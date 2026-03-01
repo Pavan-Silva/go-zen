@@ -2,7 +2,9 @@ package zen
 
 import (
     "sync"
-
+    "reflect"
+    "strings"
+    "regexp"
     "github.com/go-playground/validator/v10"
 )
 
@@ -13,12 +15,26 @@ var (
     validateInst *validator.Validate
 )
 
+// validator.go
 func validatorInstance() *validator.Validate {
     validateOnce.Do(func() {
         validateInst = validator.New()
+        validateInst.RegisterTagNameFunc(func(fld reflect.StructField) string {
+            name := strings.SplitN(fld.Tag.Get("json"), ",", 2)[0]
+            if name == "-" {
+                return ""
+            }
+            return name
+        })
+        // replace net/mail based email validator with simple regex
+        validateInst.RegisterValidation("email", func(fl validator.FieldLevel) bool {
+            return emailRegex.MatchString(fl.Field().String())
+        })
     })
     return validateInst
 }
+
+var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$`)
 
 // Validate runs struct validation using `go-playground/validator` tags. It
 // returns the error from the underlying library (which may be a

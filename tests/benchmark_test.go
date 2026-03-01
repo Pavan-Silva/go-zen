@@ -192,3 +192,78 @@ func BenchmarkEchoValidate(b *testing.B) {
         e.ServeHTTP(w, req)
     }
 }
+
+// Isolate tests
+func BenchmarkZenBindJSONOnly(b *testing.B) {
+    handler := zen.Adapt(func(c *zen.Context) {
+        var payload validatePayload
+        _ = c.BindJSON(&payload)
+    })
+    body := []byte(`{"username":"foo","email":"foo@bar.com"}`)
+    for i := 0; i < b.N; i++ {
+        req := httptest.NewRequest("POST", "/", bytes.NewReader(body))
+        w := httptest.NewRecorder()
+        handler(w, req)
+    }
+}
+
+func BenchmarkZenValidateOnly(b *testing.B) {
+    c := &zen.Context{}
+    payload := validatePayload{Username: "foo", Email: "foo@bar.com"}
+    b.ResetTimer()
+    for i := 0; i < b.N; i++ {
+        _ = c.Validate(&payload)
+    }
+}
+
+func BenchmarkEchoBindJSONOnly(b *testing.B) {
+    e := echo.New()
+    e.POST("/", func(c echo.Context) error {
+        var payload validatePayload
+        return c.Bind(&payload)
+    })
+    body := []byte(`{"username":"foo","email":"foo@bar.com"}`)
+    for i := 0; i < b.N; i++ {
+        req := httptest.NewRequest("POST", "/", bytes.NewReader(body))
+        req.Header.Set("Content-Type", "application/json")
+        w := httptest.NewRecorder()
+        e.ServeHTTP(w, req)
+    }
+}
+
+func BenchmarkEchoValidateOnly(b *testing.B) {
+    e := echo.New()
+    e.Validator = &echoValidator{v: validator.New()}
+    payload := validatePayload{Username: "foo", Email: "foo@bar.com"}
+    // grab an echo context directly
+    req := httptest.NewRequest("POST", "/", nil)
+    w := httptest.NewRecorder()
+    c := e.NewContext(req, w)
+    b.ResetTimer()
+    for i := 0; i < b.N; i++ {
+        _ = c.Validate(&payload)
+    }
+}
+
+func BenchmarkZenJSONOnly(b *testing.B) {
+    handler := zen.Adapt(func(c *zen.Context) {
+        c.JSON(200, map[string]string{"status": "ok"})
+    })
+    for i := 0; i < b.N; i++ {
+        req := httptest.NewRequest("GET", "/", nil)
+        w := httptest.NewRecorder()
+        handler(w, req)
+    }
+}
+
+func BenchmarkEchoJSONOnly(b *testing.B) {
+    e := echo.New()
+    e.GET("/", func(c echo.Context) error {
+        return c.JSON(200, map[string]string{"status": "ok"})
+    })
+    for i := 0; i < b.N; i++ {
+        req := httptest.NewRequest("GET", "/", nil)
+        w := httptest.NewRecorder()
+        e.ServeHTTP(w, req)
+    }
+}
