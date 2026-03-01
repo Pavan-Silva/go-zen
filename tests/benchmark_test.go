@@ -43,7 +43,6 @@ func (ev *echoValidator) Validate(i interface{}) error {
 	return ev.v.Struct(i)
 }
 
-// Simulated DB store (in-memory, to mimic a real handler doing some work)
 var mockUsers = map[string]User{
 	"alice": {ID: 1, Username: "alice", Email: "alice@example.com", Age: 30},
 	"bob":   {ID: 2, Username: "bob", Email: "bob@example.com", Age: 25},
@@ -54,7 +53,7 @@ func simulateDBLookup(username string) (User, bool) {
 	return u, ok
 }
 
-// ─── 1. Hello World (baseline) ───────────────────────────────────────────────
+// ─── 1. Hello World ───────────────────────────────────────────────────────────
 
 func BenchmarkZen_HelloWorld(b *testing.B) {
 	handler := zen.Adapt(func(c *zen.Context) {
@@ -103,7 +102,7 @@ func BenchmarkStdLib_HelloWorld(b *testing.B) {
 	}
 }
 
-// ─── 2. JSON Response ────────────────────────────────────────────────────────
+// ─── 2. JSON Response ─────────────────────────────────────────────────────────
 
 func BenchmarkZen_JSONResponse(b *testing.B) {
 	handler := zen.Adapt(func(c *zen.Context) {
@@ -144,7 +143,7 @@ func BenchmarkEcho_JSONResponse(b *testing.B) {
 	}
 }
 
-// ─── 3. JSON Bind + Validate + Respond (POST /users) ────────────────────────
+// ─── 3. JSON Bind + Validate + Respond ───────────────────────────────────────
 
 var createUserBody = mustMarshal(User{Username: "charlie", Email: "charlie@example.com", Age: 28})
 
@@ -155,8 +154,9 @@ func BenchmarkZen_CreateUser(b *testing.B) {
 			c.JSON(400, map[string]string{"error": err.Error()})
 			return
 		}
-		if err := c.Validate(&u); err != nil {
-			c.JSON(422, map[string]string{"error": err.Error()})
+		// switched to ValidateErr — avoids reflection chain on error path
+		if errs := c.ValidateErr(&u); errs != nil {
+			c.JSON(422, map[string]interface{}{"errors": errs})
 			return
 		}
 		u.ID = 99
@@ -219,7 +219,7 @@ func BenchmarkEcho_CreateUser(b *testing.B) {
 	}
 }
 
-// ─── 4. Login Flow (bind + validate + mock auth + JSON token response) ───────
+// ─── 4. Login Flow ────────────────────────────────────────────────────────────
 
 var loginBody = mustMarshal(LoginRequest{Username: "alice", Password: "supersecret123"})
 
@@ -230,8 +230,9 @@ func BenchmarkZen_Login(b *testing.B) {
 			c.JSON(400, map[string]string{"error": "invalid body"})
 			return
 		}
-		if err := c.Validate(&req); err != nil {
-			c.JSON(422, map[string]string{"error": err.Error()})
+		// switched to ValidateErr — avoids reflection chain on error path
+		if errs := c.ValidateErr(&req); errs != nil {
+			c.JSON(422, map[string]interface{}{"errors": errs})
 			return
 		}
 		if _, ok := simulateDBLookup(req.Username); !ok {
@@ -302,7 +303,7 @@ func BenchmarkEcho_Login(b *testing.B) {
 	}
 }
 
-// ─── 5. Middleware Chain (Logger + Recovery + Auth header check) ─────────────
+// ─── 5. Middleware Chain ──────────────────────────────────────────────────────
 
 func authMiddlewareStd(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -318,7 +319,6 @@ func BenchmarkZen_MiddlewareChain(b *testing.B) {
 	handler := zen.Adapt(func(c *zen.Context) {
 		c.JSON(200, map[string]string{"status": "ok"})
 	})
-	// Wrap with a simple auth middleware at the stdlib level
 	wrapped := authMiddlewareStd(http.HandlerFunc(handler))
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
@@ -375,7 +375,7 @@ func BenchmarkEcho_MiddlewareChain(b *testing.B) {
 	}
 }
 
-// ─── 6. List Endpoint (serialize slice of users) ─────────────────────────────
+// ─── 6. List Users ────────────────────────────────────────────────────────────
 
 var userList = []User{
 	{ID: 1, Username: "alice", Email: "alice@example.com", Age: 30},
@@ -424,14 +424,14 @@ func BenchmarkEcho_ListUsers(b *testing.B) {
 	}
 }
 
-// ─── 7. Query Param Parsing ───────────────────────────────────────────────────
+// ─── 7. Query Params ──────────────────────────────────────────────────────────
 
 func BenchmarkZen_QueryParams(b *testing.B) {
 	handler := zen.Adapt(func(c *zen.Context) {
-		q := c.Request.URL.Query()
-		page := q.Get("page")
-		limit := q.Get("limit")
-		search := q.Get("search")
+		// uses c.QueryParam so the cached parse path is exercised
+		page := c.QueryParam("page")
+		limit := c.QueryParam("limit")
+		search := c.QueryParam("search")
 		c.JSON(200, map[string]string{"page": page, "limit": limit, "search": search})
 	})
 	b.ReportAllocs()
@@ -475,7 +475,7 @@ func BenchmarkEcho_QueryParams(b *testing.B) {
 	}
 }
 
-// ─── 8. Error Handling Path (validation failure) ──────────────────────────────
+// ─── 8. Validation Error Path ─────────────────────────────────────────────────
 
 var badUserBody = []byte(`{"username":"a","email":"not-an-email","age":-1}`)
 
@@ -486,8 +486,8 @@ func BenchmarkZen_ValidationError(b *testing.B) {
 			c.JSON(400, map[string]string{"error": err.Error()})
 			return
 		}
-		if err := c.Validate(&u); err != nil {
-			c.JSON(422, map[string]string{"error": err.Error()})
+		if errs := c.ValidateErr(&u); errs != nil {
+			c.JSON(422, map[string]interface{}{"errors": errs})
 			return
 		}
 		c.JSON(201, u)
@@ -547,7 +547,7 @@ func BenchmarkEcho_ValidationError(b *testing.B) {
 	}
 }
 
-// ─── 9. Parallel Throughput (realistic GET /users/:id) ───────────────────────
+// ─── 9. Parallel Throughput ───────────────────────────────────────────────────
 
 func BenchmarkZen_Parallel(b *testing.B) {
 	handler := zen.Adapt(func(c *zen.Context) {
@@ -611,7 +611,7 @@ func BenchmarkStdLib_Parallel(b *testing.B) {
 	})
 }
 
-// ─── 10. Large JSON Payload (100 users) ──────────────────────────────────────
+// ─── 10. Large JSON Payload ───────────────────────────────────────────────────
 
 func makeLargeUserList(n int) []User {
 	users := make([]User, n)
@@ -667,7 +667,7 @@ func BenchmarkEcho_LargeJSONResponse(b *testing.B) {
 	}
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 func mustMarshal(v any) []byte {
 	b, err := json.Marshal(v)
