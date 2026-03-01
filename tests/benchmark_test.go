@@ -309,7 +309,7 @@ func BenchmarkZen_MiddlewareChain(b *testing.B) {
 	handler := zen.Adapt(func(c *zen.Context) {
 		c.JSON(200, map[string]string{"status": "ok"})
 	})
-	wrapped := authMiddlewareStd(http.HandlerFunc(handler))
+	wrapped := zen.Recovery(authMiddlewareStd(http.HandlerFunc(handler)))
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		req := httptest.NewRequest(http.MethodGet, "/protected", nil)
