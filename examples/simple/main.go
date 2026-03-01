@@ -16,11 +16,7 @@ func main() {
 			Email    string `json:"email"    validate:"required,email"`
 		}
 		if err := c.BindJSON(&payload); err != nil {
-			c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid json"})
-			return
-		}
-		if errs := c.ValidateErr(&payload); errs != nil {
-			c.JSON(http.StatusBadRequest, map[string]interface{}{"errors": errs})
+			c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
 			return
 		}
 		c.JSON(http.StatusOK, map[string]string{"status": "created"})

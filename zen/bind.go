@@ -1,25 +1,31 @@
-// bind.go
-
 package zen
 
 import (
 	"fmt"
+	"log"
 	"reflect"
 	"strings"
 )
 
-// BindForm binds URL form data to dest using struct json tags.
+// BindForm parses the request form into dest, then runs validation using
+// binding struct tags. The returned error is either a decode error or a
+// validator.ValidationErrors — callers can use errors.As to distinguish them.
 // It uses a single reflection pass over the struct fields — no intermediate
-// map, no JSON marshal/unmarshal roundtrip.
+// map, no JSON marshal/unmarshal round-trip.
 func (c *Context) BindForm(dest interface{}) error {
-	if err := c.Request.ParseForm(); err != nil {
+	if c.Request.Form == nil {
+		if err := c.Request.ParseForm(); err != nil {
+			log.Printf("zen: ParseForm error: %v", err)
+		}
+	}
+	if err := mapFormValues(c.Request.Form, dest); err != nil {
 		return err
 	}
-	return mapFormValues(c.Request.Form, dest)
+	return validatorInstance().Struct(dest)
 }
 
 // mapFormValues walks the struct fields of dest once and sets each field
-// whose json tag matches a key in values. Only string, int/int64, float64,
+// whose JSON tag matches a key in values. Only string, int/int64, float64,
 // and bool fields are handled — extend the type switch below if you need more.
 func mapFormValues(values map[string][]string, dest interface{}) error {
 	rv := reflect.ValueOf(dest)
@@ -33,8 +39,10 @@ func mapFormValues(values map[string][]string, dest interface{}) error {
 		field := rt.Field(i)
 		fieldVal := rv.Field(i)
 
-		// resolve the key name from the json tag, same logic as RegisterTagNameFunc
-		tag := strings.SplitN(field.Tag.Get("json"), ",", 2)[0]
+		tag := field.Tag.Get("json")
+		if i := strings.IndexByte(tag, ','); i != -1 {
+			tag = tag[:i]
+		}
 		if tag == "" || tag == "-" {
 			tag = field.Name
 		}
@@ -43,9 +51,8 @@ func mapFormValues(values map[string][]string, dest interface{}) error {
 		if !ok || len(vals) == 0 {
 			continue
 		}
-		raw := vals[0]
 
-		if err := setField(fieldVal, raw); err != nil {
+		if err := setField(fieldVal, vals[0]); err != nil {
 			return fmt.Errorf("zen: BindForm field %q: %w", tag, err)
 		}
 	}
