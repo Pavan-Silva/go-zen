@@ -9,17 +9,19 @@
 package zen
 
 import (
-    "fmt"
-    "strings"
+	"errors"
+	"fmt"
+	"log"
+	"strings"
 )
 
 import (
-    "context"
-    "net/http"
-    "os"
-    "os/signal"
-    "syscall"
-    "time"
+	"context"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 )
 
 // Server wraps http.Server to provide graceful shutdown helper.
@@ -27,15 +29,15 @@ import (
 // Use zen.NewServer to create, then call ListenAndServe or ListenAndServeTLS.
 
 type Server struct {
-    *http.Server
+	*http.Server
 }
 
 // NewServer returns a new Server with given address and handler.
 func NewServer(addr string, handler http.Handler) *Server {
-    return &Server{&http.Server{
-        Addr:    addr,
-        Handler: handler,
-    }}
+	return &Server{&http.Server{
+		Addr:    addr,
+		Handler: handler,
+	}}
 }
 
 // Banner returns an ASCII art banner with a clickable link for the
@@ -75,42 +77,48 @@ func Banner(addr string) string {
 		bold, reset, gray, reset,
 		bold, reset, green, url, reset,
 	)
-}   
-                     
+}
+
 // ListenAndServe starts the server and listens for termination signals to shut down gracefully.
-func (s *Server) ListenAndServe() error {
-    fmt.Print(Banner(s.Addr))
+func (s *Server) ListenAndServe() {
+	fmt.Print(Banner(s.Addr))
 
-    go func() {
-        if err := s.Server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-            // log or ignore; user can handle
-        }
-    }()
+	go func() {
+		if err := s.Server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatalf("zen: server error: %v", err)
+		}
+	}()
 
-    quit := make(chan os.Signal, 1)
-    signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-    <-quit
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
 
-    ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-    defer cancel()
-    return s.Server.Shutdown(ctx)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := s.Server.Shutdown(ctx); err != nil {
+		log.Fatalf("zen: shutdown error: %v", err)
+	}
 }
 
 // ListenAndServeTLS behaves like http.Server.ListenAndServeTLS with graceful shutdown.
-func (s *Server) ListenAndServeTLS(certFile, keyFile string) error {
-    fmt.Print(Banner(s.Addr))
+func (s *Server) ListenAndServeTLS(certFile, keyFile string) {
+	fmt.Print(Banner(s.Addr))
 
-    go func() {
-        if err := s.Server.ListenAndServeTLS(certFile, keyFile); err != nil && err != http.ErrServerClosed {
-            // log or ignore
-        }
-    }()
+	go func() {
+		if err := s.Server.ListenAndServeTLS(certFile, keyFile); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatalf("zen: server error: %v", err)
+		}
+	}()
 
-    quit := make(chan os.Signal, 1)
-    signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-    <-quit
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
 
-    ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-    defer cancel()
-    return s.Server.Shutdown(ctx)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := s.Server.Shutdown(ctx); err != nil {
+		log.Fatalf("zen: shutdown error: %v", err)
+	}
 }

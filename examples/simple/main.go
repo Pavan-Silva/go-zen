@@ -1,7 +1,6 @@
 package main
 
 import (
-	"log"
 	"net/http"
 
 	"github.com/Pavan-Silva/zen/zen"
@@ -44,8 +43,5 @@ func main() {
 		c.JSON(http.StatusOK, map[string]string{"you": data.Name})
 	}))
 
-	srv := zen.NewServer(":8080", mux)
-	if err := srv.ListenAndServe(); err != nil {
-		log.Fatal(err)
-	}
+	zen.NewServer(":8080", zen.Recovery(mux)).ListenAndServe()
 }
