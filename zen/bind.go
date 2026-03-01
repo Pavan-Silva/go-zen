@@ -21,7 +21,18 @@ func (c *Context) BindForm(dest interface{}) error {
 	if err := mapFormValues(c.Request.Form, dest); err != nil {
 		return err
 	}
-	return validatorInstance().Struct(dest)
+
+	// Skip validation for non-structs
+	val := reflect.ValueOf(dest)
+	if val.Kind() == reflect.Ptr {
+		val = val.Elem()
+	}
+
+	if val.Kind() == reflect.Struct {
+		return validatorInstance().Struct(dest)
+	}
+
+	return nil
 }
 
 // mapFormValues walks the struct fields of dest once and sets each field

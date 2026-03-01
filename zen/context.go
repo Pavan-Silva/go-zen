@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"reflect"
 	"sync"
 )
 
@@ -78,7 +79,18 @@ func (c *Context) BindJSON(dest interface{}) error {
 	if err := json.Unmarshal(buf.Bytes(), dest); err != nil {
 		return err
 	}
-	return validatorInstance().Struct(dest)
+
+	// Skip validation for non structs
+	val := reflect.ValueOf(dest)
+	if val.Kind() == reflect.Ptr {
+		val = val.Elem()
+	}
+
+	if val.Kind() == reflect.Struct {
+		return validatorInstance().Struct(dest)
+	}
+
+	return nil
 }
 
 // FormValue retrieves a form value (works for both urlencoded forms and

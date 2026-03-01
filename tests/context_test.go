@@ -26,25 +26,25 @@ func newContext(method, target, body string, contentType string) (*zen.Context, 
 	return &zen.Context{Response: w, Request: req}, w
 }
 
-//func TestJSONRoundTrip(t *testing.T) {
-//	c, _ := newContext("POST", "/", `{"foo":"bar"}`, "application/json")
-//	var data map[string]string
-//	if err := c.BindJSON(&data); err != nil {
-//		t.Fatal(err)
-//	}
-//	if data["foo"] != "bar" {
-//		t.Errorf("expected bar got %s", data["foo"])
-//	}
-//
-//	c2, w2 := newContext("GET", "/", "", "")
-//	c2.JSON(http.StatusOK, data)
-//	if w2.Code != http.StatusOK {
-//		t.Errorf("status %d", w2.Code)
-//	}
-//	if !strings.Contains(w2.Body.String(), "bar") {
-//		t.Errorf("body missing bar: %s", w2.Body.String())
-//	}
-//}
+func TestJSONRoundTrip(t *testing.T) {
+	c, _ := newContext("POST", "/", `{"foo":"bar"}`, "application/json")
+	var data map[string]string
+	if err := c.BindJSON(&data); err != nil {
+		t.Fatal(err)
+	}
+	if data["foo"] != "bar" {
+		t.Errorf("expected bar got %s", data["foo"])
+	}
+
+	c2, w2 := newContext("GET", "/", "", "")
+	c2.JSON(http.StatusOK, data)
+	if w2.Code != http.StatusOK {
+		t.Errorf("status %d", w2.Code)
+	}
+	if !strings.Contains(w2.Body.String(), "bar") {
+		t.Errorf("body missing bar: %s", w2.Body.String())
+	}
+}
 
 func TestBindJSONValidation(t *testing.T) {
 	type payload struct {
