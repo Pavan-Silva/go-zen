@@ -4,7 +4,9 @@ import (
     "net/http"
     "net/http/httptest"
     "testing"
-
+    "bytes"
+    "github.com/go-playground/validator/v10"
+    "github.com/gin-gonic/gin/binding"
     "github.com/Pavan-Silva/zen/zen"
     "github.com/gin-gonic/gin"
     "github.com/labstack/echo/v4"
@@ -113,4 +115,80 @@ func BenchmarkParallelEcho(b *testing.B) {
             e.ServeHTTP(w, req)
         }
     })
+}
+
+// Validation performance
+// shared named type for all three
+type validatePayload struct {
+    Username string `json:"username" validate:"required,alphanum"`
+    Email    string `json:"email"    validate:"required,email"`
+}
+
+// Zen — already correct
+func BenchmarkZenValidate(b *testing.B) {
+    handler := zen.Adapt(func(c *zen.Context) {
+        var payload validatePayload
+        _ = c.BindJSON(&payload)
+        _ = c.Validate(&payload)
+        c.JSON(200, "ok")
+    })
+    body := []byte(`{"username":"foo","email":"foo@bar.com"}`)
+    for i := 0; i < b.N; i++ {
+        req := httptest.NewRequest("POST", "/", bytes.NewReader(body))
+        w := httptest.NewRecorder()
+        handler(w, req)
+    }
+}
+
+// Gin — register validator
+func BenchmarkGinValidate(b *testing.B) {
+    gin.SetMode(gin.ReleaseMode)
+    r := gin.New()
+    r.POST("/", func(c *gin.Context) {
+        var payload validatePayload
+        if err := c.ShouldBindJSON(&payload); err != nil {
+            c.JSON(400, err.Error())
+            return
+        }
+        if err := binding.Validator.ValidateStruct(&payload); err != nil {
+            c.JSON(400, err.Error())
+            return
+        }
+        c.JSON(200, "ok")
+    })
+    body := []byte(`{"username":"foo","email":"foo@bar.com"}`)
+    for i := 0; i < b.N; i++ {
+        req := httptest.NewRequest("POST", "/", bytes.NewReader(body))
+        w := httptest.NewRecorder()
+        r.ServeHTTP(w, req)
+    }
+}
+
+// Echo — register validator
+type echoValidator struct {
+    v *validator.Validate
+}
+func (ev *echoValidator) Validate(i interface{}) error {
+    return ev.v.Struct(i)
+}
+
+func BenchmarkEchoValidate(b *testing.B) {
+    e := echo.New()
+    e.Validator = &echoValidator{v: validator.New()}
+    e.POST("/", func(c echo.Context) error {
+        var payload validatePayload
+        if err := c.Bind(&payload); err != nil {
+            return err
+        }
+        if err := c.Validate(&payload); err != nil {
+            return err
+        }
+        return c.JSON(200, "ok")
+    })
+    body := []byte(`{"username":"foo","email":"foo@bar.com"}`)
+    for i := 0; i < b.N; i++ {
+        req := httptest.NewRequest("POST", "/", bytes.NewReader(body))
+        w := httptest.NewRecorder()
+        e.ServeHTTP(w, req)
+    }
 }

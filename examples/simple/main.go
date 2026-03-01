@@ -9,6 +9,22 @@ import (
 func main() {
     mux := http.NewServeMux()
 
+    mux.HandleFunc("/signup", zen.Adapt(func(c *zen.Context) {
+        var payload struct{
+            Username string `json:"username" validate:"required,alphanum"`
+            Email    string `json:"email" validate:"required,email"`
+        }
+        if err := c.BindJSON(&payload); err != nil {
+            c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid json"})
+            return
+        }
+        if err := c.Validate(&payload); err != nil {
+            c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+            return
+        }
+        c.JSON(http.StatusOK, map[string]string{"status": "created"})
+    }))
+
     mux.HandleFunc("/json", zen.Adapt(func(c *zen.Context) {
         var payload struct{
             Message string `json:"message"`

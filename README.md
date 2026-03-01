@@ -50,9 +50,39 @@ The `Context` object carries `http.ResponseWriter` and `*http.Request` and adds
 utility methods such as `JSON`, `BindJSON`, `BindForm`, `FormValue`, `QueryParam`,
 and `Body`.
 
+Server methods now automatically print the banner (like Gin/Echo)
+when you call `ListenAndServe`/`ListenAndServeTLS`, so there’s no need to log
+it yourself.
+
 You can also show a startup banner with a clickable localhost link using
-`zen.Banner(addr)`. It's intended to be logged once at server start and adds no
-runtime overhead beyond building the string.
+`zen.Banner(addr)` directly if you prefer; it's purely a helper.
+
+### Request validation
+
+`zen.Context` provides a small helper for validating structs based on
+`go-playground/validator/v10` tags:
+
+```go
+var payload struct {
+    Name  string `validate:"required"`
+    Email string `validate:"required,email"`
+}
+if err := ctx.BindJSON(&payload); err != nil {
+    // handle bad JSON
+}
+if err := ctx.Validate(&payload); err != nil {
+    // validation failed
+}
+```
+
+The global validator instance is lazily initialized and reused, so the cost
+when validation is not in use is effectively zero. This keeps the framework
+lean while offering familiar tag‑based checking when you need it.
+
+Server methods automatically print the ASCII banner when you start them – you
+no longer have to call `zen.Banner` yourself; the output is handled for you
+during `ListenAndServe`/`ListenAndServeTLS`, mimicking the behaviour of Gin
+and Echo.
 
 ### Tests & benchmarks
 
@@ -71,7 +101,9 @@ go test -bench=.    # performance and throughput benchmarks
 
 The benchmarks include both serial and parallel (throughput) variations; they
 compare `zen.Adapt` to a raw `http.HandlerFunc` and consistently show
-single‑digit nanoseconds overhead per request.
+single‑digit nanoseconds overhead per request. There is also a validation
+scenario (`BenchmarkZenValidate`) which exercises JSON binding + tag
+validation, running at roughly 300 ns per request.
 
 ## Philosophy
 

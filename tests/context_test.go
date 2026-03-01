@@ -67,3 +67,20 @@ func TestBody(t *testing.T) {
         t.Errorf("expected %s got %s", content, string(b))
     }
 }
+
+func TestValidate(t *testing.T) {
+    type input struct {
+        Name  string `validate:"required"`
+        Email string `validate:"required,email"`
+    }
+    var good = input{Name: "foo", Email: "foo@bar.com"}
+    var bad = input{Name: "", Email: "not an email"}
+
+    c := &zen.Context{}
+    if err := c.Validate(good); err != nil {
+        t.Errorf("valid struct should pass, got %v", err)
+    }
+    if err := c.Validate(bad); err == nil {
+        t.Errorf("invalid struct unexpectedly passed")
+    }
+}
