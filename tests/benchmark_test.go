@@ -56,14 +56,24 @@ func simulateDBLookup(username string) (User, bool) {
 // ─── 1. Hello World ───────────────────────────────────────────────────────────
 
 func BenchmarkZen_HelloWorld(b *testing.B) {
-	handler := zen.Adapt(func(c *zen.Context) {
+	// 1. Initialize the new server
+	srv := zen.NewServer(":8080")
+
+	// 2. Register the handler using the new zen.Context
+	srv.Handle("/", func(c *zen.Context) {
 		c.Response.Write([]byte("Hello, World!"))
 	})
+
+	// 3. Setup the mock request and recorder
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	w := httptest.NewRecorder()
+
 	b.ReportAllocs()
+	b.ResetTimer() // Don't count the setup time above
+
 	for i := 0; i < b.N; i++ {
-		handler(w, req)
+		// We call ServeHTTP on the internal handler (the mux)
+		srv.Handler.ServeHTTP(w, req)
 	}
 }
 
@@ -90,15 +100,19 @@ func BenchmarkEcho_HelloWorld(b *testing.B) {
 	}
 }
 
-func BenchmarkStdLib_HelloWorld(b *testing.B) {
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func BenchmarkStdLib_WithMux(b *testing.B) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("Hello, World!"))
 	})
+
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	w := httptest.NewRecorder()
 	b.ReportAllocs()
+	b.ResetTimer()
+
 	for i := 0; i < b.N; i++ {
-		handler(w, req)
+		mux.ServeHTTP(w, req) // Now both are testing the router + the call
 	}
 }
 

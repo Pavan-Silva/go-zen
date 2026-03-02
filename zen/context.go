@@ -2,6 +2,7 @@ package zen
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"log"
@@ -23,6 +24,7 @@ type Context struct {
 	Response   http.ResponseWriter
 	Request    *http.Request
 	queryCache url.Values
+	Ctx        context.Context
 }
 
 // JSON writes the given data as JSON to the response with the status code.

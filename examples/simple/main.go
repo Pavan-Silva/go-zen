@@ -7,9 +7,9 @@ import (
 )
 
 func main() {
-	mux := http.NewServeMux()
+	mux := zen.NewServer(":8080")
 
-	mux.HandleFunc("/signup", zen.Adapt(func(c *zen.Context) {
+	mux.Handle("/signup", func(c *zen.Context) {
 		var payload struct {
 			Username string `json:"username" validate:"required,alphanum"`
 			Email    string `json:"email"    validate:"required,email"`
@@ -19,9 +19,9 @@ func main() {
 			return
 		}
 		c.JSON(http.StatusOK, map[string]string{"status": "created"})
-	}))
+	})
 
-	mux.HandleFunc("/json", zen.Adapt(func(c *zen.Context) {
+	mux.Handle("/json", func(c *zen.Context) {
 		var payload struct {
 			Message string `json:"message"`
 		}
@@ -30,9 +30,9 @@ func main() {
 			return
 		}
 		c.JSON(http.StatusOK, map[string]string{"echo": payload.Message})
-	}))
+	})
 
-	mux.HandleFunc("/form", zen.Adapt(func(c *zen.Context) {
+	mux.Handle("/form", func(c *zen.Context) {
 		var data struct {
 			Name string `json:"name"`
 		}
@@ -41,7 +41,7 @@ func main() {
 			return
 		}
 		c.JSON(http.StatusOK, map[string]string{"you": data.Name})
-	}))
+	})
 
-	zen.NewServer(":8080", zen.Recovery(mux)).ListenAndServe()
+	mux.ListenAndServe()
 }
