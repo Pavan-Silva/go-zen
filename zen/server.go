@@ -13,10 +13,14 @@ import (
 	"time"
 )
 
+// Middleware defines the function signature for zen middleware.
+type Middleware func(func(*Context)) func(*Context)
+
 // Server wraps http.Server and its internal mux.
 type Server struct {
 	*http.Server
-	mux *http.ServeMux
+	mux        *http.ServeMux
+	middleware []Middleware
 }
 
 // NewServer initializes a server with performance-optimized defaults.
@@ -38,9 +42,22 @@ func NewServer(addr string) *Server {
 	}
 }
 
+// Use adds middleware to the global chain.
+// Middleware is executed in the order it is added.
+func (s *Server) Use(m ...Middleware) {
+	s.middleware = append(s.middleware, m...)
+}
+
 // Handle registers a new handler using the zen.Context.
 // It wraps the zen-style handler into a standard http.HandlerFunc.
 func (s *Server) Handle(pattern string, handler func(*Context)) {
+	// Pre-wrap the handler with middleware at startup, not at request time.
+	// This ensures we aren't re-calculating the chain on every single request.
+	finalHandler := handler
+	for i := len(s.middleware) - 1; i >= 0; i-- {
+		finalHandler = s.middleware[i](finalHandler)
+	}
+
 	s.mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
 		// Initialize the zen context
 		c := &Context{
@@ -48,7 +65,7 @@ func (s *Server) Handle(pattern string, handler func(*Context)) {
 			Request:  r,
 			Ctx:      r.Context(),
 		}
-		handler(c)
+		finalHandler(c)
 	})
 }
 

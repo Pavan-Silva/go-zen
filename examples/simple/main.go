@@ -8,6 +8,7 @@ import (
 
 func main() {
 	mux := zen.NewServer(":8080")
+	mux.Use(zen.Recover)
 
 	mux.Handle("/signup", func(c *zen.Context) {
 		var payload struct {
