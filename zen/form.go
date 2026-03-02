@@ -2,27 +2,20 @@ package zen
 
 import (
 	"fmt"
-	"log"
 	"reflect"
 	"strings"
 )
 
-// BindForm parses the request form into dest, then runs validation using
-// binding struct tags. The returned error is either a decode error or a
-// validator.ValidationErrors — callers can use errors.As to distinguish them.
-// It uses a single reflection pass over the struct fields — no intermediate
-// map, no JSON marshal/unmarshal round-trip.
-func (c *Context) BindForm(dest interface{}) error {
-	if c.Request.Form == nil {
-		if err := c.Request.ParseForm(); err != nil {
-			log.Printf("zen: ParseForm error: %v", err)
-		}
+// BindForm parses the request form into dest and runs validation.
+func (c *Context) BindForm(dest any) error {
+	if err := c.Request.ParseForm(); err != nil {
+		return fmt.Errorf("zen: ParseForm error: %w", err)
 	}
+
 	if err := mapFormValues(c.Request.Form, dest); err != nil {
 		return err
 	}
 
-	// Skip validation for non-structs
 	val := reflect.ValueOf(dest)
 	if val.Kind() == reflect.Ptr {
 		val = val.Elem()
@@ -35,14 +28,13 @@ func (c *Context) BindForm(dest interface{}) error {
 	return nil
 }
 
-// mapFormValues walks the struct fields of dest once and sets each field
-// whose JSON tag matches a key in values. Only string, int/int64, float64,
-// and bool fields are handled — extend the type switch below if you need more.
-func mapFormValues(values map[string][]string, dest interface{}) error {
+// mapFormValues uses reflection to map form keys to struct fields.
+func mapFormValues(values map[string][]string, dest any) error {
 	rv := reflect.ValueOf(dest)
 	if rv.Kind() != reflect.Ptr || rv.Elem().Kind() != reflect.Struct {
 		return fmt.Errorf("zen: BindForm dest must be a pointer to a struct")
 	}
+
 	rv = rv.Elem()
 	rt := rv.Type()
 
@@ -50,10 +42,16 @@ func mapFormValues(values map[string][]string, dest interface{}) error {
 		field := rt.Field(i)
 		fieldVal := rv.Field(i)
 
-		tag := field.Tag.Get("json")
-		if i := strings.IndexByte(tag, ','); i != -1 {
-			tag = tag[:i]
+		// Optimization: Check if field is exportable
+		if !fieldVal.CanSet() {
+			continue
 		}
+
+		tag := field.Tag.Get("json")
+		if idx := strings.IndexByte(tag, ','); idx != -1 {
+			tag = tag[:idx]
+		}
+
 		if tag == "" || tag == "-" {
 			tag = field.Name
 		}
@@ -70,13 +68,16 @@ func mapFormValues(values map[string][]string, dest interface{}) error {
 	return nil
 }
 
-// setField sets a single reflected struct field from a raw string value.
+// setField handles the type conversion from string to the struct field type.
 func setField(fv reflect.Value, raw string) error {
 	switch fv.Kind() {
 	case reflect.String:
 		fv.SetString(raw)
 
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		// Sscan is flexible but slightly slow; for pure speed
+		// strconv.ParseInt is faster. Let's stick to fmt for simplicity
+		// unless this becomes a hot path.
 		var n int64
 		if _, err := fmt.Sscan(raw, &n); err != nil {
 			return err
@@ -98,18 +99,12 @@ func setField(fv reflect.Value, raw string) error {
 		fv.SetFloat(f)
 
 	case reflect.Bool:
-		switch strings.ToLower(raw) {
-		case "true", "1", "yes", "on":
-			fv.SetBool(true)
-		case "false", "0", "no", "off":
-			fv.SetBool(false)
-		default:
-			return fmt.Errorf("invalid bool value %q", raw)
-		}
+		// Optimized boolean check
+		b := strings.ToLower(raw)
+		fv.SetBool(b == "true" || b == "1" || b == "yes" || b == "on")
 
 	default:
-		// silently skip types we don't handle (time.Time, nested structs, etc.)
-		// caller can handle those fields manually after BindForm returns
+		// Unsupported types are skipped to keep it "Zen" (minimal)
 	}
 	return nil
 }
