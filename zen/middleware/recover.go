@@ -1,15 +1,17 @@
-package zen
+package middleware
 
 import (
 	"log"
 	"net/http"
 	"runtime/debug"
+
+	"github.com/Pavan-Silva/zen/zen"
 )
 
 // Recover catches any panic in the handler chain, logs the stack trace,
 // and returns a 500 Internal Server Error.
-func Recover(next func(*Context)) func(*Context) {
-	return func(c *Context) {
+func Recover(next func(*zen.Context)) func(*zen.Context) {
+	return func(c *zen.Context) {
 		defer func() {
 			if err := recover(); err != nil {
 				// Log the error and the full stack trace for debugging

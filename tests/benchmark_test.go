@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/Pavan-Silva/zen/zen"
+	middleware2 "github.com/Pavan-Silva/zen/zen/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
 	"github.com/go-playground/validator/v10"
@@ -378,7 +379,7 @@ func BenchmarkStdLib_Login(b *testing.B) {
 
 func BenchmarkZen_MiddlewareChain(b *testing.B) {
 	mux := zen.NewServer(":8080")
-	mux.Use(zen.Recover)
+	mux.Use(middleware2.Recover)
 	mux.Use(func(next func(*zen.Context)) func(*zen.Context) {
 		return func(c *zen.Context) {
 			if c.Request.Header.Get("Authorization") == "" {

@@ -4,11 +4,12 @@ import (
 	"net/http"
 
 	"github.com/Pavan-Silva/zen/zen"
+	"github.com/Pavan-Silva/zen/zen/middleware"
 )
 
 func main() {
 	mux := zen.NewServer(":8080")
-	mux.Use(zen.Recover)
+	mux.Use(middleware.Recover)
 
 	mux.Handle("/signup", func(c *zen.Context) {
 		var payload struct {
