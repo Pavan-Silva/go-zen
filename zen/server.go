@@ -9,12 +9,37 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 )
 
 // Middleware defines the function signature for zen middleware.
 type Middleware func(func(*Context)) func(*Context)
+
+// contextPool reuses Context objects across requests to avoid per-request heap allocations.
+var contextPool = sync.Pool{
+	New: func() any { return &Context{} },
+}
+
+// routeHandler holds a pre-built handler chain as a plain struct field.
+// Using http.Handler instead of HandleFunc avoids a closure allocation,
+// since the function pointer is stored directly rather than captured.
+type routeHandler struct {
+	handler func(*Context)
+}
+
+func (rh routeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// Acquire a context from the pool instead of allocating a new one each request.
+	c := contextPool.Get().(*Context)
+	c.Response = w
+	c.Request = r
+	rh.handler(c)
+	// Clear references before returning to pool to avoid retaining request/response.
+	c.Response = nil
+	c.Request = nil
+	contextPool.Put(c)
+}
 
 // Server wraps http.Server and its internal mux.
 type Server struct {
@@ -49,7 +74,7 @@ func (s *Server) Use(m ...Middleware) {
 }
 
 // Handle registers a new handler using the zen.Context.
-// It wraps the zen-style handler into a standard http.HandlerFunc.
+// It wraps the zen-style handler into a routeHandler to avoid closure allocations.
 func (s *Server) Handle(pattern string, handler func(*Context)) {
 	// Pre-wrap the handler with middleware at startup, not at request time.
 	// This ensures we aren't re-calculating the chain on every single request.
@@ -58,15 +83,9 @@ func (s *Server) Handle(pattern string, handler func(*Context)) {
 		finalHandler = s.middleware[i](finalHandler)
 	}
 
-	s.mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
-		// Initialize the zen context
-		c := &Context{
-			Response: w,
-			Request:  r,
-			Ctx:      r.Context(),
-		}
-		finalHandler(c)
-	})
+	// Register as a concrete struct rather than a HandleFunc closure,
+	// so finalHandler is stored as a field and never escapes to the heap.
+	s.mux.Handle(pattern, routeHandler{handler: finalHandler})
 }
 
 // --- Lifecycle Methods ---
