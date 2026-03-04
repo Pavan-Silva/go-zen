@@ -3,6 +3,7 @@ package zen
 import (
 	"fmt"
 	"reflect"
+	"strconv"
 	"strings"
 )
 
@@ -75,33 +76,34 @@ func setField(fv reflect.Value, raw string) error {
 		fv.SetString(raw)
 
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		// Sscan is flexible but slightly slow; for pure speed
-		// strconv.ParseInt is faster. Let's stick to fmt for simplicity
-		// unless this becomes a hot path.
-		var n int64
-		if _, err := fmt.Sscan(raw, &n); err != nil {
+		n, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil {
 			return err
 		}
 		fv.SetInt(n)
 
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		var n uint64
-		if _, err := fmt.Sscan(raw, &n); err != nil {
+		n, err := strconv.ParseUint(raw, 10, 64)
+		if err != nil {
 			return err
 		}
 		fv.SetUint(n)
 
 	case reflect.Float32, reflect.Float64:
-		var f float64
-		if _, err := fmt.Sscan(raw, &f); err != nil {
+		f, err := strconv.ParseFloat(raw, 64)
+		if err != nil {
 			return err
 		}
 		fv.SetFloat(f)
 
 	case reflect.Bool:
-		// Optimized boolean check
-		b := strings.ToLower(raw)
-		fv.SetBool(b == "true" || b == "1" || b == "yes" || b == "on")
+		// Avoid allocations from strings.ToLower by checking common variants directly.
+		switch raw {
+		case "true", "TRUE", "True", "1", "yes", "YES", "Yes", "on", "ON", "On":
+			fv.SetBool(true)
+		default:
+			fv.SetBool(false)
+		}
 
 	default:
 		// Unsupported types are skipped to keep it "Zen" (minimal)
