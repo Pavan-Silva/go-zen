@@ -4,25 +4,21 @@ import (
 	"log"
 	"net/http"
 	"runtime/debug"
-
-	"github.com/Pavan-Silva/zen/zen"
 )
 
 // Recover catches any panic in the handler chain, logs the stack trace,
 // and returns a 500 Internal Server Error.
-func Recover(next func(*zen.Context)) func(*zen.Context) {
-	return func(c *zen.Context) {
+func Recover(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if err := recover(); err != nil {
-				// Log the error and the full stack trace for debugging
+				// Log the error and the full stack trace for debugging.
 				log.Printf("zen: panic recovered: %v\n%s", err, debug.Stack())
 
-				// Ensure we don't send headers if they've already been written
-				// but generally, a panic happens before the response is committed.
-				c.Response.WriteHeader(http.StatusInternalServerError)
-				_, _ = c.Response.Write([]byte(http.StatusText(http.StatusInternalServerError)))
+				// Best-effort 500 response; if headers are already written this is a no-op.
+				http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			}
 		}()
-		next(c)
-	}
+		next.ServeHTTP(w, r)
+	})
 }
