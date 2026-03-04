@@ -380,14 +380,14 @@ func BenchmarkStdLib_Login(b *testing.B) {
 func BenchmarkZen_MiddlewareChain(b *testing.B) {
 	mux := zen.NewServer(":8080")
 	mux.Use(middleware2.Recover)
-	mux.Use(func(next func(*zen.Context)) func(*zen.Context) {
-		return func(c *zen.Context) {
-			if c.Request.Header.Get("Authorization") == "" {
-				http.Error(c.Response, "unauthorized", http.StatusUnauthorized)
+	mux.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Header.Get("Authorization") == "" {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
 				return
 			}
-			next(c)
-		}
+			next.ServeHTTP(w, r)
+		})
 	})
 	mux.Handle("/protected", func(c *zen.Context) {
 		c.JSON(200, map[string]string{"status": "ok"})
