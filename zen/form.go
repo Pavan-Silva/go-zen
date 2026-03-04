@@ -30,6 +30,8 @@ func (c *Context) BindForm(dest any) error {
 }
 
 // mapFormValues uses reflection to map form keys to struct fields.
+// Field names are resolved via the "json" struct tag (falling back to the
+// exported field name), keeping the API surface consistent with BindJSON.
 func mapFormValues(values map[string][]string, dest any) error {
 	rv := reflect.ValueOf(dest)
 	if rv.Kind() != reflect.Ptr || rv.Elem().Kind() != reflect.Struct {
@@ -43,7 +45,6 @@ func mapFormValues(values map[string][]string, dest any) error {
 		field := rt.Field(i)
 		fieldVal := rv.Field(i)
 
-		// Optimization: Check if field is exportable
 		if !fieldVal.CanSet() {
 			continue
 		}
@@ -69,7 +70,7 @@ func mapFormValues(values map[string][]string, dest any) error {
 	return nil
 }
 
-// setField handles the type conversion from string to the struct field type.
+// setField handles type conversion from string to the target struct field type.
 func setField(fv reflect.Value, raw string) error {
 	switch fv.Kind() {
 	case reflect.String:
@@ -106,7 +107,7 @@ func setField(fv reflect.Value, raw string) error {
 		}
 
 	default:
-		// Unsupported types are skipped to keep it "Zen" (minimal)
+		// Unsupported types are intentionally skipped (zero value is kept).
 	}
 	return nil
 }

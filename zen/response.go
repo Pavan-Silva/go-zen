@@ -5,11 +5,19 @@ import (
 	"log"
 )
 
+// JSON writes a JSON-encoded response with the given HTTP status code.
 func (c *Context) JSON(status int, data any) {
+	b, err := json.Marshal(data)
+	if err != nil {
+		// Headers not yet written — we can still send an error status.
+		log.Printf("zen: JSON marshal error: %v", err)
+		c.Response.WriteHeader(500)
+		return
+	}
 	c.Response.Header().Set("Content-Type", "application/json")
 	c.Response.WriteHeader(status)
-	if err := json.NewEncoder(c.Response).Encode(data); err != nil {
-		// At this point headers/status are already committed; best effort is logging.
-		log.Printf("zen: JSON encode error: %v", err)
+	if _, err = c.Response.Write(b); err != nil {
+		// Headers/status already committed; the best effort is logging.
+		log.Printf("zen: JSON write error: %v", err)
 	}
 }
