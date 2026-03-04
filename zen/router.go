@@ -31,26 +31,25 @@ func adaptContextHandler(handler func(*Context)) http.Handler {
 		c := contextPool.Get().(*Context)
 		c.reset(w, r)
 		handler(c)
-		// Clear references before returning to pool to avoid retaining request/response.
-		c.Response = nil
-		c.Request = nil
-		c.queryCache = nil
+		// Nil out references before returning to pool to avoid retaining
+		// request/response pointers across requests.
+		c.reset(nil, nil)
 		contextPool.Put(c)
 	})
 }
 
-// Server wraps http.Server and its internal mux.
-type Server struct {
+// Router wraps http.Server and its internal mux.
+type Router struct {
 	*http.Server
 	mux        *http.ServeMux
 	middleware []Middleware
 }
 
 // NewServer initializes a server with performance-optimized defaults.
-func NewServer(addr string) *Server {
+func NewServer(addr string) *Router {
 	mux := http.NewServeMux()
 
-	s := &Server{
+	s := &Router{
 		mux: mux,
 		Server: &http.Server{
 			Addr:    addr,
@@ -60,7 +59,7 @@ func NewServer(addr string) *Server {
 			WriteTimeout:      10 * time.Second,  // Max time to write the response
 			IdleTimeout:       120 * time.Second, // Max time to keep idle connections open
 			ReadHeaderTimeout: 2 * time.Second,   // Prevents Slowloris attacks
-			MaxHeaderBytes:    1 << 20, // 1MB max header size
+			MaxHeaderBytes:    1 << 20,           // 1MB max header size
 		},
 	}
 
@@ -69,11 +68,11 @@ func NewServer(addr string) *Server {
 
 // Use adds middleware to the global chain.
 // Middleware is executed in the order it is added.
-func (s *Server) Use(m ...Middleware) {
+func (s *Router) Use(m ...Middleware) {
 	s.middleware = append(s.middleware, m...)
 
-	// Rebuild the handler chain around the mux. This happens only at setup time,
-	// never per request, so the overhead is negligible.
+	// Always rebuild from the raw mux — never from s.Server.Handler — so that
+	// repeated Use() calls don't double-wrap previously added middleware.
 	h := http.Handler(s.mux)
 	for i := len(s.middleware) - 1; i >= 0; i-- {
 		h = s.middleware[i](h)
@@ -83,20 +82,20 @@ func (s *Server) Use(m ...Middleware) {
 
 // Handle registers a new handler using the zen.Context.
 // The zen-style handler is adapted once into an http.Handler and attached to the mux.
-func (s *Server) Handle(pattern string, handler func(*Context)) {
+func (s *Router) Handle(pattern string, handler func(*Context)) {
 	s.mux.Handle(pattern, adaptContextHandler(handler))
 }
 
 // HandleHTTP registers a standard library style handler without going through
 // the zen.Context adapter. This gives you net/http-level overhead for routes
 // that don't need the extra helpers.
-func (s *Server) HandleHTTP(pattern string, handler http.Handler) {
+func (s *Router) HandleHTTP(pattern string, handler http.Handler) {
 	s.mux.Handle(pattern, handler)
 }
 
 // --- Lifecycle Methods ---
 
-func (s *Server) ListenAndServe() {
+func (s *Router) ListenAndServe() {
 	fmt.Print(system.Banner(s.Addr))
 
 	go func() {
@@ -108,7 +107,7 @@ func (s *Server) ListenAndServe() {
 	s.gracefulShutdown()
 }
 
-func (s *Server) ListenAndServeTLS(certFile, keyFile string) {
+func (s *Router) ListenAndServeTLS(certFile, keyFile string) {
 	fmt.Print(system.Banner(s.Addr))
 
 	go func() {
@@ -120,12 +119,12 @@ func (s *Server) ListenAndServeTLS(certFile, keyFile string) {
 	s.gracefulShutdown()
 }
 
-func (s *Server) gracefulShutdown() {
+func (s *Router) gracefulShutdown() {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	// Allow 5 seconds for active connections to finish
+	// Allow 5 seconds for active connections to finish.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 

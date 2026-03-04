@@ -20,9 +20,7 @@ var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-
 func validatorInstance() *validator.Validate {
 	validateOnce.Do(func() {
 		validateInst = validator.New()
-
-		// Use the "binding" tag for validation rules, mirroring Gin.
-		validateInst.SetTagName("binding")
+		validateInst.SetTagName("validate")
 
 		validateInst.RegisterTagNameFunc(func(fld reflect.StructField) string {
 			tag := fld.Tag.Get("json")
