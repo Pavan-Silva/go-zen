@@ -8,7 +8,7 @@ import (
 )
 
 func main() {
-	mux := zen.NewServer(":8080")
+	mux := zen.New(":8080")
 	mux.Use(middleware.Recover)
 
 	mux.Handle("/signup", func(c *zen.Context) {

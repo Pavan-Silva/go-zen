@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"sync"
 	"syscall"
 	"time"
 
@@ -19,25 +18,6 @@ import (
 // It is a generic HTTP middleware, applied globally to the mux.
 type Middleware func(http.Handler) http.Handler
 
-// contextPool reuses Context objects across requests to avoid per-request heap allocations.
-var contextPool = sync.Pool{
-	New: func() any { return &Context{} },
-}
-
-// adaptContextHandler turns a zen-style handler into a standard http.Handler.
-// It is used at route registration time and reuses Context instances via contextPool.
-func adaptContextHandler(handler func(*Context)) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		c := contextPool.Get().(*Context)
-		c.reset(w, r)
-		handler(c)
-		// Nil out references before returning to pool to avoid retaining
-		// request/response pointers across requests.
-		c.reset(nil, nil)
-		contextPool.Put(c)
-	})
-}
-
 // Router wraps http.Server and its internal mux.
 type Router struct {
 	*http.Server
@@ -45,8 +25,8 @@ type Router struct {
 	middleware []Middleware
 }
 
-// NewServer initializes a server with performance-optimized defaults.
-func NewServer(addr string) *Router {
+// New initializes a server with performance-optimized defaults.
+func New(addr string) *Router {
 	mux := http.NewServeMux()
 
 	s := &Router{
@@ -83,13 +63,13 @@ func (s *Router) Use(m ...Middleware) {
 // Handle registers a new handler using the zen.Context.
 // The zen-style handler is adapted once into an http.Handler and attached to the mux.
 func (s *Router) Handle(pattern string, handler func(*Context)) {
-	s.mux.Handle(pattern, adaptContextHandler(handler))
+	s.mux.Handle(pattern, adaptHandler(handler))
 }
 
-// HandleHTTP registers a standard library style handler without going through
+// HandleRaw registers a standard library style handler without going through
 // the zen.Context adapter. This gives you net/http-level overhead for routes
 // that don't need the extra helpers.
-func (s *Router) HandleHTTP(pattern string, handler http.Handler) {
+func (s *Router) HandleRaw(pattern string, handler http.Handler) {
 	s.mux.Handle(pattern, handler)
 }
 

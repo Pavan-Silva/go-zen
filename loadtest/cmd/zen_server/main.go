@@ -49,7 +49,7 @@ func main() {
 		addr = v
 	}
 
-	s := zen.NewServer(addr)
+	s := zen.New(addr)
 
 	s.Handle("GET /products", func(c *zen.Context) {
 		c.JSON(http.StatusOK, catalog)
@@ -84,7 +84,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	s.HandleHTTP("GET /large", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	s.HandleRaw("GET /large", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write(large)
 	}))
