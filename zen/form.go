@@ -7,7 +7,29 @@ import (
 	"strings"
 )
 
-// BindForm parses the request form into dest and runs validation.
+// BindForm parses the request's form data into dest, then runs struct
+// validation if dest is a pointer to a struct.
+//
+// Both URL-encoded bodies (application/x-www-form-urlencoded) and multipart
+// form data (multipart/form-data) are supported — Go's [http.Request.ParseForm]
+// handles both transparently.
+//
+// Field mapping follows the same convention as [Context.BindJSON]: the "json"
+// struct tag is used to match form keys to struct fields, falling back to the
+// exported field name when no tag is present. This keeps the two binders
+// consistent so the same struct can serve both JSON and form endpoints.
+//
+//	type SignupForm struct {
+//	    Username string `json:"username" validate:"required,alphanum"`
+//	    Age      int    `json:"age"      validate:"required,gte=18"`
+//	}
+//
+// Possible error types returned:
+//   - A wrapped [http.Request.ParseForm] error for malformed request bodies.
+//   - [ErrInvalidBindTarget] if dest is not a pointer to a struct.
+//   - [*FormError] if a form value cannot be converted to the field's type.
+//   - A validation error from [github.com/go-playground/validator/v10] if a
+//     validate tag constraint is violated.
 func (c *Context) BindForm(dest any) error {
 	if err := c.Request.ParseForm(); err != nil {
 		return fmt.Errorf("zen: ParseForm error: %w", err)
@@ -21,21 +43,26 @@ func (c *Context) BindForm(dest any) error {
 	if val.Kind() == reflect.Ptr {
 		val = val.Elem()
 	}
-
 	if val.Kind() == reflect.Struct {
 		return validatorInstance().Struct(dest)
 	}
-
 	return nil
 }
 
-// mapFormValues uses reflection to map form keys to struct fields.
-// Field names are resolved via the "json" struct tag (falling back to the
-// exported field name), keeping the API surface consistent with BindJSON.
+// mapFormValues maps form key-value pairs onto the exported fields of the
+// struct pointed to by dest.
+//
+// Field names are resolved in this order:
+//  1. The "json" struct tag (minus any options after a comma, e.g. omitempty)
+//  2. The exported field name, if no usable tag is present
+//
+// Fields tagged with JSON:"-" are always skipped. Unexported fields are
+// skipped automatically because [reflect.Value.CanSet] returns false for them.
+// Form keys that do not match any field are silently ignored.
 func mapFormValues(values map[string][]string, dest any) error {
 	rv := reflect.ValueOf(dest)
 	if rv.Kind() != reflect.Ptr || rv.Elem().Kind() != reflect.Struct {
-		return fmt.Errorf("zen: BindForm dest must be a pointer to a struct")
+		return ErrInvalidBindTarget
 	}
 
 	rv = rv.Elem()
@@ -45,15 +72,17 @@ func mapFormValues(values map[string][]string, dest any) error {
 		field := rt.Field(i)
 		fieldVal := rv.Field(i)
 
+		// Skip unexported fields — reflect will panic on SetXxx if we don't.
 		if !fieldVal.CanSet() {
 			continue
 		}
 
+		// Resolve the form key from the JSON tag, stripping tag options such
+		// as ",omitempty". Fall back to the field name when no tag is set.
 		tag := field.Tag.Get("json")
 		if idx := strings.IndexByte(tag, ','); idx != -1 {
 			tag = tag[:idx]
 		}
-
 		if tag == "" || tag == "-" {
 			tag = field.Name
 		}
@@ -64,13 +93,23 @@ func mapFormValues(values map[string][]string, dest any) error {
 		}
 
 		if err := setField(fieldVal, vals[0]); err != nil {
-			return fmt.Errorf("zen: BindForm field %q: %w", tag, err)
+			return &FormError{Field: tag, Err: err}
 		}
 	}
 	return nil
 }
 
-// setField handles type conversion from string to the target struct field type.
+// setField converts the raw form string value into the kind of the target
+// struct field and writes it using reflection.
+//
+// Supported kinds: string, int*, uint*, float*, bool.
+// Unsupported kinds (slices, maps, nested structs, etc.) are intentionally
+// skipped and the field retains its zero value. This keeps the implementation
+// minimal; use [Context.BindJSON] for complex nested payloads.
+//
+// Bool parsing accepts the following truthy literals without allocating:
+// "true", "TRUE", "True", "1", "yes", "YES", "Yes", "on", "ON", "On".
+// Any other value is treated as false.
 func setField(fv reflect.Value, raw string) error {
 	switch fv.Kind() {
 	case reflect.String:
@@ -98,7 +137,8 @@ func setField(fv reflect.Value, raw string) error {
 		fv.SetFloat(f)
 
 	case reflect.Bool:
-		// Avoid allocations from strings.ToLower by checking common variants directly.
+		// Check common truthy variants directly rather than calling
+		// strings.ToLower, which allocates a new string on every call.
 		switch raw {
 		case "true", "TRUE", "True", "1", "yes", "YES", "Yes", "on", "ON", "On":
 			fv.SetBool(true)
@@ -107,7 +147,9 @@ func setField(fv reflect.Value, raw string) error {
 		}
 
 	default:
-		// Unsupported types are intentionally skipped (zero value is kept).
+		// Unsupported kinds are intentionally skipped; the field keeps its
+		// zero value. No error is returned to stay consistent with the
+		// "unknown keys are ignored" contract of mapFormValues.
 	}
 	return nil
 }
