@@ -1,22 +1,10 @@
 package zen
 
 import (
-	"bytes"
 	"encoding/json"
 	"io"
 	"reflect"
-	"sync"
 )
-
-// bufPool reuses byte buffers across requests to avoid a heap allocation on
-// every BindJSON call. Each buffer is reset before use, so pooling is safe
-// across goroutines.
-//
-// This is preferable to pooling json.Decoder directly because json.Decoder
-// has no Reset method in the Go standard library — a new decoder must be
-// allocated each time. By pooling the read buffer instead, we eliminate the
-// larger body-copy allocation while accepting the smaller decoder allocation.
-var bufPool = sync.Pool{New: func() any { return new(bytes.Buffer) }}
 
 // BindJSON decodes the request body as JSON into dest, then runs struct
 // validation if dest is a pointer to a struct.
@@ -32,21 +20,12 @@ var bufPool = sync.Pool{New: func() any { return new(bytes.Buffer) }}
 // validation error. The caller is responsible for writing an appropriate HTTP
 // response on error.
 //
-// The request body is always closed after reading regardless of outcome.
+// The request body is always closed after decoding regardless of outcome.
 // Body close errors are silently discarded; a failure to close indicates the
 // underlying TCP connection is already gone, making the error non-actionable.
 func (c *Context) BindJSON(dest any) error {
-	buf := bufPool.Get().(*bytes.Buffer)
-	buf.Reset()
-
-	_, err := buf.ReadFrom(c.Request.Body)
+	err := json.NewDecoder(c.Request.Body).Decode(dest)
 	_ = c.Request.Body.Close() // best-effort — TCP disconnect is not actionable
-
-	if err == nil {
-		err = json.Unmarshal(buf.Bytes(), dest)
-	}
-
-	bufPool.Put(buf)
 
 	if err != nil {
 		return err
@@ -92,8 +71,8 @@ func (c *Context) Param(key string) string {
 // It is the caller's responsibility to interpret the bytes (e.g. as plain
 // text, XML, or a custom binary format).
 //
-// For JSON payloads prefer [Context.BindJSON], which reuses a pooled buffer
-// and runs validation in the same call.
+// For JSON payloads prefer [Context.BindJSON], which streams directly and
+// runs validation in the same call.
 //
 // The request body is closed after reading. Close errors are silently
 // discarded for the same reason as in [Context.BindJSON].
