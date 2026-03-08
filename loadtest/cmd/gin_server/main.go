@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -42,6 +43,52 @@ func makeCatalog() []Product {
 	return p
 }
 
+// Auth is a Gin middleware that validates a Bearer token in the Authorization
+// header and stores the resolved user ID in the Gin context under "userID"
+// for downstream handlers to retrieve via c.GetString("userID").
+func Auth() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		token := bearerToken(c.GetHeader("Authorization"))
+		if token == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "missing or malformed Authorization header"})
+			c.Abort()
+			return
+		}
+
+		userID, ok := validateToken(token)
+		if !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired token"})
+			c.Abort()
+			return
+		}
+
+		// Store the resolved identity so handlers can retrieve it with
+		// c.GetString("userID") without re-parsing the header.
+		c.Set("userID", userID)
+		c.Next()
+	}
+}
+
+func bearerToken(header string) string {
+	const prefix = "Bearer "
+	if !strings.HasPrefix(header, prefix) {
+		return ""
+	}
+	token := strings.TrimSpace(header[len(prefix):])
+	if token == "" {
+		return ""
+	}
+	return token
+}
+
+// validateToken is a stub — replace with real JWT or session validation.
+func validateToken(token string) (userID string, ok bool) {
+	if token == "secret" {
+		return "user-123", true
+	}
+	return "", false
+}
+
 func main() {
 	addr := ":8082"
 	if v := os.Getenv("ADDR"); v != "" {
@@ -50,6 +97,8 @@ func main() {
 
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
+	r.Use(gin.Recovery())
+	r.Use(Auth())
 
 	r.GET("/products", func(c *gin.Context) {
 		c.JSON(http.StatusOK, catalog)

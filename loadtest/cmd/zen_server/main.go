@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/Pavan-Silva/zen/zen"
 )
@@ -43,6 +44,60 @@ func makeCatalog() []Product {
 	return p
 }
 
+// Auth is a global middleware that validates a Bearer token in the
+// Authorization header and stores the resolved user ID in the zen.Context
+// under the "userID" key for downstream handlers to retrieve via c.Get("userID").
+//
+// Usage:
+//
+//	s.Use(middleware.Auth)
+//
+// In production, replace the validateToken stub with real JWT verification,
+// a session lookup, or a cache check.
+func Auth(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		token := bearerToken(r.Header.Get("Authorization"))
+		if token == "" {
+			http.Error(w, `{"error":"missing or malformed Authorization header"}`, http.StatusUnauthorized)
+			return
+		}
+
+		userID, ok := validateToken(token)
+		if !ok {
+			http.Error(w, `{"error":"invalid or expired token"}`, http.StatusUnauthorized)
+			return
+		}
+
+		// Store the resolved identity on the zen.Context so handlers can
+		// retrieve it with c.Get("userID") without re-parsing the header.
+		if c := zen.FromRequest(r); c != nil {
+			c.Set("userID", userID)
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+func bearerToken(header string) string {
+	const prefix = "Bearer "
+	if !strings.HasPrefix(header, prefix) {
+		return ""
+	}
+	token := strings.TrimSpace(header[len(prefix):])
+	if token == "" {
+		return ""
+	}
+	return token
+}
+
+// validateToken is a stub — replace with real JWT or session validation.
+func validateToken(token string) (userID string, ok bool) {
+	if token == "secret" {
+		return "user-123", true
+	}
+	return "", false
+}
+
 func main() {
 	addr := ":8081"
 	if v := os.Getenv("ADDR"); v != "" {
@@ -50,6 +105,7 @@ func main() {
 	}
 
 	s := zen.New(addr)
+	s.Use(Auth)
 
 	s.Handle("GET /products", func(c *zen.Context) {
 		c.JSON(http.StatusOK, catalog)

@@ -12,8 +12,15 @@ func Recover(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if err := recover(); err != nil {
-				// Log the error and the full stack trace for debugging.
-				log.Printf("zen: panic recovered: %v\n%s", err, debug.Stack())
+				// Log the error,method, path, address and stack
+				log.Printf(
+					"zen: panic recovered: %v | method=%s path=%s ip=%s\n%s",
+					err,
+					r.Method,
+					r.URL.Path,
+					r.RemoteAddr,
+					debug.Stack(),
+				)
 
 				// Best-effort 500 response; if headers are already written this is a no-op.
 				http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)

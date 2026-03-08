@@ -13,6 +13,7 @@
 //	-warmup     warmup duration before measuring (default 2s)
 //	-conns      number of concurrent connections (default 100)
 //	-servers    comma-separated list: zen,gin,echo,std  (default all)
+//	-token      Bearer token to include in every request (default "secret")
 //
 // Each server must already be running on its default port:
 //
@@ -168,9 +169,13 @@ func buildClient(conns int) *http.Client {
 }
 
 func run(srv serverCfg, sc scenario, client *http.Client,
-	concurrency int, warmup, duration time.Duration) result {
+	concurrency int, warmup, duration time.Duration, token string) result {
 
 	url := srv.addr + sc.path
+
+	// Pre-build the Authorization header value once — same token on every
+	// request, no reason to allocate the string inside the hot loop.
+	authHeader := "Bearer " + token
 
 	var (
 		errCount int64
@@ -196,9 +201,14 @@ func run(srv serverCfg, sc scenario, client *http.Client,
 				atomic.AddInt64(&errCount, 1)
 				continue
 			}
+
 			if sc.body != nil {
 				req.Header.Set("Content-Type", "application/json")
 			}
+
+			// ── attach Bearer token ──────────────────────────────────────
+			req.Header.Set("Authorization", authHeader)
+			// ────────────────────────────────────────────────────────────
 
 			t0 := time.Now()
 			resp, err := client.Do(req)
@@ -264,9 +274,17 @@ func run(srv serverCfg, sc scenario, client *http.Client,
 
 // ── health check ─────────────────────────────────────────────────────────────
 
-func healthCheck(addr string) bool {
+// healthCheck hits /ping with the same Bearer token the load test will use
+// so auth-protected servers don't return 401 and fail the readiness check.
+func healthCheck(addr, token string) bool {
+	req, err := http.NewRequest("GET", addr+"/ping", nil)
+	if err != nil {
+		return false
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+
 	client := &http.Client{Timeout: 2 * time.Second}
-	resp, err := client.Get(addr + "/ping")
+	resp, err := client.Do(req)
 	if err != nil {
 		return false
 	}
@@ -392,6 +410,7 @@ func main() {
 	connsFlag := flag.Int("conns", 100, "number of concurrent connections")
 	serversFlag := flag.String("servers", "zen,gin,echo,std", "comma-separated servers to test")
 	outFlag := flag.String("out", "results.json", "path to write JSON results")
+	tokenFlag := flag.String("token", "secret", "Bearer token to include in every request")
 	flag.Parse()
 
 	wanted := strings.Split(*serversFlag, ",")
@@ -407,11 +426,10 @@ func main() {
 		}
 	}
 
-	// health check
 	fmt.Printf("%sChecking servers...%s\n", colorBold, colorReset)
 	var ready []serverCfg
 	for _, srv := range active {
-		if healthCheck(srv.addr) {
+		if healthCheck(srv.addr, *tokenFlag) {
 			fmt.Printf("  %-8s %s✓ ready%s at %s\n", srv.name, colorGreen, colorReset, srv.addr)
 			ready = append(ready, srv)
 		} else {
@@ -429,8 +447,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Printf("\n%sConfig:%s  conns=%d  warmup=%s  duration=%s\n\n",
-		colorBold, colorReset, *connsFlag, *warmupFlag, *durFlag)
+	fmt.Printf("\n%sConfig:%s  conns=%d  warmup=%s  duration=%s  token=%s\n\n",
+		colorBold, colorReset, *connsFlag, *warmupFlag, *durFlag, *tokenFlag)
 
 	client := buildClient(*connsFlag)
 	var results []result
@@ -441,7 +459,7 @@ func main() {
 		for _, srv := range ready {
 			done++
 			fmt.Printf("[%d/%d] %-8s  %-20s ...", done, total, srv.name, sc.name)
-			r := run(srv, sc, client, *connsFlag, *warmupFlag, *durFlag)
+			r := run(srv, sc, client, *connsFlag, *warmupFlag, *durFlag, *tokenFlag)
 			results = append(results, r)
 			fmt.Printf(" %s%.0f rps%s  mean=%s  errs=%d\n",
 				colorGreen, r.rps, colorReset,
