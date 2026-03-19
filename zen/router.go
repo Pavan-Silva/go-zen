@@ -29,7 +29,7 @@ type Router struct {
 func New(addr string) *Router {
 	mux := http.NewServeMux()
 
-	s := &Router{
+	return &Router{
 		mux: mux,
 		Server: &http.Server{
 			Addr:    addr,
@@ -42,8 +42,6 @@ func New(addr string) *Router {
 			MaxHeaderBytes:    1 << 20,           // 1MB max header size
 		},
 	}
-
-	return s
 }
 
 // Use adds middleware to the global chain.
