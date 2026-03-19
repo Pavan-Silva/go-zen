@@ -2,3 +2,4 @@ go.sum
 .idea
 loadtest/.build
 loadtest/*.json
+.DS_Store
