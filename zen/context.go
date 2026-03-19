@@ -32,7 +32,7 @@ func (c *Context) reset(w http.ResponseWriter, r *http.Request) {
 	c.Response = w
 	c.Request = r
 	c.queryCache = nil
-	c.values = nil // lazy-initialised on first Set
+	c.values = nil // lazy-initialized on first Set
 }
 
 // Set stores a value under key, shared across middlewares and the handler
