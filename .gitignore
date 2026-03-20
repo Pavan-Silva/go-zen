@@ -1,5 +1,16 @@
+# Go
 go.sum
+
+# IDE
 .idea
+.vscode
+*.swp
+.DS_Store
+
+# Build artifacts
+dist/
+
+# Loadtest
 loadtest/.build
 loadtest/*.json
-.DS_Store
+loadtest/go.sum
