@@ -6,6 +6,8 @@ import (
 	"reflect"
 )
 
+const maxBodyBytes = 1 << 20
+
 // BindJSON decodes the request body as JSON into dest, then runs struct
 // validation if dest is a pointer to a struct.
 //
@@ -24,8 +26,9 @@ import (
 // Body close errors are silently discarded; a failure to close indicates the
 // underlying TCP connection is already gone, making the error non-actionable.
 func (c *Context) BindJSON(dest any) error {
-	err := json.NewDecoder(c.Request.Body).Decode(dest)
-	_ = c.Request.Body.Close() // best-effort — TCP disconnect is not actionable
+	lr := io.LimitReader(c.Request.Body, maxBodyBytes)
+	err := json.NewDecoder(lr).Decode(dest)
+	_ = c.Request.Body.Close()
 
 	if err != nil {
 		return err
@@ -51,9 +54,15 @@ func (c *Context) BindJSON(dest any) error {
 //	missing := c.QueryParam("x")     // not present  →  ""
 func (c *Context) QueryParam(key string) string {
 	if c.queryCache == nil {
-		c.queryCache = c.Request.URL.Query()
+		m := make(map[string]string)
+		for k, vals := range c.Request.URL.Query() {
+			if len(vals) > 0 {
+				m[k] = vals[0]
+			}
+		}
+		c.queryCache = m
 	}
-	return c.queryCache.Get(key)
+	return c.queryCache[key]
 }
 
 // Param returns the URL path parameter for the given key using Go 1.22+
@@ -77,7 +86,8 @@ func (c *Context) Param(key string) string {
 // The request body is closed after reading. Close errors are silently
 // discarded for the same reason as in [Context.BindJSON].
 func (c *Context) Body() ([]byte, error) {
-	b, err := io.ReadAll(c.Request.Body)
+	lr := io.LimitReader(c.Request.Body, maxBodyBytes)
+	b, err := io.ReadAll(lr)
 	_ = c.Request.Body.Close()
 	return b, err
 }

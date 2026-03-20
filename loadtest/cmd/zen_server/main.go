@@ -54,28 +54,25 @@ func makeCatalog() []Product {
 //
 // In production, replace the validateToken stub with real JWT verification,
 // a session lookup, or a cache check.
-func Auth(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		token := bearerToken(r.Header.Get("Authorization"))
-		if token == "" {
-			http.Error(w, `{"error":"missing or malformed Authorization header"}`, http.StatusUnauthorized)
-			return
-		}
+func Auth(c *zen.Context, next http.Handler) {
+	token := bearerToken(c.Request.Header.Get("Authorization"))
+	if token == "" {
+		c.JSON(http.StatusUnauthorized, map[string]string{
+			"error": "missing or malformed Authorization header",
+		})
+		return
+	}
 
-		userID, ok := validateToken(token)
-		if !ok {
-			http.Error(w, `{"error":"invalid or expired token"}`, http.StatusUnauthorized)
-			return
-		}
+	userID, ok := validateToken(token)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, map[string]string{
+			"error": "invalid or expired token",
+		})
+		return
+	}
 
-		// Store the resolved identity on the zen.Context so handlers can
-		// retrieve it with c.Get("userID") without re-parsing the header.
-		if c := zen.FromRequest(r); c != nil {
-			c.Set("userID", userID)
-		}
-
-		next.ServeHTTP(w, r)
-	})
+	c.Set("userID", userID)
+	next.ServeHTTP(c.Response, c.Request)
 }
 
 func bearerToken(header string) string {

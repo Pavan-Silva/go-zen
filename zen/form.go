@@ -5,7 +5,103 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 )
+
+// fieldInfo caches the reflection metadata needed to bind form fields.
+// Computing this once per struct type avoids repeated reflection on every request.
+type fieldInfo struct {
+	index   int
+	kind    reflect.Kind
+	formKey string
+	setFunc func(reflect.Value, string) error
+}
+
+// formCache stores pre-computed field metadata keyed by struct type.
+// Using sync.Map allows lock-free reads after initial population.
+var formCache sync.Map
+
+// getFormFields returns the cached field metadata for the given struct type.
+// On first call for a type, it inspects all exported fields, resolves their
+// JSON tag names (stripping options like ",omitempty"), and creates a setFunc
+// closure for each field. Subsequent calls return the cached slice.
+func getFormFields(t reflect.Type) []fieldInfo {
+	if cached, ok := formCache.Load(t); ok {
+		return cached.([]fieldInfo)
+	}
+
+	numField := t.NumField()
+	fields := make([]fieldInfo, 0, numField)
+
+	for i := 0; i < numField; i++ {
+		field := t.Field(i)
+
+		// Skip unexported fields (PkgPath != "") and embedded fields.
+		if !field.Anonymous && field.PkgPath == "" {
+			tag := field.Tag.Get("json")
+			if idx := strings.IndexByte(tag, ','); idx != -1 {
+				tag = tag[:idx]
+			}
+			if tag == "" || tag == "-" {
+				tag = field.Name
+			}
+
+			fields = append(fields, fieldInfo{
+				index:   i,
+				kind:    field.Type.Kind(),
+				formKey: tag,
+				setFunc: getSetFunc(field.Type.Kind()),
+			})
+		}
+	}
+
+	formCache.Store(t, fields)
+	return fields
+}
+
+// getSetFunc returns a closure that sets a reflect.Value from a string.
+// The closure is specific to one kind so the type switch is evaluated once
+// at cache-build time rather than on every form field on every request.
+func getSetFunc(kind reflect.Kind) func(reflect.Value, string) error {
+	return func(fv reflect.Value, raw string) error {
+		switch kind {
+		case reflect.String:
+			fv.SetString(raw)
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			n, err := strconv.ParseInt(raw, 10, 64)
+			if err != nil {
+				return err
+			}
+			fv.SetInt(n)
+		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+			n, err := strconv.ParseUint(raw, 10, 64)
+			if err != nil {
+				return err
+			}
+			fv.SetUint(n)
+		case reflect.Float32, reflect.Float64:
+			f, err := strconv.ParseFloat(raw, 64)
+			if err != nil {
+				return err
+			}
+			fv.SetFloat(f)
+		case reflect.Bool:
+			// Check common truthy variants directly rather than calling
+			// strings.ToLower, which allocates a new string on every call.
+			switch raw {
+			case "true", "TRUE", "True", "1", "yes", "YES", "Yes", "on", "ON", "On":
+				fv.SetBool(true)
+			default:
+				fv.SetBool(false)
+			}
+		default:
+			// Unsupported kinds are intentionally skipped; the field keeps its
+			// zero value. No error is returned to stay consistent with the
+			// "unknown keys are ignored" contract of mapFormValues.
+		}
+		return nil
+	}
+}
 
 // BindForm parses the request's form data into dest, then runs struct
 // validation if dest is a pointer to a struct.
@@ -39,11 +135,11 @@ func (c *Context) BindForm(dest any) error {
 		return err
 	}
 
-	val := reflect.ValueOf(dest)
-	if val.Kind() == reflect.Ptr {
-		val = val.Elem()
+	rv := reflect.ValueOf(dest)
+	if rv.Kind() == reflect.Ptr {
+		rv = rv.Elem()
 	}
-	if val.Kind() == reflect.Struct {
+	if rv.Kind() == reflect.Struct {
 		return validatorInstance().Struct(dest)
 	}
 	return nil
@@ -66,90 +162,17 @@ func mapFormValues(values map[string][]string, dest any) error {
 	}
 
 	rv = rv.Elem()
-	rt := rv.Type()
+	fields := getFormFields(rv.Type())
 
-	for i := 0; i < rt.NumField(); i++ {
-		field := rt.Field(i)
-		fieldVal := rv.Field(i)
-
-		// Skip unexported fields — reflect will panic on SetXxx if we don't.
-		if !fieldVal.CanSet() {
-			continue
-		}
-
-		// Resolve the form key from the JSON tag, stripping tag options such
-		// as ",omitempty". Fall back to the field name when no tag is set.
-		tag := field.Tag.Get("json")
-		if idx := strings.IndexByte(tag, ','); idx != -1 {
-			tag = tag[:idx]
-		}
-		if tag == "" || tag == "-" {
-			tag = field.Name
-		}
-
-		vals, ok := values[tag]
+	for _, fi := range fields {
+		vals, ok := values[fi.formKey]
 		if !ok || len(vals) == 0 {
 			continue
 		}
 
-		if err := setField(fieldVal, vals[0]); err != nil {
-			return &FormError{Field: tag, Err: err}
+		if err := fi.setFunc(rv.Field(fi.index), vals[0]); err != nil {
+			return &FormError{Field: fi.formKey, Err: err}
 		}
-	}
-	return nil
-}
-
-// setField converts the raw form string value into the kind of the target
-// struct field and writes it using reflection.
-//
-// Supported kinds: string, int*, uint*, float*, bool.
-// Unsupported kinds (slices, maps, nested structs, etc.) are intentionally
-// skipped and the field retains its zero value. This keeps the implementation
-// minimal; use [Context.BindJSON] for complex nested payloads.
-//
-// Bool parsing accepts the following truthy literals without allocating:
-// "true", "TRUE", "True", "1", "yes", "YES", "Yes", "on", "ON", "On".
-// Any other value is treated as false.
-func setField(fv reflect.Value, raw string) error {
-	switch fv.Kind() {
-	case reflect.String:
-		fv.SetString(raw)
-
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		n, err := strconv.ParseInt(raw, 10, 64)
-		if err != nil {
-			return err
-		}
-		fv.SetInt(n)
-
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		n, err := strconv.ParseUint(raw, 10, 64)
-		if err != nil {
-			return err
-		}
-		fv.SetUint(n)
-
-	case reflect.Float32, reflect.Float64:
-		f, err := strconv.ParseFloat(raw, 64)
-		if err != nil {
-			return err
-		}
-		fv.SetFloat(f)
-
-	case reflect.Bool:
-		// Check common truthy variants directly rather than calling
-		// strings.ToLower, which allocates a new string on every call.
-		switch raw {
-		case "true", "TRUE", "True", "1", "yes", "YES", "Yes", "on", "ON", "On":
-			fv.SetBool(true)
-		default:
-			fv.SetBool(false)
-		}
-
-	default:
-		// Unsupported kinds are intentionally skipped; the field keeps its
-		// zero value. No error is returned to stay consistent with the
-		// "unknown keys are ignored" contract of mapFormValues.
 	}
 	return nil
 }

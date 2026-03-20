@@ -3,78 +3,128 @@ package zen
 import (
 	"context"
 	"net/http"
-	"net/url"
 	"sync"
 )
 
-// contextPool reuses Context objects across requests to avoid per-request heap allocations.
 var contextPool = sync.Pool{
-	New: func() any { return &Context{} },
+	New: func() any { return newContextPooled() },
 }
 
-// zenCtxKey is the key used to store *Context in the request context
-// so middlewares can retrieve it without an extra allocation per middleware.
+func newContextPooled() *Context {
+	return &Context{
+		overflow: strMap{m: make(map[string]any, 4)},
+	}
+}
+
 type zenCtxKey struct{}
 
+type kv struct {
+	k string
+	v any
+}
+
+type strMap struct {
+	m map[string]any
+}
+
+func (s *strMap) Get(k string) (any, bool) {
+	v, ok := s.m[k]
+	return v, ok
+}
+
+func (s *strMap) Set(k string, v any) {
+	s.m[k] = v
+}
+
+func (s *strMap) Len() int {
+	return len(s.m)
+}
+
+func (s *strMap) Clear() {
+	for k := range s.m {
+		delete(s.m, k)
+	}
+}
+
+// Context is the request context passed to every zen handler and middleware.
 type Context struct {
 	Response   http.ResponseWriter
 	Request    *http.Request
-	queryCache url.Values
-	values     map[string]any // middleware/handler shared storage
+	queryCache map[string]string
+	store      [8]kv
+	storeLen   int
+	overflow   strMap
 }
 
-// reset prepares the context for a new request, or zeros it out when called
-// with nil values before returning to the pool. Accepting nil here means the
-// pool-return path in adaptHandler can call c.reset(nil, nil) instead
-// of manually clearing each field — ensuring no field is ever forgotten when
-// Context gains new fields in the future.
+// reset clears all fields to prepare the Context for reuse.
+// It is called by [newContext] before handling each request and by
+// [releaseContext] when returning the Context to the pool.
+// Resetting storeLen to 0 means Set/Get will overwrite slots rather than
+// clear them — this is safe because Set always writes key and value before
+// incrementing storeLen.
 func (c *Context) reset(w http.ResponseWriter, r *http.Request) {
 	c.Response = w
 	c.Request = r
 	c.queryCache = nil
-	c.values = nil // lazy-initialized on first Set
+	c.storeLen = 0
+	c.overflow.Clear()
 }
 
-// Set stores a value under key, shared across middlewares and the handler
-// for the lifetime of the request. The map is allocated lazily on first use.
+// Set stores a value under key for the lifetime of the current request.
+// Values set in middleware are available in handlers via [Context.Get].
+//
+// The first eight distinct keys are stored inline with no heap allocation.
+// A map is allocated lazily only when more than eight keys are stored.
 func (c *Context) Set(key string, val any) {
-	if c.values == nil {
-		c.values = make(map[string]any)
+	for i := 0; i < c.storeLen; i++ {
+		if c.store[i].k == key {
+			c.store[i].v = val
+			return
+		}
 	}
-	c.values[key] = val
+	if c.storeLen < len(c.store) {
+		c.store[c.storeLen].k = key
+		c.store[c.storeLen].v = val
+		c.storeLen++
+		return
+	}
+	c.overflow.Set(key, val)
 }
 
-// Get retrieves a value previously stored with Set.
+// Get retrieves a value previously stored with [Context.Set].
 // Returns nil if the key is not present.
 func (c *Context) Get(key string) any {
-	return c.values[key]
+	for i := 0; i < c.storeLen; i++ {
+		if c.store[i].k == key {
+			return c.store[i].v
+		}
+	}
+	v, _ := c.overflow.Get(key)
+	return v
 }
 
-// adaptHandler turns a zen-style handler into a standard http.Handler.
-// It is used at route registration time and reuses Context instances via contextPool.
-func adaptHandler(handler func(*Context)) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		c := contextPool.Get().(*Context)
-		c.reset(w, r)
-
-		// Attach *Context to the request context once so any middleware in
-		// the chain can call zen.FromRequest(r) to reach it.
-		r = r.WithContext(context.WithValue(r.Context(), zenCtxKey{}, c))
-		c.Request = r
-
-		// Nil references before returning to pool, defer to survive panics
-		defer func() {
-			c.reset(nil, nil)
-			contextPool.Put(c)
-		}()
-
-		handler(c)
-	})
+// newContext retrieves a Context from the pool, resets it, and attaches it
+// to r.Context() so [FromRequest] works for any code that has only *http.Request.
+func newContext(w http.ResponseWriter, r *http.Request) (*Context, *http.Request) {
+	c := contextPool.Get().(*Context)
+	c.reset(w, r)
+	r = r.WithContext(context.WithValue(r.Context(), zenCtxKey{}, c))
+	c.Request = r
+	return c, r
 }
 
-// FromRequest retrieves the *Context from a standard http.Request.
-// Returns nil if the request did not go through a zen handler.
+// releaseContext returns the Context to the pool after resetting it.
+// It is called by [Router.ServeHTTP] after the handler chain completes.
+func releaseContext(c *Context) {
+	c.reset(nil, nil)
+	contextPool.Put(c)
+}
+
+// FromRequest retrieves the *Context stored by [Router.ServeHTTP].
+// Returns nil if the request did not pass through a zen Router.
 func FromRequest(r *http.Request) *Context {
-	c, _ := r.Context().Value(zenCtxKey{}).(*Context)
-	return c
+	if c := r.Context().Value(zenCtxKey{}); c != nil {
+		return c.(*Context)
+	}
+	return nil
 }
