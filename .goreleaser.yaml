@@ -52,5 +52,5 @@ changelog:
 release:
   github:
     owner: Pavan-Silva
-    name: zen
+    name: go-zen
   draft: false
