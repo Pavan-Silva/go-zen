@@ -10,7 +10,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Pavan-Silva/zen/system"
+	"github.com/Pavan-Silva/go-zen/system"
 )
 
 // MiddlewareFunc is the zen-native middleware signature.

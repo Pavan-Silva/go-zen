@@ -15,7 +15,7 @@ A minimalist Go web framework built on top of the standard library's `net/http`.
 ## Installation
 
 ```bash
-go get github.com/Pavan-Silva/zen
+go get github.com/Pavan-Silva/go-zen
 ```
 
 ## Quick Start
@@ -25,8 +25,8 @@ package main
 
 import (
     "net/http"
-    "github.com/Pavan-Silva/zen"
-    "github.com/Pavan-Silva/zen/middleware"
+    "github.com/Pavan-Silva/go-zen"
+    "github.com/Pavan-Silva/go-zen/middleware"
 )
 
 func main() {

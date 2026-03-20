@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Pavan-Silva/zen"
+	"github.com/Pavan-Silva/go-zen"
 )
 
 type Product struct {
