@@ -3,8 +3,8 @@ package main
 import (
 	"net/http"
 
-	"github.com/Pavan-Silva/zen"
-	"github.com/Pavan-Silva/zen/middleware"
+	"github.com/Pavan-Silva/go-zen"
+	"github.com/Pavan-Silva/go-zen/middleware"
 )
 
 func main() {

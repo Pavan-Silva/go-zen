@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/Pavan-Silva/zen"
-	"github.com/Pavan-Silva/zen/middleware"
+	"github.com/Pavan-Silva/go-zen"
+	"github.com/Pavan-Silva/go-zen/middleware"
 )
 
 func main() {

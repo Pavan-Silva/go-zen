@@ -1,9 +1,9 @@
-module github.com/Pavan-Silva/zen/loadtest
+module github.com/Pavan-Silva/go-zen/loadtest
 
-go 1.25.0
+go 1.22.0
 
 require (
-	github.com/Pavan-Silva/zen v0.0.0-00010101000000-000000000000
+	github.com/Pavan-Silva/go-zen v0.0.0
 	github.com/gin-gonic/gin v1.12.0
 	github.com/labstack/echo/v4 v4.15.1
 )
@@ -44,4 +44,4 @@ require (
 	google.golang.org/protobuf v1.36.10 // indirect
 )
 
-replace github.com/Pavan-Silva/zen => ../
+replace github.com/Pavan-Silva/go-zen => ../
