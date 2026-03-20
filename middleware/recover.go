@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"runtime/debug"
 
-	"github.com/Pavan-Silva/zen/zen"
+	"github.com/Pavan-Silva/zen"
 )
 
 func Recover(c *zen.Context, next http.Handler) {
