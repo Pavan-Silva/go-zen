@@ -35,7 +35,6 @@ archives:
     files:
       - "README.md"
       - "LICENSE"
-      - "examples/**/*"
 
 checksum:
   algorithm: sha256
