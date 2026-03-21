@@ -78,6 +78,39 @@ r.Handle("GET /posts/{slug}/comments/{comment_id}", handleGetComment)
 r.Handle("GET /files/*path", handleFiles)
 ```
 
+## Route Groups
+
+Route groups organize routes with common prefixes and shared middleware:
+
+```go
+r := zen.New(":8080")
+
+// Public API - no authentication
+public := r.Group("/api")
+public.Handle("GET /health", healthCheck)
+public.Handle("GET /version", versionInfo)
+
+// Protected API - requires authentication
+api := r.Group("/api", authMiddleware)
+api.Handle("GET /users/{id}", getUser)
+api.Handle("PUT /users/{id}", updateUser)
+api.Handle("DELETE /users/{id}", deleteUser)
+
+// Nested groups - inherits parent middleware
+posts := api.Group("/posts")
+posts.Handle("GET /{id}", getPost)
+posts.Handle("POST /", createPost)
+
+// Admin group with additional middleware
+admin := r.Group("/admin", adminMiddleware)
+admin.Handle("GET /dashboard", dashboard)
+
+// Sub-groups inherit middleware from parent
+adminUsers := admin.Group("/users")
+adminUsers.Handle("GET /", listAllUsers)
+adminUsers.Handle("DELETE /{id}", deleteUser)
+```
+
 ## Request Handling
 
 ### JSON Binding
@@ -386,6 +419,7 @@ cd loadtest
 zen/
 ├── context.go      # Request context with storage
 ├── router.go       # Router and server
+├── group.go        # Route groups
 ├── request.go      # JSON/form binding
 ├── response.go     # JSON response helper
 ├── validate.go     # Struct validation

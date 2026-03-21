@@ -99,13 +99,15 @@ func main() {
 	e := echo.New()
 	e.HideBanner = true
 	e.HidePort = true
-	e.Use(Auth)
 
-	e.GET("/products", func(c echo.Context) error {
+	api := e.Group("")
+	api.Use(Auth)
+
+	api.GET("/products", func(c echo.Context) error {
 		return c.JSON(http.StatusOK, catalog)
 	})
 
-	e.POST("/orders", func(c echo.Context) error {
+	api.POST("/orders", func(c echo.Context) error {
 		var req OrderRequest
 		if err := c.Bind(&req); err != nil {
 			return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
@@ -119,7 +121,7 @@ func main() {
 		})
 	})
 
-	e.GET("/ping", func(c echo.Context) error {
+	api.GET("/ping", func(c echo.Context) error {
 		return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 	})
 
@@ -128,7 +130,7 @@ func main() {
 		items[i] = Product{i + 1, "Product " + strconv.Itoa(i+1),
 			float64(i+1) * 9.99, "electronics", true}
 	}
-	e.GET("/large", func(c echo.Context) error {
+	api.GET("/large", func(c echo.Context) error {
 		return c.JSON(http.StatusOK, items)
 	})
 

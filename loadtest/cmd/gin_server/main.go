@@ -98,13 +98,15 @@ func main() {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 	r.Use(gin.Recovery())
-	r.Use(Auth())
 
-	r.GET("/products", func(c *gin.Context) {
+	api := r.Group("/")
+	api.Use(Auth())
+
+	api.GET("/products", func(c *gin.Context) {
 		c.JSON(http.StatusOK, catalog)
 	})
 
-	r.POST("/orders", func(c *gin.Context) {
+	api.POST("/orders", func(c *gin.Context) {
 		var req OrderRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -119,7 +121,7 @@ func main() {
 		})
 	})
 
-	r.GET("/ping", func(c *gin.Context) {
+	api.GET("/ping", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
@@ -128,7 +130,7 @@ func main() {
 		items[i] = Product{i + 1, "Product " + strconv.Itoa(i+1),
 			float64(i+1) * 9.99, "electronics", true}
 	}
-	r.GET("/large", func(c *gin.Context) {
+	api.GET("/large", func(c *gin.Context) {
 		c.JSON(http.StatusOK, items)
 	})
 
