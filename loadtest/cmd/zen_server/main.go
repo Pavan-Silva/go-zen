@@ -102,13 +102,15 @@ func main() {
 	}
 
 	s := zen.New(addr)
-	s.Use(Auth)
 
-	s.Handle("GET /products", func(c *zen.Context) {
+	api := s.Group("/")
+	api.Use(Auth)
+
+	api.Handle("GET /products", func(c *zen.Context) {
 		c.JSON(http.StatusOK, catalog)
 	})
 
-	s.Handle("POST /orders", func(c *zen.Context) {
+	api.Handle("POST /orders", func(c *zen.Context) {
 		var req OrderRequest
 		if err := c.BindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
@@ -123,7 +125,7 @@ func main() {
 		})
 	})
 
-	s.Handle("GET /ping", func(c *zen.Context) {
+	api.Handle("GET /ping", func(c *zen.Context) {
 		c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 	})
 
@@ -132,16 +134,15 @@ func main() {
 		items[i] = Product{i + 1, "Product " + strconv.Itoa(i+1),
 			float64(i+1) * 9.99, "electronics", true}
 	}
-	// pre-marshal large payload once
 	large, err := json.Marshal(items)
 	if err != nil {
 		log.Fatal(err)
 	}
-	s.HandleRaw("GET /large", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	api.HandleRaw("GET /large", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write(large)
 	}))
 
 	log.Printf("[zen] listening on %s", addr)
-	s.Server.ListenAndServe() // call directly to avoid banner+graceful overhead
+	s.Server.ListenAndServe()
 }

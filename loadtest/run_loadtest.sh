@@ -56,11 +56,11 @@ build_server() {
   go build -o "$BUILD_DIR/$name" "$pkg" && ok "$name"
 }
 
-build_server zen_server    ./cmd/zen_server
-build_server gin_server    ./cmd/gin_server
-build_server echo_server   ./cmd/echo_server
-build_server std_server    ./cmd/std_server
-build_server runner        ./runner
+build_server zen_server   ./cmd/zen_server
+build_server gin_server   ./cmd/gin_server
+build_server echo_server  ./cmd/echo_server
+build_server std_server  ./cmd/std_server
+build_server runner      ./runner
 
 # ── start servers ─────────────────────────────────────────────────────────────
 log "Starting servers..."
@@ -86,10 +86,10 @@ start_server() {
   fail "$name failed to start — check $log_file"
 }
 
-start_server zen  zen_server  8081
-start_server gin  gin_server  8082
-start_server echo echo_server 8083
-start_server std  std_server  8084
+start_server zen   zen_server  8081
+start_server gin   gin_server  8082
+start_server echo  echo_server 8083
+start_server std   std_server  8084
 
 echo ""
 log "All servers ready. Starting load test..."
