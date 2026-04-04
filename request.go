@@ -8,8 +8,29 @@ import (
 	"reflect"
 )
 
+// maxBodyBytes limits request body size to 1MB to prevent memory exhaustion attacks.
 const maxBodyBytes = 1 << 20
 
+// BindJSON parses the request body as JSON and decodes it into dest.
+// If dest is a struct, it also runs struct validation using the registered validator.
+// The request body is closed after reading (errors are logged but not returned).
+//
+// Returns an error if:
+// - The JSON is malformed
+// - dest is not a pointer to a struct for validation
+// - Validation fails (if enabled)
+//
+// Example:
+//
+//	type SignupRequest struct {
+//	    Email string `json:"email" validate:"required,email"`
+//	    Age   int    `json:"age" validate:"required,gte=18"`
+//	}
+//	var req SignupRequest
+//	if err := c.BindJSON(&req); err != nil {
+//	    c.SendError(CommonErrors.BadRequest(err.Error()))
+//	    return
+//	}
 func (c *Context) BindJSON(dest any) error {
 	lr := io.LimitReader(c.Request.Body, maxBodyBytes)
 	err := json.NewDecoder(lr).Decode(dest)
@@ -29,6 +50,18 @@ func (c *Context) BindJSON(dest any) error {
 	return nil
 }
 
+// QueryParam returns the first value of a query parameter from the request URL.
+// Query parameters are lazily parsed and cached on first access for performance.
+// Returns an empty string if the parameter is not present.
+//
+// Example:
+//
+//	page := c.QueryParam("page")      // GET /posts?page=2 → "2"
+//	search := c.QueryParam("q")       // GET /posts?q=golang → "golang"
+//	missing := c.QueryParam("foo")    // GET /posts → ""
+//
+// Multiple values (e.g., "?item=1&item=2") return only the first value.
+// Use c.Request.URL.Query() directly for access to all values.
 func (c *Context) QueryParam(key string) string {
 	if c.queryCache == nil {
 		m := make(map[string]string)
@@ -49,6 +82,8 @@ func (c *Context) QueryParam(key string) string {
 // the captured segment with:
 //
 //	id := c.Param("id")  // GET /users/42  →  "42"
+//
+// Returns an empty string if the parameter is not found. Requires Go 1.22+ router.
 func (c *Context) Param(key string) string {
 	return c.Request.PathValue(key)
 }
@@ -61,7 +96,16 @@ func (c *Context) Param(key string) string {
 // runs validation in the same call.
 //
 // The request body is closed after reading. Close errors are silently
-// discarded for the same reason as in [Context.BindJSON].
+// discarded.
+//
+// Example:
+//
+//	data, err := c.Body()
+//	if err != nil {
+//	    c.SendError(CommonErrors.InternalError("failed to read body"))
+//	    return
+//	}
+//	// Process raw bytes, e.g. XML parsing, custom format, etc.
 func (c *Context) Body() ([]byte, error) {
 	lr := io.LimitReader(c.Request.Body, maxBodyBytes)
 	b, err := io.ReadAll(lr)

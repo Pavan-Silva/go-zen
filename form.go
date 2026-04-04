@@ -8,23 +8,32 @@ import (
 	"sync"
 )
 
-// fieldInfo caches the reflection metadata needed to bind form fields.
-// Computing this once per struct type avoids repeated reflection on every request.
+// fieldInfo caches reflection metadata needed to bind form fields to structs.
+// By pre-computing this once per type, we avoid expensive reflection on every request.
+// The setFunc closure is pre-specialized to each field's type, so the type switch
+// happens once at setup time, not on every field assignment.
 type fieldInfo struct {
-	index   int
-	kind    reflect.Kind
+	// index is the struct field index for reflect.Value.Field(i)
+	index int
+	// kind is the target field's reflect.Kind (pre-computed for zero-copy type switches)
+	kind reflect.Kind
+	// formKey is the form parameter name (from struct tag or field name)
 	formKey string
+	// setFunc is a specialized closure for converting strings to the field type
 	setFunc func(reflect.Value, string) error
 }
 
-// formCache stores pre-computed field metadata keyed by struct type.
-// Using sync.Map allows lock-free reads after initial population.
+// formCache stores pre-computed field metadata keyed by reflect.Type.
+// Using sync.Map provides lock-free reads, which is critical in high-concurrency servers.
+// The cache is lazily populated on first access per type, then reused forever.
 var formCache sync.Map
 
-// getFormFields returns the cached field metadata for the given struct type.
-// On first call for a type, it inspects all exported fields, resolves their
-// JSON tag names (stripping options like ",omitempty"), and creates a setFunc
-// closure for each field. Subsequent calls return the cached slice.
+// getFormFields returns cached field metadata for a struct type.
+// On first call, it reflects on the struct, resolves field names from tags,
+// and builds type-specialized setFunc closures. Subsequent calls return the cache hit.
+//
+// This is the key to zen's form binding performance: reflection happens once per type,
+// not once per request.
 func getFormFields(t reflect.Type) []fieldInfo {
 	if cached, ok := formCache.Load(t); ok {
 		return cached.([]fieldInfo)
@@ -36,12 +45,14 @@ func getFormFields(t reflect.Type) []fieldInfo {
 	for i := 0; i < numField; i++ {
 		field := t.Field(i)
 
-		// Skip unexported fields (PkgPath != "") and embedded fields.
+		// Skip unexported fields (PkgPath != "") and embedded fields (Anonymous).
 		if !field.Anonymous && field.PkgPath == "" {
 			tag := field.Tag.Get("json")
+			// Strip tag options (e.g., "name,omitempty" → "name")
 			if idx := strings.IndexByte(tag, ','); idx != -1 {
 				tag = tag[:idx]
 			}
+			// Use field name if no tag or tag is "-"
 			if tag == "" || tag == "-" {
 				tag = field.Name
 			}
@@ -59,73 +70,93 @@ func getFormFields(t reflect.Type) []fieldInfo {
 	return fields
 }
 
-// getSetFunc returns a closure that sets a reflect.Value from a string.
-// The closure is specific to one kind so the type switch is evaluated once
-// at cache-build time rather than on every form field on every request.
+// getSetFunc returns a type-specialized closure for string-to-field conversion.
+// The type switch happens here (once per field type), so the returned closure
+// is nearly branch-free on the hot path. This is significantly faster than
+// doing the type switch for every field on every request.
 func getSetFunc(kind reflect.Kind) func(reflect.Value, string) error {
 	return func(fv reflect.Value, raw string) error {
 		switch kind {
 		case reflect.String:
 			fv.SetString(raw)
+
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 			n, err := strconv.ParseInt(raw, 10, 64)
 			if err != nil {
 				return err
 			}
 			fv.SetInt(n)
+
 		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 			n, err := strconv.ParseUint(raw, 10, 64)
 			if err != nil {
 				return err
 			}
 			fv.SetUint(n)
+
 		case reflect.Float32, reflect.Float64:
 			f, err := strconv.ParseFloat(raw, 64)
 			if err != nil {
 				return err
 			}
 			fv.SetFloat(f)
+
 		case reflect.Bool:
-			// Check common truthy variants directly rather than calling
-			// strings.ToLower, which allocates a new string on every call.
+			// Direct string comparison avoids strings.ToLower allocation and is faster.
+			// Common true values are checked; anything else (including "") is false.
 			switch raw {
 			case "true", "TRUE", "True", "1", "yes", "YES", "Yes", "on", "ON", "On":
 				fv.SetBool(true)
 			default:
 				fv.SetBool(false)
 			}
+
 		default:
-			// Unsupported kinds are intentionally skipped; the field keeps its
-			// zero value. No error is returned to stay consistent with the
-			// "unknown keys are ignored" contract of mapFormValues.
+			// Unsupported types are silently ignored (field keeps zero value).
+			// This is consistent with the "unknown keys are ignored" behavior.
 		}
 		return nil
 	}
 }
 
-// BindForm parses the request's form data into dest, then runs struct
-// validation if dest is a pointer to a struct.
+// BindForm parses URL-encoded or multipart form data into a struct, then validates it.
+// It's the form equivalent of BindJSON, using the same "json" struct tag for field mapping.
 //
-// Both URL-encoded bodies (application/x-www-form-urlencoded) and multipart
-// form data (multipart/form-data) are supported — Go's [http.Request.ParseForm]
-// handles both transparently.
+// This allows using a single struct for both JSON endpoints and form endpoints:
 //
-// Field mapping follows the same convention as [Context.BindJSON]: the "json"
-// struct tag is used to match form keys to struct fields, falling back to the
-// exported field name when no tag is present. This keeps the two binders
-// consistent so the same struct can serve both JSON and form endpoints.
-//
-//	type SignupForm struct {
-//	    Username string `json:"username" validate:"required,alphanum"`
-//	    Age      int    `json:"age"      validate:"required,gte=18"`
+//	type UserData struct {
+//	    Name  string `json:"name" validate:"required"`
+//	    Email string `json:"email" validate:"required,email"`
+//	    Age   int    `json:"age" validate:"gte=0,lte=200"`
 //	}
 //
-// Possible error types returned:
-//   - A wrapped [http.Request.ParseForm] error for malformed request bodies.
-//   - [ErrInvalidBindTarget] if dest is not a pointer to a struct.
-//   - [*FormError] if a form value cannot be converted to the field's type.
-//   - A validation error from [github.com/go-playground/validator/v10] if a
-//     validate tag constraint is violated.
+//	// POST /api/users (JSON): c.BindJSON(&user)
+//	// POST /register (form): c.BindForm(&user)
+//
+// Supported field types: string, bool, all int variants, all uint variants, float32, float64.
+// Unsupported types are silently ignored (keep zero value).
+//
+// Returns errors:
+// - ErrInvalidBindTarget: dest is not a pointer to struct
+// - FormError: a field value failed to parse (includes field name and cause)
+// - validator errors: validation failed
+//
+// Example:
+//
+//	type LoginForm struct {
+//	    Email    string `json:"email" validate:"required,email"`
+//	    Password string `json:"password" validate:"required,min=8"`
+//	}
+//	var form LoginForm
+//	if err := c.BindForm(&form); err != nil {
+//	    if fe := (*zen.FormError)(nil); errors.As(err, &fe) {
+//	        c.JSON(http.StatusBadRequest, map[string]string{
+//	            "field": fe.Field,
+//	            "error": fe.Err.Error(),
+//	        })
+//	    }
+//	    return
+//	}
 func (c *Context) BindForm(dest any) error {
 	if err := c.Request.ParseForm(); err != nil {
 		return fmt.Errorf("zen: ParseForm error: %w", err)
@@ -145,16 +176,11 @@ func (c *Context) BindForm(dest any) error {
 	return nil
 }
 
-// mapFormValues maps form key-value pairs onto the exported fields of the
-// struct pointed to by dest.
+// mapFormValues maps form parameters onto struct fields using cached metadata.
+// It's the core of form binding: iterates over cached fields and applies conversions.
 //
-// Field names are resolved in this order:
-//  1. The "json" struct tag (minus any options after a comma, e.g. omitempty)
-//  2. The exported field name, if no usable tag is present
-//
-// Fields tagged with JSON:"-" are always skipped. Unexported fields are
-// skipped automatically because [reflect.Value.CanSet] returns false for them.
-// Form keys that do not match any field are silently ignored.
+// Returns ErrInvalidBindTarget if dest is not a pointer to struct, or FormError
+// if a field value fails to convert.
 func mapFormValues(values map[string][]string, dest any) error {
 	rv := reflect.ValueOf(dest)
 	if rv.Kind() != reflect.Ptr || rv.Elem().Kind() != reflect.Struct {

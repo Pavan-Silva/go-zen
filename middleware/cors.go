@@ -8,23 +8,43 @@ import (
 	"github.com/Pavan-Silva/go-zen"
 )
 
-// CORSConfig holds CORS configuration options.
+// CORSConfig holds configuration for CORS middleware.
+// All fields have sensible defaults via DefaultCORSConfig().
+//
+// Note: AllowedOrigins = []string{"*"} allows any origin and is only safe for
+// public APIs without authentication. For APIs with credentials, explicitly list origins.
 type CORSConfig struct {
-	// AllowedOrigins list of allowed origins. Use "*" for any origin (not recommended for production).
+	// AllowedOrigins list of allowed origins. "*" allows any origin (insecure for private APIs).
 	AllowedOrigins []string
-	// AllowedMethods list of allowed HTTP methods. Default: GET, POST, PUT, DELETE, PATCH, OPTIONS.
+	// AllowedMethods HTTP methods clients can use in CORS requests. Default: GET, POST, PUT, DELETE, PATCH, OPTIONS.
 	AllowedMethods []string
-	// AllowedHeaders list of allowed request headers. Default: Content-Type, Authorization.
+	// AllowedHeaders request headers clients are allowed to send. Default: Content-Type, Authorization.
 	AllowedHeaders []string
-	// ExposeHeaders list of headers to expose to client. Default: Content-Length, Date, X-Request-ID.
+	// ExposeHeaders response headers the browser will expose to client JS. Default: Content-Length, Date.
 	ExposeHeaders []string
-	// AllowCredentials whether to allow credentials (cookies, auth headers). Default: false.
+	// AllowCredentials whether to allow credentials (cookies, Authorization header) in cross-origin requests. Default: false.
 	AllowCredentials bool
-	// MaxAge cache duration for preflight requests in seconds. Default: 3600.
+	// MaxAge cache duration (seconds) for preflight OPTIONS responses. Default: 3600 (1 hour).
 	MaxAge int
 }
 
-// DefaultCORSConfig returns CORS config with sensible defaults.
+// DefaultCORSConfig returns a CORSConfig with production-ready defaults.
+// Customize fields as needed for your API.
+//
+// Default values:
+// - AllowedOrigins: ["*"] (open to all - change for production APIs)
+// - AllowedMethods: [GET, POST, PUT, DELETE, PATCH, OPTIONS]
+// - AllowedHeaders: [Content-Type, Authorization]
+// - ExposeHeaders: [Content-Length, Date]
+// - AllowCredentials: false
+// - MaxAge: 3600 seconds
+//
+// Example:
+//
+//	config := middleware.DefaultCORSConfig()
+//	config.AllowedOrigins = []string{"https://example.com"}
+//	config.AllowCredentials = true  // Allow cookies in cross-origin requests
+//	r.Use(middleware.CORS(config))
 func DefaultCORSConfig() CORSConfig {
 	return CORSConfig{
 		AllowedOrigins: []string{"*"},
@@ -35,26 +55,41 @@ func DefaultCORSConfig() CORSConfig {
 	}
 }
 
-// CORS returns a middleware that handles CORS requests.
+// CORS returns a middleware that handles CORS (Cross-Origin Resource Sharing) requests.
+// It processes preflight OPTIONS requests and sets appropriate CORS headers.
 //
-// Example:
+// The middleware checks if the request origin is allowed. If not, it skips CORS processing
+// (no Access-Control headers are set). If allowed, it:
+// 1. Sets Access-Control-Allow-Origin to the request origin
+// 2. Sets other Access-Control headers per config
+// 3. For OPTIONS requests, responds with 204 No Content (preflight response)
+// 4. For other methods, passes to the next handler
 //
-//	r := zen.New(":8080")
-//	corsConfig := middleware.DefaultCORSConfig()
-//	corsConfig.AllowedOrigins = []string{"https://example.com", "https://app.example.com"}
-//	r.Use(middleware.CORS(corsConfig))
+// Example (open to all origins - only for public APIs):
+//
+//	r.Use(middleware.CORS(middleware.DefaultCORSConfig()))
+//
+// Example (specific origins - for private APIs):
+//
+//	config := middleware.DefaultCORSConfig()
+//	config.AllowedOrigins = []string{
+//	    "https://app.example.com",
+//	    "https://admin.example.com",
+//	}
+//	config.AllowCredentials = true
+//	r.Use(middleware.CORS(config))
 func CORS(config CORSConfig) zen.MiddlewareFunc {
 	return func(c *zen.Context, next http.Handler) {
 		origin := c.Request.Header.Get("Origin")
 		
 		// Check if origin is allowed
 		if !isOriginAllowed(origin, config.AllowedOrigins) {
-			// Origin not allowed, but continue (don't send CORS headers)
+			// Origin not allowed; proceed without CORS headers
 			next.ServeHTTP(c.Response, c.Request)
 			return
 		}
 
-		// Set CORS headers
+		// Set CORS headers for allowed origins
 		c.Response.Header().Set("Access-Control-Allow-Origin", origin)
 		c.Response.Header().Set("Access-Control-Allow-Methods", strings.Join(config.AllowedMethods, ", "))
 		c.Response.Header().Set("Access-Control-Allow-Headers", strings.Join(config.AllowedHeaders, ", "))
@@ -65,17 +100,19 @@ func CORS(config CORSConfig) zen.MiddlewareFunc {
 			c.Response.Header().Set("Access-Control-Allow-Credentials", "true")
 		}
 
-		// Handle preflight requests
+		// Handle CORS preflight (OPTIONS) requests
 		if c.Request.Method == http.MethodOptions {
 			c.Response.WriteHeader(http.StatusNoContent)
 			return
 		}
 
+		// Continue to next handler for actual request
 		next.ServeHTTP(c.Response, c.Request)
 	}
 }
 
-// isOriginAllowed checks if the given origin is in the allowed list.
+// isOriginAllowed checks if origin is in the allowed list.
+// Special case: "*" in allowedOrigins allows all origins.
 func isOriginAllowed(origin string, allowedOrigins []string) bool {
 	if len(allowedOrigins) == 0 {
 		return false

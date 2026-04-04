@@ -14,54 +14,91 @@ import (
 )
 
 // MiddlewareFunc is the zen-native middleware signature.
-// Call next to pass control downstream; return without calling it to
-// short-circuit (e.g. auth failure).
+// Middleware receives the zen Context and the next handler in the chain.
+// Call next.ServeHTTP() to pass control downstream; return without calling it to
+// short-circuit execution (useful for auth, logging, etc).
+//
+// Middleware is zero-allocation by design: no closures are created per request,
+// and the Context is guaranteed to be non-nil due to the Router's ServeHTTP logic.
+//
+// Example:
 //
 //	func Logger(c *zen.Context, next http.Handler) {
-//	    log.Println(c.Request.Method, c.Request.URL.Path)
+//	    start := time.Now()
+//	    log.Printf("%s %s", c.Request.Method, c.Request.URL.Path)
+//	    next.ServeHTTP(c.Response, c.Request)
+//	    log.Printf("took %v", time.Since(start))
+//	}
+//
+//	func RequireAuth(c *zen.Context, next http.Handler) {
+//	    token := c.Request.Header.Get("Authorization")
+//	    if token == "" {
+//	        c.SendError(CommonErrors.Unauthorized())
+//	        return  // short-circuit: don't call next
+//	    }
 //	    next.ServeHTTP(c.Response, c.Request)
 //	}
 type MiddlewareFunc func(*Context, http.Handler)
 
-// middlewareHandler is a pre-built chain node: it holds the zen middleware
-// function and the already-wrapped next handler. At request time the only
-// work is retrieving *Context from the request (one lookup, shared across
-// the whole request) and calling the middleware function — no closures are
-// allocated per request.
+// middlewareHandler is a chain node in the middleware stack.
+// It holds a MiddlewareFunc and the next handler, written to avoid allocations.
+// Per-request work is minimal: extract Context from request and call the middleware.
 type middlewareHandler struct {
 	m    MiddlewareFunc
 	next http.Handler
 }
 
-// ServeHTTP invokes the middleware function with the request context.
-// The context is guaranteed to be non-nil because [Router.ServeHTTP] always
-// creates it before the chain runs.
+// ServeHTTP implements http.Handler by calling the middleware function.
+// The Context is guaranteed to exist because Router.ServeHTTP creates it first.
 func (mh *middlewareHandler) ServeHTTP(_ http.ResponseWriter, r *http.Request) {
 	mh.m(FromRequest(r), mh.next)
 }
 
-// zenHandler wraps a zen handler function. It retrieves the Context from the
-// request once and calls the handler, avoiding per-field lookups.
+// zenHandler wraps a zen-style handler (func(*Context)).
+// It's registered on the mux to extract the Context from the request exactly once.
 type zenHandler struct {
 	fn func(*Context)
 }
 
+// ServeHTTP implements http.Handler by extracting the Context and calling the handler.
 func (zh *zenHandler) ServeHTTP(_ http.ResponseWriter, r *http.Request) {
 	zh.fn(FromRequest(r))
 }
 
-// Router wraps [http.Server] and its internal mux, adding middleware support
-// and a zen-style handler adapter.
+// Router is the main entry point for a zen application.
+// It wraps http.Server and http.ServeMux, adding middleware support and Context pooling.
+// The design prioritizes performance: middleware is pre-built at setup time (no per-request work),
+// and Context instances are pooled to reduce GC pressure.
 type Router struct {
+	// http.Server embedded for direct access to server configuration and lifecycle.
 	*http.Server
-	mux           *http.ServeMux
-	middleware    []MiddlewareFunc
-	chain         http.Handler
+	// mux is the underlying http.ServeMux (Go 1.22+ with pattern-based routing).
+	mux *http.ServeMux
+	// middleware holds all globally-registered middleware functions.
+	middleware []MiddlewareFunc
+	// chain is the pre-built middleware chain (rebuilt on each Use() call).
+	chain http.Handler
+	// hasMiddleware tracks whether any middleware is registered (optimization for bypass).
 	hasMiddleware bool
 }
 
-// New initialises a Router with performance-optimised and security-hardened
-// defaults.
+// New creates a new Router with performance-optimized and security-hardened defaults.
+//
+// Defaults:
+// - ReadTimeout: 5 seconds (prevent slow-read attacks)
+// - WriteTimeout: 10 seconds (prevent slow-write attacks)
+// - IdleTimeout: 120 seconds (free resources from idle conns)
+// - ReadHeaderTimeout: 2 seconds (prevent slowloris attacks)
+// - MaxHeaderBytes: 1 MB (prevent header-based attacks)
+//
+// These timeouts are production-ready but can be customized via r.Server.
+//
+// Example:
+//
+//	r := zen.New(":8080")
+//	r.Use(middleware.Logger, middleware.Recover)
+//	r.Handle("GET /", homeHandler)
+//	r.ListenAndServe()
 func New(addr string) *Router {
 	mux := http.NewServeMux()
 	r := &Router{
@@ -81,11 +118,14 @@ func New(addr string) *Router {
 	return r
 }
 
-// ServeHTTP is the single entry point for every request.
-// When middleware is registered, it creates the zen *Context once and attaches
-// it to the request before the middleware chain runs — every middleware and
-// handler reuses the same *Context with a single pointer dereference via
-// FromRequest. Without middleware, it delegates directly to the mux.
+// ServeHTTP is the main entry point for every HTTP request.
+// If middleware is registered, it creates a zen Context once, attaches it to the request,
+// and passes it through the middleware chain. Otherwise, it delegates directly to the mux.
+//
+// This design ensures:
+// - Context is created/destroyed exactly once per request (minimal overhead).
+// - Middleware is pre-built at setup time (no per-request chain building).
+// - No-middleware code path (bypass) is ultra-fast (direct mux call).
 func (s *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if s.hasMiddleware {
 		c, r := newContext(w, r)
@@ -96,15 +136,22 @@ func (s *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// Use appends middleware to the global chain and rebuilds the cached chain.
+// Use appends middleware to the global chain and rebuilds it.
 // Middleware executes in the order added.
 //
-//	s.Use(middleware.Recover)
-//	s.Use(middleware.Auth)
+// The chain is rebuilt and cached at setup time, so adding middleware has zero
+// performance impact on request processing.
+//
+// Example:
+//
+//	r := zen.New(":8080")
+//	r.Use(middleware.Recover)        // Must be first to catch panics
+//	r.Use(middleware.Logger)
+//	r.Use(middleware.CORS(...))
+//	r.Use(middleware.AuthRequired)   // Can short-circuit before other handlers
 func (s *Router) Use(m ...MiddlewareFunc) {
 	s.middleware = append(s.middleware, m...)
-	// Build the chain using middlewareHandler nodes so no closures or
-	// allocations occur at request time — only at setup time.
+	// Pre-build the chain with middleware nodes (no closures, minimal allocations).
 	h := http.Handler(s.mux)
 	for i := len(s.middleware) - 1; i >= 0; i-- {
 		h = &middlewareHandler{m: s.middleware[i], next: h}
@@ -114,21 +161,41 @@ func (s *Router) Use(m ...MiddlewareFunc) {
 }
 
 // Handle registers a zen-style handler for the given pattern.
+// Patterns use Go 1.22+ format: "METHOD /path/{param}".
 //
+// Example:
+//
+//	s.Handle("GET /users", listUsers)
 //	s.Handle("GET /users/{id}", getUser)
-//	s.Handle("POST /orders",    createOrder)
+//	s.Handle("POST /users", createUser)
+//	s.Handle("PUT /users/{id}", updateUser)
+//	s.Handle("DELETE /users/{id}", deleteUser)
 func (s *Router) Handle(pattern string, handler func(*Context)) {
 	s.mux.Handle(pattern, &zenHandler{fn: handler})
 }
 
-// HandleRaw registers a standard [http.Handler] directly, bypassing the zen
-// Context adapter. Use for third-party handlers or pre-marshalled responses.
+// HandleRaw registers a standard http.Handler directly, bypassing zen Context wrapping.
+// Use this for third-party handlers (e.g., pprof) or when you need standard net/http.
+//
+// Example:
+//
+//	s.HandleRaw("GET /debug/pprof/*", http.HandlerFunc(pprof.Index))
+//	s.HandleRaw("GET /static/*", http.FileServer(http.Dir("static")))
 func (s *Router) HandleRaw(pattern string, handler http.Handler) {
 	s.mux.Handle(pattern, handler)
 }
 
-// ListenAndServe starts the HTTP server and blocks until SIGINT or SIGTERM,
-// then performs a graceful 5-second shutdown.
+// ListenAndServe starts the HTTP server and blocks until SIGINT or SIGTERM is received.
+// Then performs a graceful shutdown with a 5-second timeout.
+//
+// The server is started in a background goroutine so that signal handling can proceed.
+// Fatal errors are logged; normal shutdown is silent.
+//
+// Example:
+//
+//	r := zen.New(":8080")
+//	r.Handle("GET /", homeHandler)
+//	r.ListenAndServe()  // Blocks until Ctrl+C
 func (s *Router) ListenAndServe() {
 	log.Print(system.Banner(s.Addr))
 
@@ -141,7 +208,14 @@ func (s *Router) ListenAndServe() {
 	s.gracefulShutdown()
 }
 
-// ListenAndServeTLS starts the HTTPS server and shuts down gracefully.
+// ListenAndServeTLS starts an HTTPS server with the given certificate and key files.
+// Similar to ListenAndServe, it blocks until shutdown and performs graceful shutdown.
+//
+// Example:
+//
+//	r := zen.New(":8443")
+//	r.Handle("GET /", homeHandler)
+//	r.ListenAndServeTLS("cert.pem", "key.pem")  // Blocks until Ctrl+C
 func (s *Router) ListenAndServeTLS(certFile, keyFile string) {
 	log.Print(system.Banner(s.Addr))
 
@@ -154,6 +228,9 @@ func (s *Router) ListenAndServeTLS(certFile, keyFile string) {
 	s.gracefulShutdown()
 }
 
+// gracefulShutdown waits for SIGINT or SIGTERM, then shuts down the server.
+// The shutdown has a 5-second timeout; contexts that don't finish in time are forced.
+// Fatal errors are logged.
 func (s *Router) gracefulShutdown() {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)

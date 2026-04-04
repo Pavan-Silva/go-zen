@@ -87,18 +87,22 @@ func (g *Group) HandleRaw(pattern string, handler http.Handler) {
 	g.router.mux.Handle(fullPattern, handler)
 }
 
-// cleanPath removes duplicate slashes from the path.
-// e.g., "/api" + "/users" becomes "/api/users", and "/" + "/users" becomes "/users".
+// cleanPath removes duplicate slashes from combined path strings.
+// This is needed when concatenating group prefix + route path.
+// Examples: "/api" + "/users" → "/api/users", "/" + "/users" → "/users"
+//
+// Uses a single-pass string replacement for efficiency (no loops).
+// The cleanPath function is called at route registration time (setup), not per-request.
 func cleanPath(path string) string {
 	if path == "/" {
 		return "/"
 	}
-	// Single-pass replacement using strings.NewReplacer is more efficient than loop.
 	return strings.NewReplacer("//", "/").Replace(path)
 }
 
-// splitMethodPath splits a Go 1.22+ pattern like "GET /users/{id}" into
-// method and path components. Returns ("GET", "/users/{id}").
+// splitMethodPath splits a Go 1.22+ pattern into method and path components.
+// Format: "METHOD /path/{param}" → ("METHOD", "/path/{param}")
+// If pattern contains no space, returns ("", pattern) (assumes it's just a path).
 func splitMethodPath(pattern string) (method, path string) {
 	idx := strings.IndexByte(pattern, ' ')
 	if idx == -1 {
@@ -172,11 +176,15 @@ func (r *Router) handleWithMiddleware(pattern string, handler func(*Context), mi
 	r.mux.Handle(pattern, &contextAwareHandler{chain: h})
 }
 
-// contextAwareHandler creates and releases zen Context for routes with middleware.
+// contextAwareHandler wraps a middleware chain with Context creation/release.
+// This handler is used when routes have group-level middleware attached.
+// It ensures the Context is created once and available to all middleware/handlers,
+// and is properly released back to the pool after the request.
 type contextAwareHandler struct {
 	chain http.Handler
 }
 
+// ServeHTTP implements http.Handler by creating a Context, running the chain, and releasing.
 func (h *contextAwareHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	c, r := newContext(w, r)
 	h.chain.ServeHTTP(w, r)
