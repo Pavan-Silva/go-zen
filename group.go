@@ -93,11 +93,8 @@ func cleanPath(path string) string {
 	if path == "/" {
 		return "/"
 	}
-	// Remove duplicate slashes
-	for strings.Contains(path, "//") {
-		path = strings.Replace(path, "//", "/", -1)
-	}
-	return path
+	// Single-pass replacement using strings.NewReplacer is more efficient than loop.
+	return strings.NewReplacer("//", "/").Replace(path)
 }
 
 // splitMethodPath splits a Go 1.22+ pattern like "GET /users/{id}" into

@@ -126,7 +126,7 @@ func main() {
 	})
 
 	api.Handle("GET /ping", func(c *zen.Context) {
-		c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+		c.Pong()
 	})
 
 	items := make([]Product, 500)
