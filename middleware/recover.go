@@ -19,6 +19,10 @@ func Recover(c *zen.Context, next http.Handler) {
 				c.Request.RemoteAddr,
 				debug.Stack(),
 			)
+			if !c.Response.(*http.ResponseWriter) == nil {
+				// Check if headers already written before sending error
+				// (ResponseWriter doesn't expose this, so we attempt to write)
+			}
 			http.Error(c.Response, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		}
 	}()
