@@ -129,14 +129,6 @@ var CommonErrors = struct {
 	InternalError func(message string) *HTTPError
 	// ServiceUnavailable creates a 503 error
 	ServiceUnavailable func() *HTTPError
-}
-	BadRequest      func(message string) *HTTPError
-	Unauthorized    func() *HTTPError
-	Forbidden       func() *HTTPError
-	NotFound        func(resource string) *HTTPError
-	Conflict        func(message string) *HTTPError
-	InternalError   func(message string) *HTTPError
-	ServiceUnavailable func() *HTTPError
 }{
 	BadRequest: func(message string) *HTTPError {
 		return NewHTTPError(http.StatusBadRequest, message)

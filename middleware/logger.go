@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 	"time"
@@ -18,12 +17,12 @@ import (
 //	r.Use(middleware.Logger)
 func Logger(c *zen.Context, next http.Handler) {
 	start := time.Now()
-	
+
 	// Capture the response writer to track status code and bytes written
 	rw := &responseWriter{ResponseWriter: c.Response}
-	
+
 	next.ServeHTTP(rw, c.Request)
-	
+
 	duration := time.Since(start)
 	log.Printf(
 		"%s %s %d %v | ip=%s size=%d resp=%d bytes",
@@ -80,4 +79,3 @@ func clientIP(r *http.Request) string {
 	}
 	return r.RemoteAddr
 }
-
