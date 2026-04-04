@@ -8,6 +8,16 @@ import (
 	"github.com/Pavan-Silva/go-zen"
 )
 
+// Recover is panic recovery middleware that catches panics and sends a 500 response.
+// The panic is logged with the stack trace for debugging.
+// Must be registered first (outermost) to catch panics from other middleware.
+//
+// Example:
+//
+//	r := zen.New(":8080")
+//	r.Use(middleware.Recover)  // Must be first
+//	r.Use(middleware.Logger)
+//	// ... other middleware and handlers
 func Recover(c *zen.Context, next http.Handler) {
 	defer func() {
 		if err := recover(); err != nil {
@@ -19,10 +29,6 @@ func Recover(c *zen.Context, next http.Handler) {
 				c.Request.RemoteAddr,
 				debug.Stack(),
 			)
-			if !c.Response.(*http.ResponseWriter) == nil {
-				// Check if headers already written before sending error
-				// (ResponseWriter doesn't expose this, so we attempt to write)
-			}
 			http.Error(c.Response, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		}
 	}()
