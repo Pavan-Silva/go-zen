@@ -11,7 +11,7 @@ import (
 // status codes, messages, optional details, and request IDs for tracing.
 //
 // For security, Details are automatically hidden for 5xx errors when sent via SendError.
-// Use NewHTTPError or CommonErrors to create instances.
+// Use NewHTTPError or helper functions to create instances.
 //
 // Example:
 //
@@ -35,7 +35,7 @@ func (e *HTTPError) Error() string {
 }
 
 // NewHTTPError creates a new HTTPError with the given status and message.
-// Use this to create custom errors or use CommonErrors for common cases.
+// Use this to create custom errors or the available helper functions for common cases.
 //
 // Example:
 //
@@ -69,7 +69,7 @@ func (e *HTTPError) WithDetails(details any) *HTTPError {
 // Example:
 //
 //	requestID := c.Get("request_id").(string)
-//	err := zen.CommonErrors.InternalError("failed to save")
+//	err := zen.InternalError("failed to save")
 //	err = err.WithRequestID(requestID)
 func (e *HTTPError) WithRequestID(id string) *HTTPError {
 	e.RequestID = id
@@ -83,7 +83,7 @@ func (e *HTTPError) WithRequestID(id string) *HTTPError {
 // Example:
 //
 //	if err := someOp(); err != nil {
-//	    c.SendError(zen.CommonErrors.InternalError(err.Error()))
+//	    c.SendError(zen.InternalError(err.Error()))
 //	    return
 //	}
 func (c *Context) SendError(err *HTTPError) {
@@ -100,55 +100,37 @@ func (c *Context) SendError(err *HTTPError) {
 	}
 }
 
-// CommonErrors provides pre-built error responses for common HTTP scenarios.
-// Use these helpers for consistent error formatting across your application.
-//
-// Example:
-//
-//	if user == nil {
-//	    c.SendError(zen.CommonErrors.NotFound("user"))
-//	    return
-//	}
-//
-//	if !authorized {
-//	    c.SendError(zen.CommonErrors.Unauthorized())
-//	    return
-//	}
-var CommonErrors = struct {
-	// BadRequest creates a 400 error with a custom message
-	BadRequest func(message string) *HTTPError
-	// Unauthorized creates a 401 error
-	Unauthorized func() *HTTPError
-	// Forbidden creates a 403 error
-	Forbidden func() *HTTPError
-	// NotFound creates a 404 error with "{resource} not found"
-	NotFound func(resource string) *HTTPError
-	// Conflict creates a 409 error with a custom message
-	Conflict func(message string) *HTTPError
-	// InternalError creates a 500 error with a custom message
-	InternalError func(message string) *HTTPError
-	// ServiceUnavailable creates a 503 error
-	ServiceUnavailable func() *HTTPError
-}{
-	BadRequest: func(message string) *HTTPError {
-		return NewHTTPError(http.StatusBadRequest, message)
-	},
-	Unauthorized: func() *HTTPError {
-		return NewHTTPError(http.StatusUnauthorized, "unauthorized")
-	},
-	Forbidden: func() *HTTPError {
-		return NewHTTPError(http.StatusForbidden, "forbidden")
-	},
-	NotFound: func(resource string) *HTTPError {
-		return NewHTTPError(http.StatusNotFound, resource+" not found")
-	},
-	Conflict: func(message string) *HTTPError {
-		return NewHTTPError(http.StatusConflict, message)
-	},
-	InternalError: func(message string) *HTTPError {
-		return NewHTTPError(http.StatusInternalServerError, message)
-	},
-	ServiceUnavailable: func() *HTTPError {
-		return NewHTTPError(http.StatusServiceUnavailable, "service unavailable")
-	},
+// BadRequest creates a 400 error with a custom message.
+func BadRequest(message string) *HTTPError {
+	return NewHTTPError(http.StatusBadRequest, message)
+}
+
+// Unauthorized creates a 401 error.
+func Unauthorized() *HTTPError {
+	return NewHTTPError(http.StatusUnauthorized, "unauthorized")
+}
+
+// Forbidden creates a 403 error.
+func Forbidden() *HTTPError {
+	return NewHTTPError(http.StatusForbidden, "forbidden")
+}
+
+// NotFound creates a 404 error for the requested resource.
+func NotFound(resource string) *HTTPError {
+	return NewHTTPError(http.StatusNotFound, resource+" not found")
+}
+
+// Conflict creates a 409 error with a custom message.
+func Conflict(message string) *HTTPError {
+	return NewHTTPError(http.StatusConflict, message)
+}
+
+// InternalError creates a 500 error with a custom message.
+func InternalError(message string) *HTTPError {
+	return NewHTTPError(http.StatusInternalServerError, message)
+}
+
+// ServiceUnavailable creates a 503 error.
+func ServiceUnavailable() *HTTPError {
+	return NewHTTPError(http.StatusServiceUnavailable, "service unavailable")
 }

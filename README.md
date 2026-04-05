@@ -1,15 +1,15 @@
 # Zen
 
-A lightweight, high-performance microframework built on Go's standard library `net/http`. Zen prioritizes simplicity and performance, providing essential helpers while maintaining compatible throughput with Gin and Echo.
+A small Go web framework built on the standard library `net/http`.
+Zen provides routing, request binding, middleware, and simple helpers with a minimal API.
 
 ## Why Zen?
 
-- **Stdlib-only** — No router dependency; uses Go 1.22+ `http.ServeMux` with pattern matching
-- **Performance-optimized** — Context pooling, buffer pooling, reflection caching, zero-allocation middleware chains (competitive with Gin/Echo, up to 45% faster for large payloads)
-- **Production-ready** — Security hardened defaults, graceful shutdown, comprehensive structured error handling
-- **Well-documented** — Every public API includes examples and performance characteristics explained
-- **Lightweight overhead** — Uses stdlib net/http, updates with Go releases, minimal attack surface
-- **High concurrency** — Outperforms competitors under high load (48.7k RPS vs 48.6k Gin in burst scenarios)
+- Uses Go 1.22+ `http.ServeMux` with pattern matching
+- Minimal surface area, no external router dependency
+- Built-in JSON, form, and file binding
+- Simple middleware chaining and graceful shutdown
+- Supports SSE and WebSocket routes through lightweight helpers
 
 ## Features
 
@@ -118,7 +118,8 @@ The request `Context` is passed to every handler and provides:
 - Query parameters: `c.QueryParam(key)`
 - URL path parameters: `c.Param(key)`
 - Request binding: `c.BindJSON()`, `c.BindForm()`, `c.BindFile()`
-- Response methods: `c.JSON(status, data)`, `c.SendError(err)`
+- Response methods: `c.JSON(status, data)`, `c.SSEvent(event, data)`, `c.SendError(err)`
+- WebSocket routes: `r.HandleWebSocket("GET /ws", handler)`
 - Key-value storage: `c.Set(key, val)`, `c.Get(key)`
 
 Contexts are pooled and reused across requests for zero allocation overhead.
@@ -141,6 +142,36 @@ r.Handle("GET /files/*path", handleFiles)
 
 // Raw http.Handler without Context wrapper
 r.HandleRaw("GET /static/*", http.FileServer(http.Dir("static")))
+```
+
+## Streaming and WebSockets
+
+Zen supports first-class server-sent events (SSE) and WebSocket routes.
+
+### Server-Sent Events (SSE)
+
+```go
+r.Handle("GET /events", func(c *zen.Context) {
+    if err := c.SSEvent("message", map[string]any{"text": "hello"}); err != nil {
+        c.SendError(zen.InternalError(err.Error()))
+    }
+})
+```
+
+### WebSockets
+
+```go
+r.HandleWebSocket("GET /ws", func(c *zen.Context, ws *zen.WebSocketConn) {
+    defer ws.Close()
+
+    for {
+        var msg map[string]any
+        if err := ws.ReadJSON(&msg); err != nil {
+            return
+        }
+        _ = ws.WriteJSON(map[string]any{"echo": msg})
+    }
+})
 ```
 
 ## Route Groups
@@ -191,7 +222,7 @@ type SignupRequest struct {
 r.Handle("POST /signup", func(c *zen.Context) {
     var req SignupRequest
     if err := c.BindJSON(&req); err != nil {
-        c.SendError(zen.CommonErrors.BadRequest(err.Error()))
+        c.SendError(zen.BadRequest(err.Error()))
         return
     }
     // req is now validated and safe to use
@@ -211,7 +242,7 @@ type LoginForm struct {
 r.Handle("POST /login", func(c *zen.Context) {
     var form LoginForm
     if err := c.BindForm(&form); err != nil {
-        c.SendError(zen.CommonErrors.BadRequest(err.Error()))
+        c.SendError(zen.BadRequest(err.Error()))
         return
     }
     // form is validated
@@ -226,7 +257,7 @@ r.Handle("POST /avatar", func(c *zen.Context) {
     // Single file
     file, content, err := c.BindFile("avatar")
     if err != nil {
-        c.SendError(zen.CommonErrors.BadRequest(err.Error()))
+        c.SendError(zen.BadRequest(err.Error()))
         return
     }
     // file.Filename, file.Size, len(content)
@@ -237,7 +268,7 @@ r.Handle("POST /attachments", func(c *zen.Context) {
     // Multiple files
     files, err := c.BindFiles("attachments")
     if err != nil {
-        c.SendError(zen.CommonErrors.BadRequest(err.Error()))
+        c.SendError(zen.BadRequest(err.Error()))
         return
     }
     for _, file := range files {
@@ -316,7 +347,7 @@ Middleware implements `zen.MiddlewareFunc`:
 func AuthMiddleware(c *zen.Context, next http.Handler) {
     token := c.Request.Header.Get("Authorization")
     if token == "" {
-        c.SendError(zen.CommonErrors.Unauthorized())
+        c.SendError(zen.Unauthorized())
         return  // short-circuit
     }
     // Validate token...
@@ -341,10 +372,10 @@ err = err.WithRequestID("req-12345")
 c.SendError(err)
 
 // Pre-built errors
-c.SendError(zen.CommonErrors.BadRequest("email invalid"))
-c.SendError(zen.CommonErrors.Unauthorized())
-c.SendError(zen.CommonErrors.NotFound("user"))
-c.SendError(zen.CommonErrors.InternalError("database error"))
+c.SendError(zen.BadRequest("email invalid"))
+c.SendError(zen.Unauthorized())
+c.SendError(zen.NotFound("user"))
+c.SendError(zen.InternalError("database error"))
 ```
 
 ### Form Binding Errors
@@ -363,7 +394,7 @@ if err := c.BindForm(&data); err != nil {
         return
     }
     // Other error (parsing, validation, etc)
-    c.SendError(zen.CommonErrors.BadRequest(err.Error()))
+    c.SendError(zen.BadRequest(err.Error()))
 }
 
 ### Form Binding
@@ -577,22 +608,21 @@ r.Server.Shutdown(context.Background())
 
 ### Structured Error Responses
 
-Zen provides a standard error response format with `HTTPError` and `CommonErrors` helpers:
+Zen provides a standard error response format with `HTTPError` and helper functions:
 
 ```go
-// Using pre-built common errors
 if user == nil {
-    c.SendError(zen.CommonErrors.NotFound("user"))
+    c.SendError(zen.NotFound("user"))
     return
 }
 
 if !authorized {
-    c.SendError(zen.CommonErrors.Unauthorized())
+    c.SendError(zen.Unauthorized())
     return
 }
 
 if err := validateData(&data); err != nil {
-    err := zen.CommonErrors.BadRequest(err.Error())
+    err := zen.BadRequest(err.Error())
     err = err.WithDetails(map[string]string{"field": "email"})
     c.SendError(err)
     return
@@ -603,7 +633,7 @@ if err := validateData(&data); err != nil {
 //   "status": 400,
 //   "message": "invalid email format",
 //   "details": {"field": "email"},
-//   "request_id": "abc123" // optional, if set
+//   "request_id": "abc123"
 // }
 ```
 
@@ -633,16 +663,15 @@ c.SendError(err)
 ```go
 var form MyForm
 if err := c.BindForm(&form); err != nil {
-    // Check for specific form field error
     var fe *zen.FormError
     if errors.As(err, &fe) {
-        c.SendError(zen.CommonErrors.BadRequest(
+        c.SendError(zen.BadRequest(
             fmt.Sprintf("Field '%s': %s", fe.Field, fe.Err.Error()),
         ))
         return
     }
-    // Handle other errors (parse error, etc)
-    c.SendError(zen.CommonErrors.BadRequest(err.Error()))
+
+    c.SendError(zen.BadRequest(err.Error()))
     return
 }
 ```
@@ -652,14 +681,14 @@ if err := c.BindForm(&form); err != nil {
 ```go
 var req MyRequest
 if err := c.BindJSON(&req); err != nil {
-    c.SendError(zen.CommonErrors.BadRequest(err.Error()))
+    c.SendError(zen.BadRequest(err.Error()))
     return
 }
 ```
 
 ## Structured Error Handling
 
-See [Error Handling](#error-handling) section above for comprehensive error handling with HTTPError and CommonErrors.
+See [Error Handling](#error-handling) section above for comprehensive error handling with HTTPError and helper functions.
 
 ## Middleware
 
@@ -704,7 +733,7 @@ Middleware implements `zen.MiddlewareFunc`:
 func AuthMiddleware(c *zen.Context, next http.Handler) {
     token := c.Request.Header.Get("Authorization")
     if token == "" {
-        c.SendError(zen.CommonErrors.Unauthorized())
+        c.SendError(zen.Unauthorized())
         return  // short-circuit
     }
     // Validate token...
@@ -861,7 +890,8 @@ zen/
 ├── cmd/                # Example servers
 │   └── zenserver/main.go
 └── examples/           # Example applications
-    └── simple/main.go
+    ├── simple/main.go
+    └── sse_ws/main.go
 ```
 
 ## Performance Characteristics
