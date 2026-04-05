@@ -23,6 +23,7 @@ Zen provides routing, request binding, middleware, and simple helpers with a min
 - Structured HTTP error responses (HTTPError type)
 - Context pooling with zero-allocation operations
 - Security hardened defaults (timeouts, header limits)
+- Optional `util` package for env loading and DB helpers
 
 ### Built-in Middleware
 
@@ -122,6 +123,53 @@ The request `Context` is passed to every handler and provides:
 - Key-value storage: `c.Set(key, val)`, `c.Get(key)`
 
 Contexts are pooled and reused across requests for zero allocation overhead.
+
+## Utilities
+
+Zen includes an optional `util` package for common app setup helpers:
+
+- `util.LoadEnvFile(path, override)` to load `.env` files
+- `util.GetEnv`, `util.MustGetEnv`, `util.GetEnvInt`, `util.GetEnvBool`, `util.GetEnvDuration`
+- `util.OpenDB`, `util.WithTransaction`, `util.CloseDB`
+
+### Environment helpers
+
+```go
+import (
+    "github.com/Pavan-Silva/go-zen/util"
+)
+
+if err := util.LoadEnvFile(".env", false); err != nil {
+    panic(err)
+}
+
+port := util.GetEnv("PORT", "8080")
+maxActive, _ := util.GetEnvInt("DB_MAX_ACTIVE", 25)
+```
+
+### Database helpers
+
+```go
+import (
+    "context"
+    "database/sql"
+
+    "github.com/Pavan-Silva/go-zen/util"
+)
+
+cfg := util.DefaultDBConfig()
+ctx := context.Background()
+db, err := util.OpenDB(ctx, "postgres", "postgres://user:pass@localhost/db?sslmode=disable", cfg)
+if err != nil {
+    panic(err)
+}
+defer util.CloseDB(db)
+
+err = util.WithTransaction(ctx, db, func(tx *sql.Tx) error {
+    _, err := tx.ExecContext(ctx, "INSERT INTO users(name) VALUES($1)", "alice")
+    return err
+})
+```
 
 ## Optional Streaming Packages
 
@@ -893,6 +941,9 @@ zen/
 │   ├── logger.go       # Request logging with metrics
 │   ├── recover.go      # Panic recovery
 │   └── cors.go         # CORS handling
+├── util/               # Optional utility helpers
+│   ├── db.go           # Database connection helpers and transactions
+│   └── env.go          # Environment loading and typed env helpers
 ├── sse/                # Optional SSE helpers
 │   └── sse.go
 ├── ws/                 # Optional WebSocket helpers
