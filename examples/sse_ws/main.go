@@ -6,37 +6,39 @@ import (
 	"time"
 
 	"github.com/Pavan-Silva/go-zen"
+	"github.com/Pavan-Silva/go-zen/sse"
+	"github.com/Pavan-Silva/go-zen/ws"
 )
 
 func main() {
 	r := zen.New(":8082")
 
-	r.Handle("GET /events", func(c *zen.Context) {
-		// Keep the connection open and send five SSE events.
+	sse.Handle(r, "GET /events", func(c *zen.Context) error {
 		for i := 1; i <= 5; i++ {
-			if err := c.SSEvent("message", map[string]any{
+			if err := sse.Send(c, "message", map[string]any{
 				"count": i,
 				"time":  time.Now().Format(time.RFC3339),
 			}); err != nil {
-				return
+				return err
 			}
 			time.Sleep(1 * time.Second)
 		}
+		return nil
 	})
 
-	r.HandleWebSocket("GET /ws", func(c *zen.Context, ws *zen.WebSocketConn) {
-		defer ws.Close()
+	ws.Handle(r, "GET /ws", func(c *zen.Context, conn *ws.Conn) {
+		defer conn.Close()
 
 		for {
 			var payload map[string]any
-			if err := ws.ReadJSON(&payload); err != nil {
+			if err := conn.ReadJSON(&payload); err != nil {
 				return
 			}
 
 			payload["received_at"] = time.Now().Format(time.RFC3339)
 			payload["echo"] = true
 
-			if err := ws.WriteJSON(payload); err != nil {
+			if err := conn.WriteJSON(payload); err != nil {
 				return
 			}
 		}
@@ -50,5 +52,5 @@ func main() {
 		})
 	})
 
-	r.ListenAndServe();
+	r.ListenAndServe()
 }
