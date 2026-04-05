@@ -9,7 +9,7 @@ Zen provides routing, request binding, middleware, and simple helpers with a min
 - Minimal surface area, no external router dependency
 - Built-in JSON, form, and file binding
 - Simple middleware chaining and graceful shutdown
-- Supports SSE and WebSocket routes through lightweight helpers
+- Optional SSE/WebSocket support via separate `sse` and `ws` packages
 
 ## Features
 
@@ -118,13 +118,65 @@ The request `Context` is passed to every handler and provides:
 - Query parameters: `c.QueryParam(key)`
 - URL path parameters: `c.Param(key)`
 - Request binding: `c.BindJSON()`, `c.BindForm()`, `c.BindFile()`
-- Response methods: `c.JSON(status, data)`, `c.SSEvent(event, data)`, `c.SendError(err)`
-- WebSocket routes: `r.HandleWebSocket("GET /ws", handler)`
+- Response methods: `c.JSON(status, data)`, `c.SendError(err)`
 - Key-value storage: `c.Set(key, val)`, `c.Get(key)`
 
 Contexts are pooled and reused across requests for zero allocation overhead.
 
-## Routing
+## Optional Streaming Packages
+
+SSE and WebSocket support are available as optional packages rather than being included in the core `zen` package.
+
+### Server-Sent Events (SSE)
+
+```go
+import (
+    "time"
+
+    "github.com/Pavan-Silva/go-zen"
+    "github.com/Pavan-Silva/go-zen/sse"
+)
+
+r := zen.New(":8080")
+
+sse.Handle(r, "GET /events", func(c *zen.Context) error {
+    for i := 1; i <= 5; i++ {
+        if err := sse.Send(c, "message", map[string]any{
+            "count": i,
+            "time":  time.Now().Format(time.RFC3339),
+        }); err != nil {
+            return err
+        }
+        time.Sleep(1 * time.Second)
+    }
+    return nil
+})
+```
+
+### WebSockets
+
+```go
+import (
+    "github.com/Pavan-Silva/go-zen"
+    "github.com/Pavan-Silva/go-zen/ws"
+)
+
+r := zen.New(":8080")
+
+ws.Handle(r, "GET /ws", func(c *zen.Context, conn *ws.Conn) {
+    defer conn.Close()
+
+    for {
+        var msg map[string]any
+        if err := conn.ReadJSON(&msg); err != nil {
+            return
+        }
+        _ = conn.WriteJSON(map[string]any{"echo": msg})
+    }
+})
+```
+
+## Route Groups
 
 Zen uses Go 1.22+ enhanced `http.ServeMux` with path parameters:
 
@@ -144,32 +196,56 @@ r.Handle("GET /files/*path", handleFiles)
 r.HandleRaw("GET /static/*", http.FileServer(http.Dir("static")))
 ```
 
-## Streaming and WebSockets
+## Optional Streaming Packages
 
-Zen supports first-class server-sent events (SSE) and WebSocket routes.
+SSE and WebSocket support are available as optional packages rather than bundled into the core `zen` package.
 
 ### Server-Sent Events (SSE)
 
 ```go
-r.Handle("GET /events", func(c *zen.Context) {
-    if err := c.SSEvent("message", map[string]any{"text": "hello"}); err != nil {
-        c.SendError(zen.InternalError(err.Error()))
+import (
+    "time"
+
+    "github.com/Pavan-Silva/go-zen"
+    "github.com/Pavan-Silva/go-zen/sse"
+)
+
+r := zen.New(":8080")
+
+sse.Handle(r, "GET /events", func(c *zen.Context) error {
+    for i := 1; i <= 5; i++ {
+        if err := sse.Send(c, "message", map[string]any{
+            "count": i,
+            "time":  time.Now().Format(time.RFC3339),
+        }); err != nil {
+            return err
+        }
+        time.Sleep(1 * time.Second)
     }
+    return nil
 })
 ```
 
 ### WebSockets
 
 ```go
-r.HandleWebSocket("GET /ws", func(c *zen.Context, ws *zen.WebSocketConn) {
-    defer ws.Close()
+import (
+    "github.com/Pavan-Silva/go-zen"
+    "github.com/Pavan-Silva/go-zen/ws"
+)
+
+r := zen.New(":8080")
+
+ws.Handle(r, "GET /ws", func(c *zen.Context, conn *ws.Conn) {
+    defer conn.Close()
 
     for {
         var msg map[string]any
-        if err := ws.ReadJSON(&msg); err != nil {
+        if err := conn.ReadJSON(&msg); err != nil {
             return
         }
-        _ = ws.WriteJSON(map[string]any{"echo": msg})
+
+        _ = conn.WriteJSON(map[string]any{"echo": msg})
     }
 })
 ```
@@ -777,177 +853,6 @@ r.Handle("POST /contact", func(c *zen.Context) {
 })
 ```
 
-## Performance
-
-Zen is designed for high throughput and low latency with minimal GC overhead.
-
-### Quick Stats
-
-- **Simple requests:** 47k-48k RPS (parity with Gin/Echo)
-- **Complex requests:** 47k RPS (with JSON binding + validation)
-- **High concurrency:** 48.8k RPS ⭐ (beats Gin by 0.3%)
-- **Large payloads:** 28k RPS ⭐⭐ (45% faster than Gin!)
-- **Mean latency:** 2-5ms (depending on payload)
-- **Consistency:** Best P95/P99 tail latencies
-
-### Comprehensive Benchmarks
-
-See [PERFORMANCE.md](PERFORMANCE.md) for detailed benchmark analysis including:
-
-- Scenario-by-scenario results (Simple GET, Complex POST, High Concurrency, Large Payload)
-- Performance driver explanations
-- Comparative analysis with Gin, Echo, and stdlib
-- Production readiness assessment
-
-### Benchmarks (Real TCP, not httptest)
-
-Load tests against Go stdlib, Gin, and Echo under various scenarios:
-
-**Simple GET Requests** — `GET /products`
-| Framework | RPS | Mean Latency | P95 | Status |
-|-----------|-----|--------------|-----|--------|
-| Echo | 47.8k | 2.05ms | 3.4ms | ✓ |
-| Zen | 47.7k | 2.06ms | 3.5ms | ✓ |
-| Gin | 47.3k | 2.07ms | 3.5ms | ✓ |
-
-**Complex POST with Validation** — `POST /orders` with JSON binding
-| Framework | RPS | Mean Latency | P95 | Status |
-|-----------|-----|--------------|-----|--------|
-| Gin | 47.9k | 2.04ms | 3.4ms | ✓ |
-| Echo | 47.3k | 2.07ms | 3.5ms | ✓ |
-| Zen | 47.3k | 2.07ms | 3.7ms | ✓ |
-
-**High Concurrency Burst** — `GET /users/{id}` under high load
-| Framework | RPS | Mean Latency | P95 | Status |
-|-----------|-----|--------------|-----|--------|
-| **Zen** | **48.8k** | **2.01ms** | **3.1ms** | ✓ |
-| Gin | 48.6k | 2.02ms | 3.2ms | ✓ |
-| Echo | 48.3k | 2.03ms | 3.3ms | ✓ |
-
-**Large Payload (1MB JSON)** — `GET /data`
-| Framework | RPS | Mean Latency | P95 | Status |
-|-----------|-----|--------------|-----|--------|
-| **Zen** | **28.2k** | **3.47ms** | **4.5ms** | ✓ |
-| Echo | 24.1k | 4.08ms | 8.0ms | ✓ |
-| Gin | 19.5k | 5.07ms | 14.2ms | ✓ |
-
-### Key Findings
-
-✅ **Performance parity with Gin/Echo** in typical use cases
-✅ **Best-in-class large payload handling** (45% faster than Gin)
-✅ **Superior high-concurrency performance** (+0.3% throughput vs Gin)
-✅ **Consistent latency distribution** (minimal P95/P99 jitter)
-✅ **Zero errors under sustained load**
-
-### Performance Characteristics
-
-- **Memory Efficiency**
-  - Context pooling: Reuses objects across requests
-  - Inline storage: First 8 context keys allocated inline
-  - Form caching: Metadata computed once per struct type
-  - Query caching: Parsed once per request
-  - Buffer pooling: JSON response buffers reused
-
-- **CPU Efficiency**
-  - Zero allocations in hot path
-  - Middleware pre-built at setup time
-  - Type-specialized form setters
-  - Lazy validation initialization
-
-### Run Your Own Benchmarks
-
-```bash
-cd loadtest
-./run_loadtest.sh
-
-# Custom options:
-./run_loadtest.sh -duration 30s -conns 250
-./run_loadtest.sh -servers zen,echo,gin,std -duration 20s
-```
-
-**Note:** Tests use real TCP connections, not `httptest.ResponseRecorder` for realistic results
-
-## Project Structure
-
-```
-zen/
-├── zen.go              # Package documentation and overview
-├── context.go          # Context pooling with zero-allocation storage
-├── router.go           # Router, server, and middleware chaining
-├── group.go            # Route groups with prefix and middleware inheritance
-├── request.go          # JSON/form/file binding with validation
-├── response.go         # JSON response with buffer pooling
-├── http_error.go       # Structured HTTP error responses
-├── validate.go         # Lazy validator initialization
-├── errors.go           # Sentinel error types (ErrInvalidBindTarget, FormError)
-├── form.go             # Form binding with reflection caching
-├── middleware/         # Built-in middleware
-│   ├── logger.go       # Request logging with metrics
-│   ├── recover.go      # Panic recovery
-│   └── cors.go         # CORS handling
-├── system/
-│   └── banner.go       # Startup banner
-├── cmd/                # Example servers
-│   └── zenserver/main.go
-└── examples/           # Example applications
-    ├── simple/main.go
-    └── sse_ws/main.go
-```
-
-## Performance Characteristics
-
-Zen is optimized for production workloads with minimal GC overhead:
-
-### Memory Efficiency
-
-- **Context pooling:** Reuses Context allocations across requests (sync.Pool)
-- **Inline storage:** First 8 context keys stored inline (no allocation)
-- **Form caching:** Reflection metadata cached per struct type (sync.Map)
-- **Query caching:** URL query parameters parsed once per request
-- **Buffer pooling:** JSON response buffers reused via sync.Pool
-
-### CPU Efficiency
-
-- **Zero-allocation hot path:** No closures allocated per request in middleware
-- **Middleware pre-built:** Chain construction happens at setup time, not per-request
-- **Type-specialized form setters:** Type switch happens once per field type, not per field per request
-- **Lazy validation:** Validator initialized only on first use
-
-### Benchmarks
-
-Run the included load test to compare zen with stdlib, Echo, and Gin:
-
-```bash
-cd loadtest
-./run_loadtest.sh
-
-# Custom options:
-./run_loadtest.sh -duration 30s -conns 250
-./run_loadtest.sh -servers zen,echo,std -duration 20s
-```
-
-**Important:** The load test uses real TCP connections, not `httptest.ResponseRecorder`. This gives accurate real-world numbers.
-
-## Comparison with Other Frameworks
-
-| Feature                 | Zen                   | Gin        | Echo       | Stdlib      |
-| ----------------------- | --------------------- | ---------- | ---------- | ----------- |
-| **Dependencies**        | validator/v10 only    | Multiple   | Multiple   | None        |
-| **Routing**             | Go 1.22+ mux          | Custom     | Custom     | Basic mux   |
-| **Performance**         | 47-48k RPS            | 47-48k RPS | 47-48k RPS | 46k RPS     |
-| **Large payloads**      | 28k RPS ⭐            | 19k RPS    | 24k RPS    | N/A         |
-| **Context pooling**     | Yes ✓                 | Yes        | Yes        | Manual      |
-| **Built-in middleware** | Logger, Recover, CORS | None       | None       | None        |
-| **Error handling**      | Structured            | Manual     | Manual     | Manual      |
-| **File uploads**        | ✓ Single & multiple   | ✓          | ✓          | Manual      |
-| **Form validation**     | ✓ Built-in            | Manual     | Manual     | Manual      |
-| **Route groups**        | ✓ With inheritance    | ✓          | ✓          | No          |
-| **Documentation**       | Comprehensive         | Good       | Good       | Stdlib docs |
-| **Maintenance**         | Lightweight           | Active     | Active     | Go team     |
-| **Learning curve**      | Minimal               | Low        | Low        | Minimal     |
-
-**Summary:** Zen offers production-ready features with minimal dependencies while matching or exceeding performance of heavier frameworks.
-
 ## Testing
 
 Zen works seamlessly with Go's `httptest` package for unit tests:
@@ -968,6 +873,37 @@ func TestGetUser(t *testing.T) {
         t.Fatalf("expected 200, got %d", w.Code)
     }
 }
+```
+
+## Project Structure
+
+```
+zen/
+├── zen.go              # Package documentation and overview
+├── context.go          # Context pooling with zero-allocation storage
+├── router.go           # Router, server, and middleware chaining
+├── group.go            # Route groups with prefix and middleware inheritance
+├── request.go          # JSON/form/file binding with validation
+├── response.go         # JSON response with buffer pooling
+├── http_error.go       # Structured HTTP error responses
+├── validate.go         # Lazy validator initialization
+├── errors.go           # Sentinel error types (ErrInvalidBindTarget, FormError)
+├── form.go             # Form binding with reflection caching
+├── middleware/         # Built-in middleware
+│   ├── logger.go       # Request logging with metrics
+│   ├── recover.go      # Panic recovery
+│   └── cors.go         # CORS handling
+├── sse/                # Optional SSE helpers
+│   └── sse.go
+├── ws/                 # Optional WebSocket helpers
+│   └── ws.go
+├── system/
+│   └── banner.go       # Startup banner
+├── cmd/                # Example servers
+│   └── zenserver/main.go
+└── examples/           # Example applications
+    ├── simple/main.go
+    └── sse_ws/main.go
 ```
 
 ## License
