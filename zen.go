@@ -35,7 +35,7 @@
 //
 //	var req UserRequest
 //	if err := c.BindJSON(&req); err != nil {
-//	    c.SendError(zen.CommonErrors.BadRequest(err.Error()))
+//	    c.SendError(zen.BadRequest(err.Error()))
 //	    return
 //	}
 //

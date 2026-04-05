@@ -102,7 +102,7 @@ func (c *Context) Set(key string, val any) {
 //
 //	userID := c.Get("user_id")
 //	if userID == nil {
-//	    c.SendError(CommonErrors.Unauthorized())
+//	    c.SendError(Unauthorized())
 //	    return
 //	}
 func (c *Context) Get(key string) any {

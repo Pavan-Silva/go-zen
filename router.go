@@ -33,7 +33,7 @@ import (
 //	func RequireAuth(c *zen.Context, next http.Handler) {
 //	    token := c.Request.Header.Get("Authorization")
 //	    if token == "" {
-//	        c.SendError(CommonErrors.Unauthorized())
+//	        c.SendError(Unauthorized())
 //	        return  // short-circuit: don't call next
 //	    }
 //	    next.ServeHTTP(c.Response, c.Request)
