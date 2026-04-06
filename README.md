@@ -9,9 +9,9 @@ Zen provides routing, request binding, middleware, and simple helpers with a min
 - Minimal surface area, no external router dependency
 - Built-in JSON, form, and file binding
 - Simple middleware chaining and graceful shutdown
-- Optional SSE/WebSocket support via separate `sse` and `ws` packages
-- Optional `util` package for env loading and DB helpers
-- Optional `auth` package for authentication across HTTP, WebSocket, and SSE
+- Optional SSE/WebSocket/gRPC support via separate `sse`, `ws`, and `grpc` packages
+- Optional `config` package for env loading and DB helpers
+- Optional `auth` package for authentication across HTTP, WebSocket, SSE, and gRPC
 
 ## Features
 
@@ -226,9 +226,35 @@ ws.Handle(r, "GET /ws", func(c *zen.Context, conn *ws.Conn) {
 })
 ```
 
+### gRPC
+
+Zen provides optional gRPC support via the `grpc` package for high-performance RPC services.
+
+```go
+import (
+    "github.com/Pavan-Silva/go-zen/grpc"
+)
+
+server := grpc.NewServer(":50051",
+    grpc.ChainUnary(
+        grpc.LoggingInterceptor(),
+        grpc.RecoveryInterceptor(),
+        grpc.AuthInterceptor(func(token string) bool {
+            return token == "valid-token"
+        }),
+    ),
+)
+
+// Register your gRPC services
+// pb.RegisterYourServiceServer(server.Server, &yourService{})
+
+server.EnableReflection() // For debugging
+server.ListenAndServe()
+```
+
 ## Authentication
 
-Zen provides an optional `auth` package for consistent authentication across HTTP, WebSocket, and SSE routes.
+Zen provides an optional `auth` package for consistent authentication across HTTP, WebSocket, SSE, and gRPC routes.
 
 ### Authenticator Interface
 
@@ -1038,6 +1064,9 @@ zen/
 │   └── sse.go
 ├── ws/                 # Optional WebSocket helpers
 │   └── ws.go
+├── grpc/               # Optional gRPC helpers
+│   ├── server.go
+│   └── interceptors.go
 ├── system/
 │   └── banner.go       # Startup banner
 ```
