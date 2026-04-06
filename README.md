@@ -1040,11 +1040,6 @@ zen/
 │   └── ws.go
 ├── system/
 │   └── banner.go       # Startup banner
-├── cmd/                # Example servers
-│   └── zenserver/main.go
-└── examples/           # Example applications
-    ├── simple/main.go
-    └── sse_ws/main.go
 ```
 
 ## License

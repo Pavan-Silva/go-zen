@@ -9,7 +9,11 @@
 # Build artifacts
 dist/
 
-# Loadtest
+# Excluded directories
+loadtest/
+examples/
+
+# Loadtest (legacy)
 loadtest/.build
 loadtest/*.json
 loadtest/go.sum
