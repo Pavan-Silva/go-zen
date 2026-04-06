@@ -15,6 +15,8 @@ require (
 	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/leodido/go-urn v1.4.0 // indirect
+	github.com/rabbitmq/amqp091-go v1.10.0
+	github.com/segmentio/kafka-go v0.4.50
 	golang.org/x/crypto v0.49.0 // indirect
 	golang.org/x/net v0.52.0
 	google.golang.org/grpc v1.60.1
