@@ -130,25 +130,25 @@ Contexts are pooled and reused across requests for zero allocation overhead.
 
 ## Utilities
 
-Zen includes an optional `config` package for common app setup helpers:
+Zen includes optional `env` and `config` packages for common app setup helpers:
 
-- `config.LoadEnvFile(path, override)` to load `.env` files
-- `config.GetEnv`, `config.MustGetEnv`, `config.GetEnvInt`, `config.GetEnvBool`, `config.GetEnvDuration`
+- `env.Load()` / `env.LoadOverride()` to load `.env` files
+- `env.Get`, `env.Must`, `env.GetInt`, `env.GetBool`, `env.GetDuration`
 - `config.OpenDB`, `config.WithTransaction`, `config.CloseDB`
 
 ### Environment helpers
 
 ```go
 import (
-    "github.com/Pavan-Silva/go-zen/config"
+    "github.com/Pavan-Silva/go-zen/env"
 )
 
-if err := config.LoadEnvFile(".env", false); err != nil {
+if err := env.Load(); err != nil {
     panic(err)
 }
 
-port := config.GetEnv("PORT", "8080")
-maxActive, _ := config.GetEnvInt("DB_MAX_ACTIVE", 25)
+port := env.Get("PORT", "8080")
+maxActive, _ := env.GetInt("DB_MAX_ACTIVE", 25)
 ```
 
 ### Database helpers
