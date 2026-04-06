@@ -3,6 +3,7 @@ package amqp
 import (
 	"context"
 	"fmt"
+
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
@@ -22,8 +23,8 @@ func NewConsumer(url, queueName string) (*Consumer, error) {
 
 	ch, err := conn.Channel()
 	if err != nil {
-		if cerr := conn.Close(); cerr != nil {
-			return nil, fmt.Errorf("%w; close error: %v", err, cerr)
+		if closeErr := conn.Close(); closeErr != nil {
+			return nil, fmt.Errorf("%w; connection close error: %v", err, closeErr)
 		}
 		return nil, err
 	}
@@ -31,16 +32,10 @@ func NewConsumer(url, queueName string) (*Consumer, error) {
 	// Declare queue (idempotent)
 	_, err = ch.QueueDeclare(queueName, true, false, false, false, nil)
 	if err != nil {
-		if cerr := ch.Close(); cerr != nil {
-			if rerr := conn.Close(); rerr != nil {
-				return nil, fmt.Errorf("%w; channel close error: %v; conn close error: %v", err, cerr, rerr)
-			}
-			return nil, fmt.Errorf("%w; channel close error: %v", err, cerr)
+		if closeErr := closeResources(ch, conn); closeErr != nil {
+			return nil, fmt.Errorf("failed to declare queue: %w; cleanup error: %v", err, closeErr)
 		}
-		if cerr := conn.Close(); cerr != nil {
-			return nil, fmt.Errorf("%w; conn close error: %v", err, cerr)
-		}
-		return nil, err
+		return nil, fmt.Errorf("failed to declare queue: %w", err)
 	}
 
 	return &Consumer{conn: conn, channel: ch, queue: queueName}, nil
@@ -48,7 +43,7 @@ func NewConsumer(url, queueName string) (*Consumer, error) {
 
 // Consume starts consuming messages and calls the handler for each message
 func (c *Consumer) Consume(ctx context.Context, handler func([]byte) error) error {
-	msgs, err := c.channel.Consume(
+	messages, err := c.channel.Consume(
 		c.queue,
 		"",    // consumer tag (auto-generated)
 		false, // autoAck = false (manual acks)
@@ -65,39 +60,28 @@ func (c *Consumer) Consume(ctx context.Context, handler func([]byte) error) erro
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case delivery := <-msgs:
+		case delivery := <-messages:
 			if delivery.DeliveryTag == 0 {
 				continue // channel closed
 			}
 
 			if err := handler(delivery.Body); err != nil {
 				// Nack and requeue on error
-				delivery.Nack(false, true)
+				if nackErr := delivery.Nack(false, true); nackErr != nil {
+					return fmt.Errorf("handler error: %w; nack error: %v", err, nackErr)
+				}
 				continue
 			}
 
 			// Ack on success
-			delivery.Ack(false)
+			if ackErr := delivery.Ack(false); ackErr != nil {
+				return fmt.Errorf("ack error: %w", ackErr)
+			}
 		}
 	}
 }
 
 // Close closes the connection and channel
 func (c *Consumer) Close() error {
-	var err error
-	if c.channel != nil {
-		if cerr := c.channel.Close(); cerr != nil {
-			err = cerr
-		}
-	}
-	if c.conn != nil {
-		if cerr := c.conn.Close(); cerr != nil {
-			if err != nil {
-				err = fmt.Errorf("%v; conn close error: %w", err, cerr)
-			} else {
-				err = cerr
-			}
-		}
-	}
-	return err
+	return closeResources(c.channel, c.conn)
 }

@@ -21,24 +21,18 @@ func NewPublisher(url string) (*Publisher, error) {
 
 	ch, err := conn.Channel()
 	if err != nil {
-		if cerr := conn.Close(); cerr != nil {
-			return nil, fmt.Errorf("%w; close error: %v", err, cerr)
+		if closeErr := conn.Close(); closeErr != nil {
+			return nil, fmt.Errorf("%w; connection close error: %v", err, closeErr)
 		}
 		return nil, err
 	}
 
 	// Enable publisher confirmations for reliability
 	if err := ch.Confirm(false); err != nil {
-		if cerr := ch.Close(); cerr != nil {
-			if rerr := conn.Close(); rerr != nil {
-				return nil, fmt.Errorf("%w; channel close error: %v; conn close error: %v", err, cerr, rerr)
-			}
-			return nil, fmt.Errorf("%w; channel close error: %v", err, cerr)
+		if closeErr := closeResources(ch, conn); closeErr != nil {
+			return nil, fmt.Errorf("failed to enable publisher confirms: %w; cleanup error: %v", err, closeErr)
 		}
-		if cerr := conn.Close(); cerr != nil {
-			return nil, fmt.Errorf("%w; conn close error: %v", err, cerr)
-		}
-		return nil, err
+		return nil, fmt.Errorf("failed to enable publisher confirms: %w", err)
 	}
 
 	return &Publisher{conn: conn, channel: ch}, nil
@@ -62,20 +56,32 @@ func (p *Publisher) Publish(ctx context.Context, exchange, routingKey string, bo
 
 // Close closes the connection and channel
 func (p *Publisher) Close() error {
-	var err error
-	if p.channel != nil {
-		if cerr := p.channel.Close(); cerr != nil {
-			err = cerr
+	return closeResources(p.channel, p.conn)
+}
+
+// closeResources closes channel and connection, combining any errors
+func closeResources(channel *amqp.Channel, conn *amqp.Connection) error {
+	var errs []error
+
+	if channel != nil {
+		if err := channel.Close(); err != nil {
+			errs = append(errs, fmt.Errorf("channel close error: %w", err))
 		}
 	}
-	if p.conn != nil {
-		if cerr := p.conn.Close(); cerr != nil {
-			if err != nil {
-				err = fmt.Errorf("%v; conn close error: %w", err, cerr)
-			} else {
-				err = cerr
-			}
+
+	if conn != nil {
+		if err := conn.Close(); err != nil {
+			errs = append(errs, fmt.Errorf("connection close error: %w", err))
 		}
 	}
-	return err
+
+	if len(errs) == 0 {
+		return nil
+	}
+
+	if len(errs) == 1 {
+		return errs[0]
+	}
+
+	return fmt.Errorf("%v", errs)
 }

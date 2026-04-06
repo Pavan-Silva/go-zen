@@ -338,7 +338,7 @@ authenticator := &auth.BasicAuth{
 
 r := zen.New(":8080")
 // Skip auth for public health and metrics endpoints
-r.Use(auth.RequireAuthWithSkipper(authenticator, auth.SkipPaths("/health", "/metrics")))
+r.Use(auth.RequireAuth(authenticator, auth.SkipPaths("/health", "/metrics")))
 
 r.Handle("GET /protected", func(c *zen.Context) {
     user := auth.GetUser(c)

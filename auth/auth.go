@@ -43,16 +43,16 @@ func (u User) HasRole(role string) bool {
 	return false
 }
 
-// AuthMiddleware creates HTTP middleware that authenticates requests.
+// Middleware creates HTTP middleware that authenticates requests.
 // It stores the authenticated User in the zen.Context under the key "user".
 // On failure, it calls the onError function (defaults to sending 401).
-func AuthMiddleware(auth Authenticator, onError func(*zen.Context)) func(*zen.Context, http.Handler) {
-	return AuthMiddlewareWithSkipper(auth, onError, nil)
+func Middleware(auth Authenticator, onError func(*zen.Context)) func(*zen.Context, http.Handler) {
+	return MiddlewareWithSkipper(auth, onError, nil)
 }
 
-// AuthMiddlewareWithSkipper creates HTTP middleware that authenticates requests and can skip selected routes.
+// MiddlewareWithSkipper creates HTTP middleware that authenticates requests and can skip selected routes.
 // If skip returns true, authentication is bypassed and the request proceeds.
-func AuthMiddlewareWithSkipper(auth Authenticator, onError func(*zen.Context), skip SkipFunc) func(*zen.Context, http.Handler) {
+func MiddlewareWithSkipper(auth Authenticator, onError func(*zen.Context), skip SkipFunc) func(*zen.Context, http.Handler) {
 	if onError == nil {
 		onError = func(c *zen.Context) {
 			c.SendError(zen.Unauthorized())
@@ -83,7 +83,7 @@ func RequireAuth(auth Authenticator, skip ...SkipFunc) func(*zen.Context, http.H
 	if len(skip) > 0 {
 		skipper = skip[0]
 	}
-	return AuthMiddlewareWithSkipper(auth, nil, skipper)
+	return MiddlewareWithSkipper(auth, nil, skipper)
 }
 
 // RequireRole creates middleware that requires a specific role.
@@ -140,9 +140,9 @@ func (b *BasicAuth) Authenticate(r *http.Request) (User, error) {
 
 // JWTAuth implements JWT token authentication.
 type JWTAuth struct {
-	Secret     []byte
+	Secret        []byte
 	SigningMethod jwt.SigningMethod
-	ClaimsFunc func(claims jwt.MapClaims) User
+	ClaimsFunc    func(claims jwt.MapClaims) User
 }
 
 func (j *JWTAuth) Authenticate(r *http.Request) (User, error) {
