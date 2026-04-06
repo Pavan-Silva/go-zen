@@ -10,6 +10,8 @@ Zen provides routing, request binding, middleware, and simple helpers with a min
 - Built-in JSON, form, and file binding
 - Simple middleware chaining and graceful shutdown
 - Optional SSE/WebSocket support via separate `sse` and `ws` packages
+- Optional `util` package for env loading and DB helpers
+- Optional `auth` package for authentication across HTTP, WebSocket, and SSE
 
 ## Features
 
@@ -221,6 +223,92 @@ ws.Handle(r, "GET /ws", func(c *zen.Context, conn *ws.Conn) {
         }
         _ = conn.WriteJSON(map[string]any{"echo": msg})
     }
+})
+```
+
+## Authentication
+
+Zen provides an optional `auth` package for consistent authentication across HTTP, WebSocket, and SSE routes.
+
+### Authenticator Interface
+
+Implement the `Authenticator` interface to define custom authentication logic:
+
+```go
+type Authenticator interface {
+    Authenticate(r *http.Request) (User, error)
+}
+```
+
+### Built-in Authenticators
+
+- `BasicAuth` - HTTP Basic Authentication
+- `JWTAuth` - JWT token authentication
+- `APIKeyAuth` - API key via header or query param
+- `SessionAuth` - Session-based authentication
+
+### HTTP Authentication
+
+```go
+import (
+    "github.com/Pavan-Silva/go-zen"
+    "github.com/Pavan-Silva/go-zen/auth"
+)
+
+authenticator := &auth.BasicAuth{
+    Realm: "My App",
+    Validate: func(username, password string) (auth.User, error) {
+        // Your validation logic
+        return auth.User{ID: "1", Username: username}, nil
+    },
+}
+
+r := zen.New(":8080")
+// Skip auth for public health and metrics endpoints
+r.Use(auth.RequireAuthWithSkipper(authenticator, auth.SkipPaths("/health", "/metrics")))
+
+r.Handle("GET /protected", func(c *zen.Context) {
+    user := auth.GetUser(c)
+    c.JSON(200, map[string]string{"user": user.Username})
+})
+```
+
+### WebSocket Authentication
+
+```go
+ws.HandleWithAuth(r, "GET /ws", authenticator, func(c *zen.Context, conn *ws.Conn) {
+    user := auth.GetUser(c)
+    // Authenticated WebSocket handler
+})
+```
+
+### SSE Authentication
+
+```go
+sse.HandleWithAuth(r, "GET /events", authenticator, func(c *zen.Context) error {
+    user := auth.GetUser(c)
+    // Authenticated SSE handler
+    return sse.Send(c, "message", map[string]any{"user": user.Username})
+})
+```
+
+### Skipping Auth for Selected Routes
+
+```go
+r := zen.New(":8080")
+r.Use(auth.RequireAuth(authenticator, auth.SkipPaths("/health", "/metrics")))
+
+// /health and /metrics are public.
+// All other routes require auth.
+```
+
+### Role-Based Access
+
+```go
+r.Use(auth.RequireRole("admin", nil))
+
+r.Handle("GET /admin", func(c *zen.Context) {
+    // Only accessible to users with "admin" role
 })
 ```
 
@@ -937,6 +1025,8 @@ zen/
 ├── validate.go         # Lazy validator initialization
 ├── errors.go           # Sentinel error types (ErrInvalidBindTarget, FormError)
 ├── form.go             # Form binding with reflection caching
+├── auth/               # Optional authentication helpers
+│   └── auth.go          # Authenticators for HTTP, WS, SSE
 ├── middleware/         # Built-in middleware
 │   ├── logger.go       # Request logging with metrics
 │   ├── recover.go      # Panic recovery
