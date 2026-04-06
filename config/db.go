@@ -46,8 +46,8 @@ func OpenDB(ctx context.Context, driver, dsn string, cfg DBConfig) (*sql.DB, err
 	defer cancel()
 
 	if err := db.PingContext(pingCtx); err != nil {
-		if cerr := db.Close(); cerr != nil {
-			return nil, fmt.Errorf("%w; close error: %v", err, cerr)
+		if errClose := db.Close(); errClose != nil {
+			return nil, fmt.Errorf("%w; close error: %v", err, errClose)
 		}
 		return nil, err
 	}
@@ -64,15 +64,15 @@ func WithTransaction(ctx context.Context, db *sql.DB, fn func(*sql.Tx) error) (e
 
 	defer func() {
 		if p := recover(); p != nil {
-			if rerr := tx.Rollback(); rerr != nil {
-				panic(fmt.Errorf("panic: %v; rollback error: %w", p, rerr))
+			if err := tx.Rollback(); err != nil {
+				panic(fmt.Errorf("panic: %v; rollback error: %w", p, err))
 			}
 			panic(p)
 		}
 
 		if err != nil {
-			if rerr := tx.Rollback(); rerr != nil {
-				err = fmt.Errorf("%v; rollback error: %w", err, rerr)
+			if err := tx.Rollback(); err != nil {
+				err = fmt.Errorf("%v; rollback error: %w", err, err)
 			}
 		}
 	}()

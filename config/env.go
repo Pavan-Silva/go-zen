@@ -18,11 +18,11 @@ func LoadEnvFile(path string, override bool) (err error) {
 		return err
 	}
 	defer func() {
-		if cerr := f.Close(); cerr != nil {
+		if errClose := f.Close(); errClose != nil {
 			if err != nil {
-				err = fmt.Errorf("%w; close error: %v", err, cerr)
+				err = fmt.Errorf("%w; close error: %v", err, errClose)
 			} else {
-				err = cerr
+				err = errClose
 			}
 		}
 	}()
