@@ -128,25 +128,25 @@ Contexts are pooled and reused across requests for zero allocation overhead.
 
 ## Utilities
 
-Zen includes an optional `util` package for common app setup helpers:
+Zen includes an optional `config` package for common app setup helpers:
 
-- `util.LoadEnvFile(path, override)` to load `.env` files
-- `util.GetEnv`, `util.MustGetEnv`, `util.GetEnvInt`, `util.GetEnvBool`, `util.GetEnvDuration`
-- `util.OpenDB`, `util.WithTransaction`, `util.CloseDB`
+- `config.LoadEnvFile(path, override)` to load `.env` files
+- `config.GetEnv`, `config.MustGetEnv`, `config.GetEnvInt`, `config.GetEnvBool`, `config.GetEnvDuration`
+- `config.OpenDB`, `config.WithTransaction`, `config.CloseDB`
 
 ### Environment helpers
 
 ```go
 import (
-    "github.com/Pavan-Silva/go-zen/util"
+    "github.com/Pavan-Silva/go-zen/config"
 )
 
-if err := util.LoadEnvFile(".env", false); err != nil {
+if err := config.LoadEnvFile(".env", false); err != nil {
     panic(err)
 }
 
-port := util.GetEnv("PORT", "8080")
-maxActive, _ := util.GetEnvInt("DB_MAX_ACTIVE", 25)
+port := config.GetEnv("PORT", "8080")
+maxActive, _ := config.GetEnvInt("DB_MAX_ACTIVE", 25)
 ```
 
 ### Database helpers
@@ -156,18 +156,18 @@ import (
     "context"
     "database/sql"
 
-    "github.com/Pavan-Silva/go-zen/util"
+    "github.com/Pavan-Silva/go-zen/config"
 )
 
-cfg := util.DefaultDBConfig()
+cfg := config.DefaultDBConfig()
 ctx := context.Background()
-db, err := util.OpenDB(ctx, "postgres", "postgres://user:pass@localhost/db?sslmode=disable", cfg)
+db, err := config.OpenDB(ctx, "postgres", "postgres://user:pass@localhost/db?sslmode=disable", cfg)
 if err != nil {
     panic(err)
 }
-defer util.CloseDB(db)
+defer config.CloseDB(db)
 
-err = util.WithTransaction(ctx, db, func(tx *sql.Tx) error {
+err = config.WithTransaction(ctx, db, func(tx *sql.Tx) error {
     _, err := tx.ExecContext(ctx, "INSERT INTO users(name) VALUES($1)", "alice")
     return err
 })
@@ -1027,13 +1027,13 @@ zen/
 ├── form.go             # Form binding with reflection caching
 ├── auth/               # Optional authentication helpers
 │   └── auth.go          # Authenticators for HTTP, WS, SSE
+├── config/             # Optional app configuration helpers
+│   ├── db.go           # Database connection helpers and transactions
+│   └── env.go          # Environment loading and typed env helpers
 ├── middleware/         # Built-in middleware
 │   ├── logger.go       # Request logging with metrics
 │   ├── recover.go      # Panic recovery
 │   └── cors.go         # CORS handling
-├── util/               # Optional utility helpers
-│   ├── db.go           # Database connection helpers and transactions
-│   └── env.go          # Environment loading and typed env helpers
 ├── sse/                # Optional SSE helpers
 │   └── sse.go
 ├── ws/                 # Optional WebSocket helpers
