@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/Pavan-Silva/go-zen"
+	"github.com/Pavan-Silva/go-zen/auth"
 )
 
 const contentType = "text/event-stream;charset=utf-8"
@@ -67,6 +68,24 @@ func encodeSSEData(data any) (string, error) {
 // to propagate as a 500 response.
 func Handle(r *zen.Router, pattern string, handler func(*zen.Context) error) {
 	r.Handle(pattern, func(c *zen.Context) {
+		if err := handler(c); err != nil {
+			c.SendError(zen.InternalError(err.Error()))
+		}
+	})
+}
+
+// HandleWithAuth registers an authenticated SSE route.
+// The authenticator is called before the handler, and the authenticated User
+// is stored in the Context under "user".
+func HandleWithAuth(r *zen.Router, pattern string, auth auth.Authenticator, handler func(*zen.Context) error) {
+	r.Handle(pattern, func(c *zen.Context) {
+		user, err := auth.AuthenticateSSE(c.Request)
+		if err != nil {
+			c.SendError(zen.Unauthorized())
+			return
+		}
+
+		c.Set("user", user)
 		if err := handler(c); err != nil {
 			c.SendError(zen.InternalError(err.Error()))
 		}
