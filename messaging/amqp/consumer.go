@@ -2,6 +2,7 @@ package amqp
 
 import (
 	"context"
+	"fmt"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
@@ -21,15 +22,24 @@ func NewConsumer(url, queueName string) (*Consumer, error) {
 
 	ch, err := conn.Channel()
 	if err != nil {
-		conn.Close()
+		if cerr := conn.Close(); cerr != nil {
+			return nil, fmt.Errorf("%w; close error: %v", err, cerr)
+		}
 		return nil, err
 	}
 
 	// Declare queue (idempotent)
 	_, err = ch.QueueDeclare(queueName, true, false, false, false, nil)
 	if err != nil {
-		ch.Close()
-		conn.Close()
+		if cerr := ch.Close(); cerr != nil {
+			if rerr := conn.Close(); rerr != nil {
+				return nil, fmt.Errorf("%w; channel close error: %v; conn close error: %v", err, cerr, rerr)
+			}
+			return nil, fmt.Errorf("%w; channel close error: %v", err, cerr)
+		}
+		if cerr := conn.Close(); cerr != nil {
+			return nil, fmt.Errorf("%w; conn close error: %v", err, cerr)
+		}
 		return nil, err
 	}
 
@@ -74,11 +84,20 @@ func (c *Consumer) Consume(ctx context.Context, handler func([]byte) error) erro
 
 // Close closes the connection and channel
 func (c *Consumer) Close() error {
+	var err error
 	if c.channel != nil {
-		c.channel.Close()
+		if cerr := c.channel.Close(); cerr != nil {
+			err = cerr
+		}
 	}
 	if c.conn != nil {
-		return c.conn.Close()
+		if cerr := c.conn.Close(); cerr != nil {
+			if err != nil {
+				err = fmt.Errorf("%v; conn close error: %w", err, cerr)
+			} else {
+				err = cerr
+			}
+		}
 	}
-	return nil
+	return err
 }

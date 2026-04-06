@@ -77,9 +77,9 @@ func Handle(r *zen.Router, pattern string, handler func(*zen.Context) error) {
 // HandleWithAuth registers an authenticated SSE route.
 // The authenticator is called before the handler, and the authenticated User
 // is stored in the Context under "user".
-func HandleWithAuth(r *zen.Router, pattern string, auth auth.Authenticator, handler func(*zen.Context) error) {
+func HandleWithAuth(r *zen.Router, pattern string, authenticator auth.Authenticator, handler func(*zen.Context) error) {
 	r.Handle(pattern, func(c *zen.Context) {
-		user, err := auth.AuthenticateSSE(c.Request)
+		user, err := auth.AuthenticateSSE(authenticator, c.Request)
 		if err != nil {
 			c.SendError(zen.Unauthorized())
 			return

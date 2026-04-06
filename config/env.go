@@ -12,12 +12,20 @@ import (
 // LoadEnvFile reads a .env-style file and sets environment variables.
 // Lines beginning with # are ignored. If override is false, existing
 // environment variables are preserved.
-func LoadEnvFile(path string, override bool) error {
+func LoadEnvFile(path string, override bool) (err error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() {
+		if cerr := f.Close(); cerr != nil {
+			if err != nil {
+				err = fmt.Errorf("%w; close error: %v", err, cerr)
+			} else {
+				err = cerr
+			}
+		}
+	}()
 
 	s := bufio.NewScanner(f)
 	for s.Scan() {

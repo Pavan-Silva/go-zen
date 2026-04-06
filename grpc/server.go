@@ -1,7 +1,6 @@
 package grpc
 
 import (
-	"context"
 	"log"
 	"net"
 
@@ -40,7 +39,7 @@ func (s *Server) EnableReflection() {
 }
 
 // UnaryInterceptor is a function type for unary interceptors
-type UnaryInterceptor func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error)
+type UnaryInterceptor = grpc.UnaryServerInterceptor
 
 // ChainUnary creates chained unary interceptors
 func ChainUnary(interceptors ...UnaryInterceptor) grpc.ServerOption {
@@ -48,7 +47,7 @@ func ChainUnary(interceptors ...UnaryInterceptor) grpc.ServerOption {
 }
 
 // StreamInterceptor is a function type for stream interceptors
-type StreamInterceptor func(srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error
+type StreamInterceptor = grpc.StreamServerInterceptor
 
 // ChainStream creates chained stream interceptors
 func ChainStream(interceptors ...StreamInterceptor) grpc.ServerOption {
