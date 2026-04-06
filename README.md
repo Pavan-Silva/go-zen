@@ -11,6 +11,7 @@ Zen provides routing, request binding, middleware, and simple helpers with a min
 - Simple middleware chaining and graceful shutdown
 - Optional SSE/WebSocket/gRPC support via separate `sse`, `ws`, and `grpc` packages
 - Optional messaging support for AMQP (RabbitMQ) and Kafka via `messaging/amqp` and `messaging/kafka` packages
+- Optional `mail` package for SMTP email sending using `net/mail` and `net/smtp`
 - Optional `config` package for env loading and DB helpers
 - Optional `auth` package for authentication across HTTP, WebSocket, SSE, and gRPC
 
@@ -298,6 +299,35 @@ consumer.Consume(context.Background(), func(msg []byte) error {
     return nil
 })
 ```
+
+### Email (SMTP)
+
+Zen provides optional email support via the `mail` package for sending emails using SMTP with `net/mail` for validation.
+
+```go
+import "github.com/Pavan-Silva/go-zen/mail"
+
+config := mail.Config{
+    Host:     "smtp.gmail.com",
+    Port:     587,
+    Username: "your-email@gmail.com",
+    Password: "your-app-password",
+}
+
+msg := mail.Message{
+    From:    "sender@example.com",
+    To:      []string{"recipient@example.com"},
+    Subject: "Hello from Zen",
+    Body:    "This is a test email sent via Zen's mail package.",
+}
+
+err := mail.Send(config, msg)
+if err != nil {
+    log.Fatal(err)
+}
+```
+
+For HTML emails, use `mail.SendHTML()` with the same API.
 
 ## Authentication
 
@@ -1098,6 +1128,8 @@ zen/
 ├── validate.go         # Lazy validator initialization
 ├── errors.go           # Sentinel error types (ErrInvalidBindTarget, FormError)
 ├── form.go             # Form binding with reflection caching
+├── mail/               # Optional SMTP email sending
+│   └── mail.go         # Email sending with net/mail validation
 ├── auth/               # Optional authentication helpers
 │   └── auth.go          # Authenticators for HTTP, WS, SSE
 ├── config/             # Optional app configuration helpers
