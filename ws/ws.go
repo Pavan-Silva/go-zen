@@ -1,6 +1,7 @@
 package ws
 
 import (
+	"log"
 	"net/http"
 
 	"github.com/Pavan-Silva/go-zen"
@@ -33,7 +34,9 @@ func Handler(fn func(*zen.Context, *Conn)) http.Handler {
 	return websocket.Handler(func(conn *websocket.Conn) {
 		c := zen.FromRequest(conn.Request())
 		if c == nil {
-			_ = conn.Close()
+			if err := conn.Close(); err != nil {
+				log.Printf("ws: failed to close connection: %v", err)
+			}
 			return
 		}
 		fn(c, &Conn{conn: conn})
@@ -48,17 +51,21 @@ func Handle(r *zen.Router, pattern string, fn func(*zen.Context, *Conn)) {
 // HandleWithAuth registers an authenticated WebSocket route.
 // The authenticator is called during the connection upgrade, and the authenticated User
 // is stored in the Context under "user".
-func HandleWithAuth(r *zen.Router, pattern string, auth auth.Authenticator, fn func(*zen.Context, *Conn)) {
+func HandleWithAuth(r *zen.Router, pattern string, authenticator auth.Authenticator, fn func(*zen.Context, *Conn)) {
 	authHandler := websocket.Handler(func(conn *websocket.Conn) {
 		c := zen.FromRequest(conn.Request())
 		if c == nil {
-			_ = conn.Close()
+			if err := conn.Close(); err != nil {
+				log.Printf("ws: failed to close connection: %v", err)
+			}
 			return
 		}
 
-		user, err := auth.AuthenticateWS(conn.Request())
+		user, err := auth.AuthenticateWS(authenticator, conn.Request())
 		if err != nil {
-			_ = conn.Close()
+			if cerr := conn.Close(); cerr != nil {
+				log.Printf("ws: failed to close connection after auth failure: %v", cerr)
+			}
 			return
 		}
 

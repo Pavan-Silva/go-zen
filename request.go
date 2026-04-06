@@ -33,10 +33,16 @@ const maxBodyBytes = 1 << 20
 //	}
 func (c *Context) BindJSON(dest any) error {
 	lr := io.LimitReader(c.Request.Body, maxBodyBytes)
-	err := json.NewDecoder(lr).Decode(dest)
-	_ = c.Request.Body.Close()
+	var err error
+	if err = json.NewDecoder(lr).Decode(dest); err != nil {
+		closeErr := c.Request.Body.Close()
+		if closeErr != nil {
+			return fmt.Errorf("%w; body close error: %v", err, closeErr)
+		}
+		return err
+	}
 
-	if err != nil {
+	if err = c.Request.Body.Close(); err != nil {
 		return err
 	}
 
@@ -109,8 +115,17 @@ func (c *Context) Param(key string) string {
 func (c *Context) Body() ([]byte, error) {
 	lr := io.LimitReader(c.Request.Body, maxBodyBytes)
 	b, err := io.ReadAll(lr)
-	_ = c.Request.Body.Close()
-	return b, err
+	closeErr := c.Request.Body.Close()
+	if err != nil {
+		if closeErr != nil {
+			return nil, fmt.Errorf("%w; body close error: %v", err, closeErr)
+		}
+		return nil, err
+	}
+	if closeErr != nil {
+		return nil, closeErr
+	}
+	return b, nil
 }
 
 // BindFile retrieves a single file from a multipart form upload by field name.
@@ -133,7 +148,11 @@ func (c *Context) BindFile(fieldName string) (*multipart.FileHeader, []byte, err
 	if err != nil {
 		return nil, nil, fmt.Errorf("zen: FormFile error: %w", err)
 	}
-	defer file.Close()
+	defer func() {
+		if cerr := file.Close(); cerr != nil && err == nil {
+			err = fmt.Errorf("zen: file close error: %w", cerr)
+		}
+	}()
 
 	content, err := io.ReadAll(io.LimitReader(file, maxBodyBytes))
 	if err != nil {
@@ -174,9 +193,12 @@ func (c *Context) BindFiles(fieldName string) ([]UploadedFile, error) {
 		}
 
 		content, err := io.ReadAll(io.LimitReader(file, maxBodyBytes))
-		file.Close()
+		closeErr := file.Close()
 		if err != nil {
 			return nil, fmt.Errorf("zen: file read error: %w", err)
+		}
+		if closeErr != nil {
+			return nil, fmt.Errorf("zen: file close error: %w", closeErr)
 		}
 
 		result = append(result, UploadedFile{

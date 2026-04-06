@@ -2,6 +2,8 @@ package kafka
 
 import (
 	"context"
+	"errors"
+
 	"github.com/segmentio/kafka-go"
 )
 
@@ -18,7 +20,7 @@ func NewConsumer(brokers []string, topic, groupID string) *Consumer {
 			Topic:          topic,
 			GroupID:        groupID,
 			StartOffset:    kafka.LastOffset,
-			CommitInterval: 0, // auto-commit immediately
+			CommitInterval: 0,    // auto-commit immediately
 			MaxBytes:       10e6, // 10MB
 		}),
 	}
@@ -29,7 +31,7 @@ func (c *Consumer) Consume(ctx context.Context, handler func([]byte) error) erro
 	for {
 		msg, err := c.reader.ReadMessage(ctx)
 		if err != nil {
-			if err == context.Canceled {
+			if errors.Is(err, context.Canceled) {
 				return nil
 			}
 			return err

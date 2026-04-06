@@ -3,6 +3,7 @@ package config
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"time"
 )
 
@@ -45,7 +46,9 @@ func OpenDB(ctx context.Context, driver, dsn string, cfg DBConfig) (*sql.DB, err
 	defer cancel()
 
 	if err := db.PingContext(pingCtx); err != nil {
-		db.Close()
+		if cerr := db.Close(); cerr != nil {
+			return nil, fmt.Errorf("%w; close error: %v", err, cerr)
+		}
 		return nil, err
 	}
 
@@ -53,7 +56,7 @@ func OpenDB(ctx context.Context, driver, dsn string, cfg DBConfig) (*sql.DB, err
 }
 
 // WithTransaction runs fn inside a transaction and commits or rolls back.
-func WithTransaction(ctx context.Context, db *sql.DB, fn func(*sql.Tx) error) error {
+func WithTransaction(ctx context.Context, db *sql.DB, fn func(*sql.Tx) error) (err error) {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -61,13 +64,21 @@ func WithTransaction(ctx context.Context, db *sql.DB, fn func(*sql.Tx) error) er
 
 	defer func() {
 		if p := recover(); p != nil {
-			tx.Rollback()
+			if rerr := tx.Rollback(); rerr != nil {
+				panic(fmt.Errorf("panic: %v; rollback error: %w", p, rerr))
+			}
 			panic(p)
+		}
+
+		if err != nil {
+			if rerr := tx.Rollback(); rerr != nil {
+				err = fmt.Errorf("%v; rollback error: %w", err, rerr)
+			}
 		}
 	}()
 
-	if err := fn(tx); err != nil {
-		tx.Rollback()
+	err = fn(tx)
+	if err != nil {
 		return err
 	}
 

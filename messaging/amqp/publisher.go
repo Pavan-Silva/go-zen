@@ -2,6 +2,7 @@ package amqp
 
 import (
 	"context"
+	"fmt"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
@@ -20,14 +21,23 @@ func NewPublisher(url string) (*Publisher, error) {
 
 	ch, err := conn.Channel()
 	if err != nil {
-		conn.Close()
+		if cerr := conn.Close(); cerr != nil {
+			return nil, fmt.Errorf("%w; close error: %v", err, cerr)
+		}
 		return nil, err
 	}
 
 	// Enable publisher confirmations for reliability
 	if err := ch.Confirm(false); err != nil {
-		ch.Close()
-		conn.Close()
+		if cerr := ch.Close(); cerr != nil {
+			if rerr := conn.Close(); rerr != nil {
+				return nil, fmt.Errorf("%w; channel close error: %v; conn close error: %v", err, cerr, rerr)
+			}
+			return nil, fmt.Errorf("%w; channel close error: %v", err, cerr)
+		}
+		if cerr := conn.Close(); cerr != nil {
+			return nil, fmt.Errorf("%w; conn close error: %v", err, cerr)
+		}
 		return nil, err
 	}
 
@@ -52,11 +62,20 @@ func (p *Publisher) Publish(ctx context.Context, exchange, routingKey string, bo
 
 // Close closes the connection and channel
 func (p *Publisher) Close() error {
+	var err error
 	if p.channel != nil {
-		p.channel.Close()
+		if cerr := p.channel.Close(); cerr != nil {
+			err = cerr
+		}
 	}
 	if p.conn != nil {
-		return p.conn.Close()
+		if cerr := p.conn.Close(); cerr != nil {
+			if err != nil {
+				err = fmt.Errorf("%v; conn close error: %w", err, cerr)
+			} else {
+				err = cerr
+			}
+		}
 	}
-	return nil
+	return err
 }

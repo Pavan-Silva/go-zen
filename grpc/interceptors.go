@@ -18,7 +18,7 @@ func LoggingInterceptor() UnaryInterceptor {
 		resp, err := handler(ctx, req)
 		duration := time.Since(start)
 
-		log.Printf("gRPC %s - %v - %s", info.FullMethod, duration, grpc.Code(err))
+		log.Printf("gRPC %s - %v - %s", info.FullMethod, duration, status.Code(err))
 		return resp, err
 	}
 }
