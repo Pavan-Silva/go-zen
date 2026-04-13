@@ -25,8 +25,11 @@ func (c *Conn) WriteJSON(message any) error {
 }
 
 // Close closes the connection.
-func (c *Conn) Close() error {
-	return c.conn.Close()
+func (c *Conn) Close() {
+	err := c.conn.Close()
+	if err != nil {
+		log.Printf("ws: failed to close connection: %v", err)
+	}
 }
 
 // Handler converts the provided function into an http.Handler.
