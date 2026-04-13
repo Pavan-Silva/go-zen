@@ -9,11 +9,10 @@ Zen provides routing, request binding, middleware, and simple helpers with a min
 - Minimal surface area, no external router dependency
 - Built-in JSON, form, and file binding
 - Simple middleware chaining and graceful shutdown
-- Optional SSE/WebSocket/gRPC support via separate `sse`, `ws`, and `grpc` packages
-- Optional messaging support for AMQP (RabbitMQ) and Kafka via `messaging/amqp` and `messaging/kafka` packages
+- Optional SSE/WebSocket support via separate `sse` and `ws` packages
 - Optional `mail` package for SMTP email sending using `net/mail` and `net/smtp`
 - Optional `config` package for env loading and DB helpers
-- Optional `auth` package for authentication across HTTP, WebSocket, SSE, and gRPC
+- Optional `auth` package for authentication across HTTP, WebSocket, and SSE
 
 ## Features
 
@@ -228,78 +227,6 @@ ws.Handle(r, "GET /ws", func(c *zen.Context, conn *ws.Conn) {
 })
 ```
 
-### gRPC
-
-Zen provides optional gRPC support via the `grpc` package for high-performance RPC services.
-
-```go
-import (
-    "github.com/Pavan-Silva/go-zen/grpc"
-)
-
-server := grpc.NewServer(":50051",
-    grpc.ChainUnary(
-        grpc.LoggingInterceptor(),
-        grpc.RecoveryInterceptor(),
-        grpc.AuthInterceptor(func(token string) bool {
-            return token == "valid-token"
-        }),
-    ),
-)
-
-// Register your gRPC services
-// pb.RegisterYourServiceServer(server.Server, &yourService{})
-
-server.EnableReflection() // For debugging
-server.ListenAndServe()
-```
-
-### Messaging (AMQP & Kafka)
-
-Zen provides optional messaging support for RabbitMQ (AMQP) and Kafka via separate packages.
-
-#### AMQP (RabbitMQ)
-
-```go
-import "github.com/Pavan-Silva/go-zen/messaging/amqp"
-
-// Publisher
-publisher, _ := amqp.NewPublisher("amqp://guest:guest@localhost:5672/")
-defer publisher.Close()
-
-publisher.Publish(context.Background(), "my-exchange", "my-key", []byte(`{"message": "hello"}`))
-
-// Consumer
-consumer, _ := amqp.NewConsumer("amqp://guest:guest@localhost:5672/", "my-queue")
-defer consumer.Close()
-
-consumer.Consume(context.Background(), func(msg []byte) error {
-    log.Printf("Received: %s", msg)
-    return nil
-})
-```
-
-#### Kafka
-
-```go
-import "github.com/Pavan-Silva/go-zen/messaging/kafka"
-
-// Publisher
-publisher := kafka.NewPublisher([]string{"localhost:9092"}, "my-topic")
-defer publisher.Close()
-
-publisher.Publish(context.Background(), []byte("key"), []byte(`{"message": "hello"}`))
-
-// Consumer
-consumer := kafka.NewConsumer([]string{"localhost:9092"}, "my-topic", "my-group")
-defer consumer.Close()
-
-consumer.Consume(context.Background(), func(msg []byte) error {
-    log.Printf("Received: %s", msg)
-    return nil
-})
-```
-
 ### Email (SMTP)
 
 Zen provides optional email support via the `mail` package for sending emails using SMTP with `net/mail` for validation.
@@ -331,7 +258,7 @@ For HTML emails, use `mail.SendHTML()` with the same API.
 
 ## Authentication
 
-Zen provides an optional `auth` package for consistent authentication across HTTP, WebSocket, SSE, and gRPC routes.
+Zen provides an optional `auth` package for consistent authentication across HTTP, WebSocket, and SSE routes.
 
 ### Authenticator Interface
 
@@ -1143,18 +1070,8 @@ zen/
 │   └── sse.go
 ├── ws/                 # Optional WebSocket helpers
 │   └── ws.go
-├── grpc/               # Optional gRPC helpers
-│   ├── server.go
-│   └── interceptors.go
-├── messaging/          # Optional messaging helpers
-│   ├── amqp/
-│   │   ├── publisher.go
-│   │   └── consumer.go
-│   └── kafka/
-│       ├── publisher.go
-│       └── consumer.go
-├── system/
-│   └── banner.go       # Startup banner
+└── system/
+    └── banner.go       # Startup banner
 ```
 
 ## License
