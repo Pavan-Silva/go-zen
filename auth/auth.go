@@ -2,14 +2,10 @@ package auth
 
 import (
 	"crypto/subtle"
-	"errors"
-	"fmt"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/Pavan-Silva/go-zen"
-	"github.com/golang-jwt/jwt/v5"
 )
 
 // Authenticator defines the interface for authentication logic.
@@ -123,124 +119,6 @@ func GetUser(c *zen.Context) *User {
 	return nil
 }
 
-// BasicAuth implements HTTP Basic Authentication.
-type BasicAuth struct {
-	Realm    string
-	Validate func(username, password string) (User, error)
-}
-
-func (b *BasicAuth) Authenticate(r *http.Request) (User, error) {
-	username, password, ok := r.BasicAuth()
-	if !ok {
-		return User{}, errors.New("missing basic auth")
-	}
-
-	return b.Validate(username, password)
-}
-
-// JWTAuth implements JWT token authentication.
-type JWTAuth struct {
-	Secret        []byte
-	SigningMethod jwt.SigningMethod
-	ClaimsFunc    func(claims jwt.MapClaims) User
-}
-
-func (j *JWTAuth) Authenticate(r *http.Request) (User, error) {
-	authHeader := r.Header.Get("Authorization")
-	if authHeader == "" {
-		return User{}, errors.New("missing authorization header")
-	}
-
-	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-	if tokenString == authHeader {
-		return User{}, errors.New("invalid authorization header")
-	}
-
-	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-		if token.Method != j.SigningMethod {
-			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
-		}
-		return j.Secret, nil
-	})
-
-	if err != nil {
-		return User{}, err
-	}
-
-	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
-		return j.ClaimsFunc(claims), nil
-	}
-
-	return User{}, errors.New("invalid token")
-}
-
-// APIKeyAuth implements API key authentication via header or query param.
-type APIKeyAuth struct {
-	HeaderName string // e.g., "X-API-Key"
-	QueryParam string // e.g., "api_key"
-	Validate   func(key string) (User, error)
-}
-
-func (a *APIKeyAuth) Authenticate(r *http.Request) (User, error) {
-	var key string
-
-	if a.HeaderName != "" {
-		key = r.Header.Get(a.HeaderName)
-	}
-
-	if key == "" && a.QueryParam != "" {
-		key = r.URL.Query().Get(a.QueryParam)
-	}
-
-	if key == "" {
-		return User{}, errors.New("missing API key")
-	}
-
-	return a.Validate(key)
-}
-
-// SessionAuth implements session-based authentication using cookies.
-type SessionAuth struct {
-	CookieName string
-	Store      SessionStore
-}
-
-type SessionStore interface {
-	Get(sessionID string) (User, error)
-}
-
-func (s *SessionAuth) Authenticate(r *http.Request) (User, error) {
-	cookie, err := r.Cookie(s.CookieName)
-	if err != nil {
-		return User{}, errors.New("missing session cookie")
-	}
-
-	return s.Store.Get(cookie.Value)
-}
-
-// InMemorySessionStore is a simple in-memory session store for development.
-type InMemorySessionStore struct {
-	sessions map[string]User
-}
-
-func NewInMemorySessionStore() *InMemorySessionStore {
-	return &InMemorySessionStore{
-		sessions: make(map[string]User),
-	}
-}
-
-func (s *InMemorySessionStore) Get(sessionID string) (User, error) {
-	user, ok := s.sessions[sessionID]
-	if !ok {
-		return User{}, errors.New("invalid session")
-	}
-	return user, nil
-}
-
-func (s *InMemorySessionStore) Set(sessionID string, user User) {
-	s.sessions[sessionID] = user
-}
-
 // SkipPaths returns a SkipFunc that bypasses authentication for exact path matches.
 func SkipPaths(paths ...string) SkipFunc {
 	allowed := make(map[string]struct{}, len(paths))
@@ -287,16 +165,6 @@ func AuthenticateWS(auth Authenticator, r *http.Request) (User, error) {
 // Call this in your SSE handler before proceeding.
 func AuthenticateSSE(auth Authenticator, r *http.Request) (User, error) {
 	return auth.Authenticate(r)
-}
-
-// GenerateJWT creates a JWT token with the given claims.
-func GenerateJWT(secret []byte, method jwt.SigningMethod, claims jwt.MapClaims, expiry time.Duration) (string, error) {
-	now := time.Now()
-	claims["iat"] = now.Unix()
-	claims["exp"] = now.Add(expiry).Unix()
-
-	token := jwt.NewWithClaims(method, claims)
-	return token.SignedString(secret)
 }
 
 // ValidatePassword securely compares passwords using constant-time comparison.
