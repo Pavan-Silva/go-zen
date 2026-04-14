@@ -150,30 +150,6 @@ port := env.Get("PORT", "8080")
 maxActive, _ := env.GetInt("DB_MAX_ACTIVE", 25)
 ```
 
-### Database helpers
-
-```go
-import (
-    "context"
-    "database/sql"
-
-    "github.com/Pavan-Silva/go-zen/config"
-)
-
-cfg := config.DefaultDBConfig()
-ctx := context.Background()
-db, err := config.OpenDB(ctx, "postgres", "postgres://user:pass@localhost/db?sslmode=disable", cfg)
-if err != nil {
-    panic(err)
-}
-defer config.CloseDB(db)
-
-err = config.WithTransaction(ctx, db, func(tx *sql.Tx) error {
-    _, err := tx.ExecContext(ctx, "INSERT INTO users(name) VALUES($1)", "alice")
-    return err
-})
-```
-
 ## Optional Streaming Packages
 
 SSE and WebSocket support are available as optional packages rather than being included in the core `zen` package.
