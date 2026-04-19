@@ -24,10 +24,13 @@ func Send(c *zen.Context, event string, data any) error {
 	}
 
 	headers := c.Response.Header()
-	headers.Set("Content-Type", contentType)
-	headers.Set("Cache-Control", "no-cache")
-	headers.Set("Connection", "keep-alive")
-	headers.Set("X-Accel-Buffering", "no")
+	// Set SSE headers only if not already set (first call per response)
+	if headers.Get("Content-Type") != contentType {
+		headers.Set("Content-Type", contentType)
+		headers.Set("Cache-Control", "no-cache")
+		headers.Set("Connection", "keep-alive")
+		headers.Set("X-Accel-Buffering", "no")
+	}
 
 	payload, err := encodeSSEData(data)
 	if err != nil {
