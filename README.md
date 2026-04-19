@@ -1,70 +1,16 @@
 # Zen
 
-A small Go web framework built on the standard library `net/http`.
-Zen provides routing, request binding, middleware, and simple helpers with a minimal API.
+A lightweight Go web framework built on the standard library `net/http`.
+Zen gives you modern request routing, binding, middleware, and reusable helpers with a small API surface and no external router dependency.
 
 ## Why Zen?
 
-- Uses Go 1.22+ `http.ServeMux` with pattern matching
-- Minimal surface area, no external router dependency
-- Built-in JSON, form, and file binding
-- Simple middleware chaining and graceful shutdown
-- Optional SSE/WebSocket support via separate `sse` and `ws` packages
-- Optional `mail` package for SMTP email sending using `net/mail` and `net/smtp`
-- Optional `config` package for env loading and DB helpers
-- Optional `auth` package for authentication across HTTP, WebSocket, and SSE
-- Optional `cron` package for scheduled job execution
-
-## Features
-
-### Core Framework
-
-- Go 1.22+ pattern-based routing (no external router)
-- Request/response binding (JSON, forms, files with 1MB limit)
-- Struct validation with custom validators (`email`, `email-strict`)
-- Route groups with prefix and middleware inheritance
-- Graceful shutdown with signal handling (SIGINT/SIGTERM)
-- Structured HTTP error responses (HTTPError type)
-- Context pooling with zero-allocation operations
-- Security hardened defaults (timeouts, header limits)
-- Optional `util` package for env loading and DB helpers
-
-### Built-in Middleware
-
-- **Logger** — Request logging with method, path, status, latency, IP, response size
-- **Recover** — Panic recovery with stack trace logging
-- **CORS** — Full CORS support with configurable origins, methods, headers
-
-### Request/Response Features
-
-- JSON binding with automatic validation: `c.BindJSON(&req)`
-- Form binding (URL-encoded and multipart): `c.BindForm(&req)`
-- Single file upload: `c.BindFile("fieldname")`
-- Multiple file upload: `c.BindFiles("fieldname")`
-- Query parameter caching: `c.QueryParam("key")`
-- Path parameter extraction: `c.Param("id")`
-- Raw body reading with DoS protection: `c.Body()`
-- JSON responses with buffer pooling: `c.JSON(status, data)`
-- Structured error responses: `c.SendError(err)`
-
-### Performance Optimizations
-
-- **Context pooling** — Reuses Context allocations (reduces GC pressure)
-- **Inline context storage** — First 8 key-value pairs stored inline (no allocation)
-- **Middleware pre-chaining** — Chain built at setup time (zero per-request overhead)
-- **Form field caching** — Reflection metadata cached per struct type (sync.Map)
-- **Query parameter caching** — Parsed once per request, lazily
-- **JSON buffer pooling** — Response buffers reused via sync.Pool
-- **Type-specialized form setters** — Type switch happens once per field type
-- **Lazy validator initialization** — Validator created only on first use
-- **No per-request closures** — Pre-built handlers and middleware chains
-
-### Supported Bind Types
-
-- **Primitives:** `string`, `bool`
-- **Integers:** `int`, `int8`, `int16`, `int32`, `int64`
-- **Unsigned:** `uint`, `uint8`, `uint16`, `uint32`, `uint64`
-- **Floats:** `float32`, `float64`
+- Minimal, stdlib-first framework for Go 1.22+
+- Pattern-based routing via `http.ServeMux` and Go's route syntax
+- Fast request lifecycle with pooled contexts and zero-allocation middleware chaining
+- Secure defaults for timeouts, header limits, and graceful shutdown
+- Built-in request binding for JSON, forms, multipart files, and raw bodies
+- Optional helper packages for auth, config, mail, cron, SSE, and WebSocket
 
 ## Installation
 
@@ -79,1118 +25,357 @@ package main
 
 import (
     "net/http"
+    "time"
+
     "github.com/Pavan-Silva/go-zen"
     "github.com/Pavan-Silva/go-zen/middleware"
 )
 
 func main() {
-    r := zen.New(":8080")
-    r.Use(middleware.Logger, middleware.Recover)
+    r := zen.New(":8080",
+        zen.WithReadTimeout(10*time.Second),
+        zen.WithWriteTimeout(15*time.Second),
+    )
 
-    r.Handle("GET /hello", func(c *zen.Context) {
-        c.JSON(http.StatusOK, map[string]string{"message": "Hello!"})
+    r.Use(middleware.Recover, middleware.Logger)
+
+    r.Handle("GET /", func(c *zen.Context) {
+        c.JSON(http.StatusOK, map[string]string{"message": "Hello from Zen"})
     })
 
-    r.ListenAndServe()  // Blocks until Ctrl+C
+    r.ListenAndServe()
 }
 ```
 
-## Core Components
+## Router and Server Options
 
-### Router
-
-`zen.New(addr)` creates a Router with security-hardened defaults:
-
-- **Read timeout:** 5s (prevent slow-read attacks)
-- **Write timeout:** 10s (prevent slow-write attacks)
-- **Idle timeout:** 120s (free up idle connections)
-- **Read header timeout:** 2s (prevent slowloris attacks)
-- **Max header bytes:** 1MB (prevent memory exhaustion)
-
-All timeouts are customizable via `r.Server.*`:
+Zen creates an `http.Server` internally and exposes it directly via `r.Server`.
+Use `zen.New(addr, opts...)` to customize defaults or provide an existing server.
 
 ```go
-r := zen.New(":8080")
-r.Server.ReadTimeout = 10 * time.Second  // Custom timeout
-r.ListenAndServe()
+r := zen.New(":8080",
+    zen.WithReadTimeout(8*time.Second),
+    zen.WithWriteTimeout(12*time.Second),
+    zen.WithIdleTimeout(90*time.Second),
+    zen.WithMaxHeaderBytes(2<<20),
+)
 ```
 
-### Context
-
-The request `Context` is passed to every handler and provides:
-
-- Request/response data: `c.Request`, `c.Response`
-- Query parameters: `c.QueryParam(key)`
-- URL path parameters: `c.Param(key)`
-- Request binding: `c.BindJSON()`, `c.BindForm()`, `c.BindFile()`
-- Response methods: `c.JSON(status, data)`, `c.SendError(err)`
-- Key-value storage: `c.Set(key, val)`, `c.Get(key)`
-
-Contexts are pooled and reused across requests for zero allocation overhead.
-
-## Utilities
-
-Zen includes optional `config` package for environment loading, typed configuration, and database helpers.
-
-### Environment Configuration
+You can also replace the server completely:
 
 ```go
-import "github.com/Pavan-Silva/go-zen/config"
+srv := &http.Server{Addr: ":8080"}
+r := zen.New(":8080", zen.WithServer(srv))
+```
 
-// Load environment variables with defaults and type conversion
+## Context and Handlers
+
+Handlers receive a `*zen.Context` and use request/response helpers directly.
+
+```go
+r.Handle("POST /users", func(c *zen.Context) {
+    var payload struct {
+        Name  string `json:"name" validate:"required"`
+        Email string `json:"email" validate:"required,email"`
+    }
+
+    if err := c.BindJSON(&payload); err != nil {
+        c.SendError(zen.BadRequest(err.Error()))
+        return
+    }
+
+    c.JSON(http.StatusCreated, payload)
+})
+```
+
+You can also read query and path parameters:
+
+```go
+r.Handle("GET /users/{id}", func(c *zen.Context) {
+    page := c.QueryParam("page")
+    userID := c.Param("id")
+    c.JSON(http.StatusOK, map[string]string{"id": userID, "page": page})
+})
+```
+
+### Context helpers
+
+- `c.Request`, `c.Response`
+- `c.QueryParam(key)`
+- `c.Param(name)`
+- `c.BindJSON(dest)`
+- `c.BindForm(dest)`
+- `c.BindFile(field)`
+- `c.BindFiles(field)`
+- `c.Body()`
+- `c.JSON(status, data)`
+- `c.SendError(err)`
+- `c.Set(key, value)`, `c.Get(key)`
+
+## Middleware
+
+Global middleware is registered with `r.Use(...)`.
+Middleware executes in registration order and is pre-chained at startup.
+
+```go
+r.Use(middleware.Recover, middleware.Logger, middleware.CORS(corsConfig))
+```
+
+### Built-in middleware
+
+- `middleware.Logger` — request logging with method, path, status, latency, client IP, and response size
+- `middleware.Recover` — recovers from panics and returns a 500 response
+- `middleware.CORS` — flexible CORS support for origins, methods, headers, and credentials
+
+## Route Groups
+
+Use route groups to apply prefixes and middleware to sets of handlers.
+
+```go
+api := r.Group("/api", authMiddleware)
+api.Handle("GET /users", listUsers)
+api.Handle("POST /users", createUser)
+
+admin := api.Group("/admin", adminMiddleware)
+admin.Handle("GET /stats", adminStats)
+```
+
+Group middleware is inherited by subgroup routes.
+
+## Request Binding and Validation
+
+Zen supports request binding for JSON, form data, multipart uploads, and raw request bodies.
+
+```go
+r.Handle("POST /submit", func(c *zen.Context) {
+    var form struct {
+        Name  string `form:"name" validate:"required"`
+        Email string `form:"email" validate:"required,email"`
+    }
+
+    if err := c.BindForm(&form); err != nil {
+        c.SendError(zen.BadRequest(err.Error()))
+        return
+    }
+
+    c.JSON(http.StatusOK, form)
+})
+```
+
+```go
+r.Handle("POST /upload", func(c *zen.Context) {
+    header, content, err := c.BindFile("avatar")
+    if err != nil {
+        c.SendError(zen.BadRequest(err.Error()))
+        return
+    }
+
+    c.JSON(http.StatusOK, map[string]any{"filename": header.Filename, "size": len(content)})
+})
+```
+
+```go
+r.Handle("POST /data", func(c *zen.Context) {
+    body, err := c.Body()
+    if err != nil {
+        c.SendError(zen.InternalError("failed to read body"))
+        return
+    }
+
+    c.JSON(http.StatusOK, map[string]int{"bytes": len(body)})
+})
+```
+
+Built-in validation runs automatically during `BindJSON` when destination is a struct.
+
+## Streaming and Real-time
+
+Zen supports SSE and WebSockets through optional packages.
+
+### SSE
+
+```go
+import "github.com/Pavan-Silva/go-zen/sse"
+
+sse.Handle(r, "GET /events", func(c *zen.Context) error {
+    return sse.Send(c, "message", map[string]string{"hello": "world"})
+})
+```
+
+### WebSocket
+
+```go
+import "github.com/Pavan-Silva/go-zen/ws"
+
+ws.Handle(r, "GET /ws", func(c *zen.Context, conn *ws.Conn) {
+    var msg map[string]any
+    conn.ReadJSON(&msg)
+    conn.WriteJSON(map[string]string{"pong": "ok"})
+})
+```
+
+## Authentication
+
+The optional `auth` package supports multiple authenticator types: basic auth, JWT, OAuth2, OIDC, and session-based.
+All can be used with HTTP, WebSocket, and SSE routes.
+
+### Basic Auth
+
+```go
+basicAuth := &auth.BasicAuth{ValidatePassword: auth.ValidatePassword}
+r.Use(auth.RequireAuth(basicAuth))
+```
+
+### JWT
+
+```go
+jwtAuth := &auth.JWTAuth{SecretKey: "your-secret-key"}
+r.Use(auth.RequireAuth(jwtAuth))
+```
+
+### OAuth2 Token Introspection
+
+```go
+oauth2Auth := &auth.OAuth2Auth{
+    TokenIntrospectionEndpoint: "https://oauth.example.com/introspect",
+    ClientID: "your-client-id",
+    ClientSecret: "your-client-secret",
+}
+r.Use(auth.RequireAuth(oauth2Auth))
+```
+
+### OIDC
+
+```go
+oidcAuth := &auth.OIDCAuth{
+    Issuer: "https://accounts.google.com",
+    ClientID: "your-client-id",
+    UserInfoEndpoint: "https://www.googleapis.com/oauth2/v2/userinfo",
+}
+r.Use(auth.RequireAuth(oidcAuth))
+```
+
+### Session-based
+
+```go
+sessionStore := auth.NewInMemorySessionStore()
+sessionAuth := &auth.SessionAuth{CookieName: "session_id", Store: sessionStore}
+r.Use(auth.RequireAuth(sessionAuth))
+```
+
+### Using authenticated users
+
+Access the authenticated user in any handler:
+
+```go
+r.Handle("GET /profile", func(c *zen.Context) {
+    user := auth.GetUser(c)
+    c.JSON(http.StatusOK, user)
+})
+```
+
+Require specific roles with role-based middleware:
+
+```go
+r.Use(auth.RequireRole("admin"))
+r.Handle("GET /admin/users", func(c *zen.Context) {
+    c.JSON(http.StatusOK, map[string]string{"access": "admin only"})
+})
+```
+
+### SSE authentication
+
+```go
+sse.HandleWithAuth(r, "GET /events", myAuthenticator, func(c *zen.Context) error {
+    user := auth.GetUser(c)
+    return sse.Send(c, "welcome", map[string]string{"user": user.Username})
+})
+```
+
+### WebSocket authentication
+
+```go
+ws.HandleWithAuth(r, "GET /ws", myAuthenticator, func(c *zen.Context, conn *ws.Conn) {
+    user := auth.GetUser(c)
+    conn.WriteJSON(map[string]string{"welcome": user.Username})
+})
+```
+
+## Configuration Helpers
+
+Zen includes environment and database helpers in the `config` package.
+
+### Environment helpers
+
+```go
 port := config.GetString("PORT", "8080")
 maxConns := config.GetInt("DB_MAX_CONNS", 25)
 debug := config.GetBool("DEBUG", false)
 timeout := config.GetDuration("TIMEOUT", 30*time.Second)
-
-// Require specific environment variables (panic if missing)
 apiKey := config.MustGetString("API_KEY")
-dbPort := config.MustGetInt("DB_PORT")
 ```
 
-### Database Handling
-
-Zen provides a lightweight database wrapper around `database/sql` with connection pooling, transaction support, and reduced boilerplate:
+### Database wrapper
 
 ```go
-import (
-    "context"
-    "github.com/Pavan-Silva/go-zen/config"
-    _ "github.com/lib/pq" // PostgreSQL driver
-)
-
-// Open database with automatic connection pooling
-db, err := config.Open("postgres", "user=app password=pass dbname=myapp sslmode=disable")
+ctx := context.Background()
+db, err := config.Open("postgres", "user=app password=secret dbname=mydb sslmode=disable")
 if err != nil {
     log.Fatal(err)
 }
 defer db.Close()
 
-// Configure connection pool
 db.SetPool(25, 5, 5*time.Minute)
 
-// Simple queries
-ctx := context.Background()
 var name string
-db.ScanRow(ctx, "SELECT name FROM users WHERE id = $1", []any{&name}, 42)
-
-// Multiple rows
-rows, _ := db.ScanAll(ctx, "SELECT id, name FROM users WHERE active = $1", true)
-defer rows.Close()
-
-for rows.Next() {
-    var id int
-    var name string
-    rows.Scan(&id, &name)
+if err := db.ScanRow(ctx, "SELECT name FROM users WHERE id = $1", []any{&name}, 42); err != nil {
+    log.Fatal(err)
 }
 
-// Insert/Update/Delete
-result, _ := db.Exec(ctx, "INSERT INTO users (name) VALUES ($1)", "Alice")
-id, _ := result.LastInsertId()
-
-// Transactions
 err = db.Tx(ctx, func(tx *config.Tx) error {
-    if _, err := tx.Exec(ctx, "INSERT INTO users (name) VALUES ($1)", "Bob"); err != nil {
-        return err
-    }
-    if _, err := tx.Exec(ctx, "UPDATE users SET active = $1 WHERE name = $2", true, "Bob"); err != nil {
+    if _, err := tx.Exec(ctx, "UPDATE users SET active = $1 WHERE id = $2", true, 42); err != nil {
         return err
     }
     return nil
 })
-
-// Handle NULL values safely
-var nullable config.Nullable[string]
-db.ScanRow(ctx, "SELECT bio FROM users WHERE id = $1", []any{&nullable}, 42)
-if nullable.Valid {
-    fmt.Println("Bio:", nullable.Value)
-}
-```
-
-## Optional Streaming Packages
-
-SSE and WebSocket support are available as optional packages rather than being included in the core `zen` package.
-
-### Server-Sent Events (SSE)
-
-```go
-import (
-    "time"
-
-    "github.com/Pavan-Silva/go-zen"
-    "github.com/Pavan-Silva/go-zen/sse"
-)
-
-r := zen.New(":8080")
-
-sse.Handle(r, "GET /events", func(c *zen.Context) error {
-    for i := 1; i <= 5; i++ {
-        if err := sse.Send(c, "message", map[string]any{
-            "count": i,
-            "time":  time.Now().Format(time.RFC3339),
-        }); err != nil {
-            return err
-        }
-        time.Sleep(1 * time.Second)
-    }
-    return nil
-})
-```
-
-### WebSockets
-
-```go
-import (
-    "github.com/Pavan-Silva/go-zen"
-    "github.com/Pavan-Silva/go-zen/ws"
-)
-
-r := zen.New(":8080")
-
-ws.Handle(r, "GET /ws", func(c *zen.Context, conn *ws.Conn) {
-    defer conn.Close()
-
-    for {
-        var msg map[string]any
-        if err := conn.ReadJSON(&msg); err != nil {
-            return
-        }
-        _ = conn.WriteJSON(map[string]any{"echo": msg})
-    }
-})
-```
-
-### Email (SMTP)
-
-Zen provides optional email support via the `mail` package for sending emails using SMTP with `net/mail` for validation.
-
-```go
-import "github.com/Pavan-Silva/go-zen/mail"
-
-config := mail.Config{
-    Host:     "smtp.gmail.com",
-    Port:     587,
-    Username: "your-email@gmail.com",
-    Password: "your-app-password",
-}
-
-msg := mail.Message{
-    From:    "sender@example.com",
-    To:      []string{"recipient@example.com"},
-    Subject: "Hello from Zen",
-    Body:    "This is a test email sent via Zen's mail package.",
-}
-
-err := mail.Send(config, msg)
 if err != nil {
     log.Fatal(err)
 }
 ```
 
-For HTML emails, use `mail.SendHTML()` with the same API.
+Transaction support and query helpers are included for common SQL workflows.
 
-## Cron Jobs
+## Mail
 
-Zen provides an optional `cron` package for efficient scheduled job execution using cron expressions.
+The optional `mail` package provides SMTP email sending with both single and bulk delivery.
 
 ```go
-import "github.com/Pavan-Silva/go-zen/cron"
+mailer := mail.NewDialer(mail.Config{Host: "smtp.example.com", Port: 587, Username: "user", Password: "pass"})
+err := mailer.Send(mail.Message{From: "noreply@example.com", To: []string{"user@example.com"}, Subject: "Hello", Body: "Welcome"})
+```
 
+## Cron
+
+The optional `cron` package provides a lightweight scheduler for periodic jobs.
+
+```go
 scheduler := cron.New()
-
-// Add a job that runs every 5 minutes
-err := scheduler.AddJob("*/5 * * * *", func() {
-    fmt.Println("Job executed at", time.Now())
+scheduler.AddJob("*/5 * * * *", func() {
+    log.Println("run every 5 minutes")
 })
-if err != nil {
-    log.Fatal(err)
-}
-
-// Start the scheduler
 scheduler.Start()
-
-// Stop when done
-defer scheduler.Stop()
 ```
 
-### Cron Expression Format
+## Examples
 
-The cron package supports standard cron expressions with 5 fields:
+The repository includes working example apps in the `example/` and `examples/` folders.
+Explore those directories for ready-to-run server, auth, SSE, and cron examples.
 
-```
-* * * * *
-│ │ │ │ │
-│ │ │ │ └─ Day of week (0-6, Sunday=0)
-│ │ │ └─── Month (1-12)
-│ │ └───── Day of month (1-31)
-│ └─────── Hour (0-23)
-└───────── Minute (0-59)
-```
+## Contributing
 
-Examples:
-
-- `"*/5 * * * *"` - Every 5 minutes
-- `"0 * * * *"` - Every hour at minute 0
-- `"0 9 * * 1"` - Every Monday at 9:00 AM
-- `"30 14 1 * *"` - 1st of every month at 2:30 PM
-
-## Authentication
-
-Zen provides an optional `auth` package for consistent authentication across HTTP, WebSocket, and SSE routes.
-
-### Authenticator Interface
-
-Implement the `Authenticator` interface to define custom authentication logic:
-
-```go
-type Authenticator interface {
-    Authenticate(r *http.Request) (User, error)
-}
-```
-
-### Built-in Authenticators
-
-- `BasicAuth` - HTTP Basic Authentication
-- `JWTAuth` - JWT token authentication
-- `APIKeyAuth` - API key via header or query param
-- `SessionAuth` - Session-based authentication
-- `OIDCAuth` - OpenID Connect authentication via userinfo endpoint
-- `OAuth2Auth` - OAuth2 token introspection authentication
-
-### HTTP Authentication
-
-```go
-import (
-    "github.com/Pavan-Silva/go-zen"
-    "github.com/Pavan-Silva/go-zen/auth"
-)
-
-authenticator := &auth.BasicAuth{
-    Realm: "My App",
-    Validate: func(username, password string) (auth.User, error) {
-        // Your validation logic
-        return auth.User{ID: "1", Username: username}, nil
-    },
-}
-
-r := zen.New(":8080")
-// Skip auth for public health and metrics endpoints
-r.Use(auth.RequireAuth(authenticator, auth.SkipPaths("/health", "/metrics")))
-
-r.Handle("GET /protected", func(c *zen.Context) {
-    user := auth.GetUser(c)
-    c.JSON(200, map[string]string{"user": user.Username})
-})
-```
-
-### WebSocket Authentication
-
-```go
-ws.HandleWithAuth(r, "GET /ws", authenticator, func(c *zen.Context, conn *ws.Conn) {
-    user := auth.GetUser(c)
-    // Authenticated WebSocket handler
-})
-```
-
-### SSE Authentication
-
-```go
-sse.HandleWithAuth(r, "GET /events", authenticator, func(c *zen.Context) error {
-    user := auth.GetUser(c)
-    // Authenticated SSE handler
-    return sse.Send(c, "message", map[string]any{"user": user.Username})
-})
-```
-
-### Skipping Auth for Selected Routes
-
-```go
-r := zen.New(":8080")
-r.Use(auth.RequireAuth(authenticator, auth.SkipPaths("/health", "/metrics")))
-
-// /health and /metrics are public.
-// All other routes require auth.
-```
-
-### Role-Based Access
-
-```go
-r.Use(auth.RequireRole("admin", nil))
-
-r.Handle("GET /admin", func(c *zen.Context) {
-    // Only accessible to users with "admin" role
-})
-```
-
-### OIDC Authentication
-
-OIDC authentication validates access tokens by calling the provider's userinfo endpoint:
-
-```go
-import "github.com/Pavan-Silva/go-zen/auth"
-
-oidcAuth := &auth.OIDCAuth{
-    Issuer:   "https://accounts.google.com",
-    ClientID: "your-client-id",
-}
-
-r.Use(auth.RequireAuth(oidcAuth))
-```
-
-### OAuth2 Token Introspection
-
-OAuth2 authentication validates access tokens using RFC 7662 token introspection:
-
-```go
-oauth2Auth := &auth.OAuth2Auth{
-    TokenIntrospectionEndpoint: "https://auth.example.com/oauth2/introspect",
-    ClientID:                   "your-client-id",
-    ClientSecret:               "your-client-secret",
-}
-
-r.Use(auth.RequireAuth(oauth2Auth))
-```
-
-## Route Groups
-
-Zen uses Go 1.22+ enhanced `http.ServeMux` with path parameters:
-
-```go
-// Static routes
-r.Handle("GET /home", handleHome)
-r.Handle("POST /users", handleCreateUser)
-
-// URL path parameters (captured with {name})
-r.Handle("GET /users/{id}", handleGetUser)
-r.Handle("GET /posts/{slug}/comments/{id}", handleGetComment)
-
-// Wildcard routes (captured as {path})
-r.Handle("GET /files/*path", handleFiles)
-
-// Raw http.Handler without Context wrapper
-r.HandleRaw("GET /static/*", http.FileServer(http.Dir("static")))
-```
-
-## Optional Streaming Packages
-
-SSE and WebSocket support are available as optional packages rather than bundled into the core `zen` package.
-
-### Server-Sent Events (SSE)
-
-```go
-import (
-    "time"
-
-    "github.com/Pavan-Silva/go-zen"
-    "github.com/Pavan-Silva/go-zen/sse"
-)
-
-r := zen.New(":8080")
-
-sse.Handle(r, "GET /events", func(c *zen.Context) error {
-    for i := 1; i <= 5; i++ {
-        if err := sse.Send(c, "message", map[string]any{
-            "count": i,
-            "time":  time.Now().Format(time.RFC3339),
-        }); err != nil {
-            return err
-        }
-        time.Sleep(1 * time.Second)
-    }
-    return nil
-})
-```
-
-### WebSockets
-
-```go
-import (
-    "github.com/Pavan-Silva/go-zen"
-    "github.com/Pavan-Silva/go-zen/ws"
-)
-
-r := zen.New(":8080")
-
-ws.Handle(r, "GET /ws", func(c *zen.Context, conn *ws.Conn) {
-    defer conn.Close()
-
-    for {
-        var msg map[string]any
-        if err := conn.ReadJSON(&msg); err != nil {
-            return
-        }
-
-        _ = conn.WriteJSON(map[string]any{"echo": msg})
-    }
-})
-```
-
-## Route Groups
-
-Organize routes with common prefixes and middleware:
-
-```go
-r := zen.New(":8080")
-
-// Public routes
-public := r.Group("/api")
-public.Handle("GET /health", healthHandler)
-public.Handle("GET /version", versionHandler)
-
-// Protected routes with auth middleware
-auth := r.Group("/api", authMiddleware)
-auth.Handle("GET /users", listUsers)
-auth.Handle("GET /users/{id}", getUser)
-auth.Handle("PUT /users/{id}", updateUser)
-
-// Nested groups inherit parent middleware
-admin := auth.Group("/admin", adminMiddleware)
-admin.Handle("GET /dashboard", adminDashboard)
-admin.Handle("POST /users", adminCreateUser)
-
-// Add more middleware to a group
-auth.Use(loggerMiddleware)
-
-// Create sub-groups
-posts := auth.Group("/posts")
-posts.Use(postMiddleware)  // Additional middleware
-posts.Handle("GET /{id}", getPost)
-posts.Handle("POST /", createPost)
-```
-
-## Request Binding
-
-### JSON Binding with Validation
-
-```go
-type SignupRequest struct {
-    Username string `json:"username" validate:"required,alphanum,min=3,max=20"`
-    Email    string `json:"email"    validate:"required,email"`
-    Password string `json:"password" validate:"required,min=8"`
-    Age      int    `json:"age"      validate:"gte=18,lte=150"`
-}
-
-r.Handle("POST /signup", func(c *zen.Context) {
-    var req SignupRequest
-    if err := c.BindJSON(&req); err != nil {
-        c.SendError(zen.BadRequest(err.Error()))
-        return
-    }
-    // req is now validated and safe to use
-    c.JSON(http.StatusCreated, map[string]string{"status": "ok"})
-})
-```
-
-### Form Binding
-
-```go
-type LoginForm struct {
-    Email    string `json:"email"    validate:"required,email"`
-    Password string `json:"password" validate:"required,min=8"`
-    RememberMe bool `json:"remember"`
-}
-
-r.Handle("POST /login", func(c *zen.Context) {
-    var form LoginForm
-    if err := c.BindForm(&form); err != nil {
-        c.SendError(zen.BadRequest(err.Error()))
-        return
-    }
-    // form is validated
-    c.JSON(http.StatusOK, map[string]string{"token": "..."})
-})
-```
-
-### File Upload
-
-```go
-r.Handle("POST /avatar", func(c *zen.Context) {
-    // Single file
-    file, content, err := c.BindFile("avatar")
-    if err != nil {
-        c.SendError(zen.BadRequest(err.Error()))
-        return
-    }
-    // file.Filename, file.Size, len(content)
-    c.JSON(http.StatusOK, map[string]string{"size": fmt.Sprintf("%d bytes", len(content))})
-})
-
-r.Handle("POST /attachments", func(c *zen.Context) {
-    // Multiple files
-    files, err := c.BindFiles("attachments")
-    if err != nil {
-        c.SendError(zen.BadRequest(err.Error()))
-        return
-    }
-    for _, file := range files {
-        fmt.Printf("%s: %d bytes\n", file.Header.Filename, len(file.Content))
-    }
-    c.JSON(http.StatusOK, map[string]int{"count": len(files)})
-})
-```
-
-### Supported Types
-
-- **Strings:** `string`
-- **Numbers:** `int`, `int8`, `int16`, `int32`, `int64`, `uint`, `uint8`, `uint16`, `uint32`, `uint64`
-- **Floats:** `float32`, `float64`
-- **Booleans:** `bool` (recognizes: "true", "TRUE", "1", "yes", "on", anything else is false)
-
-Unknown types are silently ignored (field keeps zero value).
-
-### Validation Tags
-
-Zen uses [go-playground/validator](https://github.com/go-playground/validator) with custom email validators:
-
-| Tag            | Example                   | Description                           |
-| -------------- | ------------------------- | ------------------------------------- |
-| `required`     | `validate:"required"`     | Field must not be empty               |
-| `email`        | `validate:"email"`        | Valid email (regex pattern)           |
-| `email-strict` | `validate:"email-strict"` | Valid email (RFC 5322 parser)         |
-| `alphanum`     | `validate:"alphanum"`     | Letters and digits only               |
-| `min=X`        | `validate:"min=3"`        | Min length (string) or value (number) |
-| `max=X`        | `validate:"max=100"`      | Max length or value                   |
-| `gte=X`        | `validate:"gte=18"`       | Greater than or equal                 |
-| `lte=X`        | `validate:"lte=150"`      | Less than or equal                    |
-
-For full list of validators, see [go-playground/validator docs](https://pkg.go.dev/github.com/go-playground/validator/v10).
-
-## Middleware
-
-### Built-in Middleware
-
-#### Logger
-
-Logs all requests with method, path, status, latency, and size:
-
-```go
-r.Use(middleware.Logger)
-
-// Output:
-// GET /users 200 1.234ms | ip=192.168.1.100 size=0 resp=250 bytes
-```
-
-#### Recover
-
-Catches panics and returns 500 error (must be registered first):
-
-```go
-r.Use(middleware.Recover)  // Must be first
-r.Use(middleware.Logger)
-```
-
-#### CORS
-
-Handles cross-origin requests:
-
-```go
-corsConfig := middleware.DefaultCORSConfig()
-corsConfig.AllowedOrigins = []string{"https://example.com"}
-corsConfig.AllowCredentials = true
-r.Use(middleware.CORS(corsConfig))
-```
-
-### Custom Middleware
-
-Middleware implements `zen.MiddlewareFunc`:
-
-```go
-func AuthMiddleware(c *zen.Context, next http.Handler) {
-    token := c.Request.Header.Get("Authorization")
-    if token == "" {
-        c.SendError(zen.Unauthorized())
-        return  // short-circuit
-    }
-    // Validate token...
-    c.Set("user_id", 42)  // Store in context
-    next.ServeHTTP(c.Response, c.Request)
-}
-
-r.Use(AuthMiddleware)
-```
-
-## Error Handling
-
-### Structured Errors
-
-Return structured JSON error responses:
-
-```go
-// Custom error
-err := zen.NewHTTPError(http.StatusBadRequest, "invalid input")
-err = err.WithDetails(map[string]string{"field": "email"})
-err = err.WithRequestID("req-12345")
-c.SendError(err)
-
-// Pre-built errors
-c.SendError(zen.BadRequest("email invalid"))
-c.SendError(zen.Unauthorized())
-c.SendError(zen.NotFound("user"))
-c.SendError(zen.InternalError("database error"))
-```
-
-### Form Binding Errors
-
-Detailed form parsing errors:
-
-````go
-if err := c.BindForm(&data); err != nil {
-    var fe *zen.FormError
-    if errors.As(err, &fe) {
-        // Structured form error
-        c.JSON(http.StatusBadRequest, map[string]string{
-            "field": fe.Field,
-            "error": fe.Err.Error(),
-        })
-        return
-    }
-    // Other error (parsing, validation, etc)
-    c.SendError(zen.BadRequest(err.Error()))
-}
-
-### Form Binding
-
-Parse URL-encoded or multipart form data:
-
-```go
-type ContactForm struct {
-    Name  string `json:"name"`
-    Email string `json:"email" validate:"required,email"`
-    Age   int    `json:"age"`
-}
-
-r.Handle("POST /contact", func(c *zen.Context) {
-    var form ContactForm
-    if err := c.BindForm(&form); err != nil {
-        c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
-        return
-    }
-    // Process form data
-})
-````
-
-### Query Parameters
-
-Retrieve query string parameters with caching:
-
-```go
-r.Handle("GET /search", func(c *zen.Context) {
-    query := c.QueryParam("q")        // ?q=keyword
-    page := c.QueryParam("page")      // ?page=2
-    limit := c.QueryParam("limit")    // ?limit=10
-})
-```
-
-### Path Parameters
-
-Access URL path parameters (requires Go 1.22+):
-
-```go
-r.Handle("GET /users/{id}", func(c *zen.Context) {
-    id := c.Param("id")  // Matches {id} in the route pattern
-})
-```
-
-### Raw Body
-
-Read the complete request body as bytes:
-
-```go
-r.Handle("POST /webhook", func(c *zen.Context) {
-    body, err := c.Body()
-    if err != nil {
-        // Handle error
-    }
-    // Process raw body
-})
-```
-
-**Note:** Body size is limited to 1MB by default to prevent DoS attacks.
-
-## Response Helpers
-
-### JSON Response
-
-```go
-r.Handle("GET /api/user", func(c *zen.Context) {
-    user := map[string]any{
-        "id":    123,
-        "name":  "Alice",
-        "email": "alice@example.com",
-    }
-    c.JSON(http.StatusOK, user)
-})
-```
-
-### String Response
-
-```go
-r.Handle("GET /robots.txt", func(c *zen.Context) {
-    c.JSON(http.StatusOK, "User-agent: *\nDisallow: /")
-})
-```
-
-### Error Response
-
-```go
-r.Handle("GET /not-found", func(c *zen.Context) {
-    c.JSON(http.StatusNotFound, map[string]string{"error": "resource not found"})
-})
-```
-
-## Middleware
-
-### Built-in Middleware
-
-**Recover** - Catches panics and returns 500:
-
-```go
-r.Use(middleware.Recover)
-```
-
-### Custom Middleware
-
-Write middleware with the `MiddlewareFunc` signature:
-
-```go
-type MiddlewareFunc func(*zen.Context, http.Handler)
-
-func Logger(c *zen.Context, next http.Handler) {
-    start := time.Now()
-    log.Printf("%s %s", c.Request.Method, c.Request.URL.Path)
-    next.ServeHTTP(c.Response, c.Request)
-    log.Printf("took %v", time.Since(start))
-}
-
-r.Use(Logger)
-```
-
-### Example: Authentication Middleware
-
-```go
-func Auth(c *zen.Context, next http.Handler) {
-    token := c.Request.Header.Get("Authorization")
-    if !strings.HasPrefix(token, "Bearer ") {
-        c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
-        return
-    }
-
-    // Validate token (implement your logic here)
-    userID := validateToken(strings.TrimPrefix(token, "Bearer "))
-    if userID == "" {
-        c.JSON(http.StatusUnauthorized, map[string]string{"error": "invalid token"})
-        return
-    }
-
-    // Store user ID for handlers to access
-    c.Set("userID", userID)
-    next.ServeHTTP(c.Response, c.Request)
-}
-
-r.Use(Auth)
-
-r.Handle("GET /profile", func(c *zen.Context) {
-    userID := c.Get("userID")  // Retrieve from context
-    // ...
-})
-```
-
-## Context Storage
-
-Store and retrieve arbitrary values during request processing:
-
-```go
-// In middleware
-c.Set("userID", userID)
-c.Set("session", sessionData)
-
-// In handler
-userID := c.Get("userID")
-session := c.Get("session")
-```
-
-The first 8 unique keys are stored inline (no allocation). A map is allocated lazily for additional keys.
-
-## Raw Handlers
-
-For third-party handlers or pre-marshalled responses:
-
-```go
-// Pre-compute response
-var largeResponse []byte  // computed once at startup
-
-r.HandleRaw("GET /api/data", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-    w.Header().Set("Content-Type", "application/json")
-    w.Write(largeResponse)
-}))
-```
-
-## HTTPS Support
-
-```go
-r := zen.New(":8443")
-r.ListenAndServeTLS("cert.pem", "key.pem")
-```
-
-## Graceful Shutdown
-
-`ListenAndServe` and `ListenAndServeTLS` automatically handle graceful shutdown:
-
-1. Wait for SIGINT or SIGTERM
-2. Allow 5 seconds for in-flight requests to complete
-3. Force close after timeout
-
-For programmatic control, use the underlying `http.Server` directly:
-
-```go
-r := zen.New(":8080")
-
-go func() {
-    if err := r.Server.ListenAndServe(); err != nil {
-        log.Fatal(err)
-    }
-}()
-
-// Your shutdown logic here
-r.Server.Shutdown(context.Background())
-```
-
-## Error Handling
-
-### Structured Error Responses
-
-Zen provides a standard error response format with `HTTPError` and helper functions:
-
-```go
-if user == nil {
-    c.SendError(zen.NotFound("user"))
-    return
-}
-
-if !authorized {
-    c.SendError(zen.Unauthorized())
-    return
-}
-
-if err := validateData(&data); err != nil {
-    err := zen.BadRequest(err.Error())
-    err = err.WithDetails(map[string]string{"field": "email"})
-    c.SendError(err)
-    return
-}
-
-// Response sent as JSON:
-// {
-//   "status": 400,
-//   "message": "invalid email format",
-//   "details": {"field": "email"},
-//   "request_id": "abc123"
-// }
-```
-
-### Available Error Helpers
-
-| Helper                 | Status | Usage                                     |
-| ---------------------- | ------ | ----------------------------------------- |
-| `BadRequest(msg)`      | 400    | Invalid input, validation errors          |
-| `Unauthorized()`       | 401    | Missing or invalid authentication         |
-| `Forbidden()`          | 403    | Authenticated but not authorized          |
-| `NotFound(resource)`   | 404    | Resource not found                        |
-| `Conflict(msg)`        | 409    | Duplicate or conflicting resource         |
-| `InternalError(msg)`   | 500    | Server error (details hidden in response) |
-| `ServiceUnavailable()` | 503    | Service temporarily unavailable           |
-
-### Custom Errors
-
-```go
-err := zen.NewHTTPError(http.StatusGone, "resource deleted")
-err = err.WithDetails(map[string]any{"deleted_at": "2024-01-01"})
-err = err.WithRequestID(requestID)
-c.SendError(err)
-```
-
-### Form Binding Errors
-
-```go
-var form MyForm
-if err := c.BindForm(&form); err != nil {
-    var fe *zen.FormError
-    if errors.As(err, &fe) {
-        c.SendError(zen.BadRequest(
-            fmt.Sprintf("Field '%s': %s", fe.Field, fe.Err.Error()),
-        ))
-        return
-    }
-
-    c.SendError(zen.BadRequest(err.Error()))
-    return
-}
-```
-
-### JSON Binding Errors
-
-```go
-var req MyRequest
-if err := c.BindJSON(&req); err != nil {
-    c.SendError(zen.BadRequest(err.Error()))
-    return
-}
-```
-
-## Structured Error Handling
-
-See [Error Handling](#error-handling) section above for comprehensive error handling with HTTPError and helper functions.
-
-## Middleware
-
-### Built-in Middleware
-
-#### Logger
-
-Logs all requests with method, path, status, latency, and size:
-
-```go
-r.Use(middleware.Logger)
-
-// Output:
-// GET /users 200 1.234ms | ip=192.168.1.100 size=0 resp=250 bytes
-```
-
-#### Recover
-
-Catches panics and returns 500 error (must be registered first):
-
-```go
-r.Use(middleware.Recover)  // Must be first
-r.Use(middleware.Logger)
-```
-
-#### CORS
-
-Handles cross-origin requests:
-
-```go
-corsConfig := middleware.DefaultCORSConfig()
-corsConfig.AllowedOrigins = []string{"https://example.com"}
-corsConfig.AllowCredentials = true
-r.Use(middleware.CORS(corsConfig))
-```
-
-### Custom Middleware
-
-Middleware implements `zen.MiddlewareFunc`:
-
-```go
-func AuthMiddleware(c *zen.Context, next http.Handler) {
-    token := c.Request.Header.Get("Authorization")
-    if token == "" {
-        c.SendError(zen.Unauthorized())
-        return  // short-circuit
-    }
-    // Validate token...
-    c.Set("user_id", 42)  // Store in context
-    next.ServeHTTP(c.Response, c.Request)
-}
-
-r.Use(AuthMiddleware)
-```
-
-## Error Handling
-
-### Bind Errors
-
-```go
-r.Handle("POST /data", func(c *zen.Context) {
-    var req MyRequest
-    if err := c.BindJSON(&req); err != nil {
-        // JSON decode error or validation error
-        c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
-        return
-    }
-})
-```
-
-### Form Errors
-
-```go
-r.Handle("POST /contact", func(c *zen.Context) {
-    var form ContactForm
-    if err := c.BindForm(&form); err != nil {
-        if _, ok := err.(*zen.FormError); ok {
-            // Field conversion error
-            c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
-            return
-        }
-        // Parse error
-        c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
-        return
-    }
-})
-```
-
-## Testing
-
-Zen works seamlessly with Go's `httptest` package for unit tests:
-
-```go
-func TestGetUser(t *testing.T) {
-    r := zen.New(":8080")
-    r.Handle("GET /users/{id}", func(c *zen.Context) {
-        id := c.Param("id")
-        c.JSON(http.StatusOK, map[string]string{"id": id})
-    })
-
-    req := httptest.NewRequest("GET", "/users/42", nil)
-    w := httptest.NewRecorder()
-    r.ServeHTTP(w, req)
-
-    if w.Code != http.StatusOK {
-        t.Fatalf("expected 200, got %d", w.Code)
-    }
-}
-```
-
-## Project Structure
-
-```
-zen/
-├── zen.go              # Package documentation and overview
-├── context.go          # Context pooling with zero-allocation storage
-├── router.go           # Router, server, and middleware chaining
-├── group.go            # Route groups with prefix and middleware inheritance
-├── request.go          # JSON/form/file binding with validation
-├── response.go         # JSON response with buffer pooling
-├── http_error.go       # Structured HTTP error responses
-├── validate.go         # Lazy validator initialization
-├── errors.go           # Sentinel error types (ErrInvalidBindTarget, FormError)
-├── form.go             # Form binding with reflection caching
-├── mail/               # Optional SMTP email sending
-│   └── mail.go         # Email sending with net/mail validation
-├── cron/               # Optional cron job scheduling
-│   └── cron.go         # Efficient cron expression parsing and execution
-├── auth/               # Optional authentication helpers
-│   ├── auth.go         # Core authentication interfaces and middleware
-│   ├── basic.go        # HTTP Basic authentication
-│   ├── jwt.go          # JWT token authentication
-│   ├── api_key.go      # API key authentication
-│   ├── session.go      # Session-based authentication
-│   ├── oidc.go         # OIDC authentication
-│   └── oauth2.go       # OAuth2 token introspection
-├── config/             # Optional app configuration helpers
-│   ├── env.go          # Environment loading and typed env helpers
-│   └── db.go           # Database wrapper with connection pooling and query helpers
-├── middleware/         # Built-in middleware
-│   ├── logger.go       # Request logging with metrics
-│   ├── recover.go      # Panic recovery
-│   └── cors.go         # CORS handling
-├── sse/                # Optional SSE helpers
-│   └── sse.go
-├── ws/                 # Optional WebSocket helpers
-│   └── ws.go
-└── system/
-    └── banner.go       # Startup banner
-```
+Zen is designed for simplicity, performance, and clarity.
+If you want to contribute, please submit issues or pull requests with focused improvements.
 
 ## License
 
-MIT
+Zen is released under the MIT License.
