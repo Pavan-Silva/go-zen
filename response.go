@@ -137,6 +137,27 @@ func (c *Context) String(status int, text string) {
 	}
 }
 
+// NoContent writes a response with no body and the given HTTP status.
+// This is useful for responses like 204 No Content or 202 Accepted.
+//
+// Example:
+//
+//	c.NoContent(http.StatusNoContent)
+func (c *Context) NoContent(status int) {
+	c.Response.Header().Set("Content-Length", "0")
+	c.Response.WriteHeader(status)
+}
+
+// Redirect sends an HTTP redirect to the specified location.
+// It sets the Location header and writes the provided redirect status.
+//
+// Example:
+//
+//	c.Redirect(http.StatusMovedPermanently, "https://example.com/new")
+func (c *Context) Redirect(status int, location string) {
+	http.Redirect(c.Response, c.Request, location, status)
+}
+
 // Error writes a plain text error message to the response with the given HTTP status.
 // Unlike JSON(), this sends plain text without JSON encoding, similar to http.Error().
 // The response Content-Type header is set to "text/plain; charset=utf-8".
