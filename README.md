@@ -80,7 +80,7 @@ r.Handle("POST /users", func(c *zen.Context) {
     }
 
     if err := c.BindJSON(&payload); err != nil {
-        c.SendError(zen.BadRequest(err.Error()))
+        c.Error(http.StatusBadRequest, err.Error())
         return
     }
 
@@ -109,7 +109,7 @@ r.Handle("GET /users/{id}", func(c *zen.Context) {
 - `c.BindFiles(field)`
 - `c.Body()`
 - `c.JSON(status, data)`
-- `c.SendError(err)`
+- `c.Error(status, message)`
 - `c.Set(key, value)`, `c.Get(key)`
 
 ## Middleware
@@ -154,7 +154,7 @@ r.Handle("POST /submit", func(c *zen.Context) {
     }
 
     if err := c.BindForm(&form); err != nil {
-        c.SendError(zen.BadRequest(err.Error()))
+        c.Error(http.StatusBadRequest, err.Error())
         return
     }
 
@@ -166,7 +166,7 @@ r.Handle("POST /submit", func(c *zen.Context) {
 r.Handle("POST /upload", func(c *zen.Context) {
     header, content, err := c.BindFile("avatar")
     if err != nil {
-        c.SendError(zen.BadRequest(err.Error()))
+        c.Error(http.StatusBadRequest, err.Error())
         return
     }
 
@@ -178,7 +178,7 @@ r.Handle("POST /upload", func(c *zen.Context) {
 r.Handle("POST /data", func(c *zen.Context) {
     body, err := c.Body()
     if err != nil {
-        c.SendError(zen.InternalError("failed to read body"))
+        c.Error(http.StatusInternalServerError, "failed to read body")
         return
     }
 

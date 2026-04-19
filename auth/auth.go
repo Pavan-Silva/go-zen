@@ -51,7 +51,7 @@ func Middleware(auth Authenticator, onError func(*zen.Context)) func(*zen.Contex
 func MiddlewareWithSkipper(auth Authenticator, onError func(*zen.Context), skip SkipFunc) func(*zen.Context, http.Handler) {
 	if onError == nil {
 		onError = func(c *zen.Context) {
-			c.SendError(zen.Unauthorized())
+			c.Error(http.StatusUnauthorized, "authentication required")
 		}
 	}
 
@@ -87,7 +87,7 @@ func RequireAuth(auth Authenticator, skip ...SkipFunc) func(*zen.Context, http.H
 func RequireRole(role string, onError func(*zen.Context)) func(*zen.Context, http.Handler) {
 	if onError == nil {
 		onError = func(c *zen.Context) {
-			c.SendError(zen.Forbidden())
+			c.Error(http.StatusForbidden, "insufficient permissions")
 		}
 	}
 
