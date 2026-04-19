@@ -251,6 +251,51 @@ r.Use(middleware.BodyLimitWithConfig(config))
 - `middleware.CORS` — flexible CORS support for origins, methods, headers, and credentials
 - `middleware.BodyLimit` — limits request body size with support for skippers
 
+## Static Files
+
+Zen provides built-in support for serving static files and directories.
+
+### Single File
+
+Serve a single file for a specific route:
+
+```go
+r.File("GET /", "public/index.html")
+```
+
+### Directory Serving
+
+Serve files from a local directory:
+
+```go
+r.Static("/images", "assets/images")
+r.Static("/css", "public/css")
+```
+
+### Embedded Files
+
+Serve files from an embedded filesystem:
+
+```go
+import (
+    "embed"
+    "io/fs"
+)
+
+//go:embed "assets/images"
+var images embed.FS
+
+func main() {
+    r := zen.New(":8080")
+
+    // Serve embedded files
+    imagesFS, _ := fs.Sub(images, "assets/images")
+    r.StaticFS("/images", imagesFS)
+
+    r.ListenAndServe()
+}
+```
+
 ## Route Groups
 
 Use route groups to apply prefixes and middleware to sets of handlers.

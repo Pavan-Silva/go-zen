@@ -3,10 +3,12 @@ package zen
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -247,6 +249,66 @@ func (s *Router) Handle(pattern string, handler func(*Context)) {
 //	s.HandleRaw("GET /static/*", http.FileServer(http.Dir("static")))
 func (s *Router) HandleRaw(pattern string, handler http.Handler) {
 	s.mux.Handle(pattern, handler)
+}
+
+// File serves a single file for the given route pattern.
+// The path may be a full filesystem path or relative file path.
+//
+// Example:
+//
+//	r.File("GET /", "public/index.html")
+func (s *Router) File(pattern, filePath string) {
+	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, filePath)
+	})
+	s.HandleRaw(pattern, h)
+}
+
+// Static serves files from a local directory under the given URL prefix.
+// It uses http.FileServer and strips the prefix from the request path.
+//
+// Example:
+//
+//	r.Static("/images", "assets/images")
+func (s *Router) Static(prefix, root string) {
+	prefix = strings.TrimSuffix(prefix, "/")
+	if prefix == "" {
+		prefix = "/"
+	}
+	fsHandler := http.StripPrefix(prefix, http.FileServer(http.Dir(root)))
+	if prefix == "/" {
+		s.HandleRaw("GET /*", fsHandler)
+		s.HandleRaw("HEAD /*", fsHandler)
+	} else {
+		s.HandleRaw("GET "+prefix, fsHandler)
+		s.HandleRaw("HEAD "+prefix, fsHandler)
+		s.HandleRaw("GET "+prefix+"/*", fsHandler)
+		s.HandleRaw("HEAD "+prefix+"/*", fsHandler)
+	}
+}
+
+// StaticFS serves files from an fs.FS under the given URL prefix.
+// This supports embedded file systems (embed.FS) and custom fs.FS implementations.
+//
+// Example:
+//
+//	imagesFS, _ := fs.Sub(images, "assets/images")
+//	r.StaticFS("/images", imagesFS)
+func (s *Router) StaticFS(prefix string, filesystem fs.FS) {
+	prefix = strings.TrimSuffix(prefix, "/")
+	if prefix == "" {
+		prefix = "/"
+	}
+	fsHandler := http.StripPrefix(prefix, http.FileServer(http.FS(filesystem)))
+	if prefix == "/" {
+		s.HandleRaw("GET /*", fsHandler)
+		s.HandleRaw("HEAD /*", fsHandler)
+	} else {
+		s.HandleRaw("GET "+prefix, fsHandler)
+		s.HandleRaw("HEAD "+prefix, fsHandler)
+		s.HandleRaw("GET "+prefix+"/*", fsHandler)
+		s.HandleRaw("HEAD "+prefix+"/*", fsHandler)
+	}
 }
 
 // ListenAndServe starts the HTTP server and blocks until SIGINT or SIGTERM is received.
