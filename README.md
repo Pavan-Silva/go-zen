@@ -88,6 +88,52 @@ r.Handle("POST /users", func(c *zen.Context) {
 })
 ```
 
+You can also return XML responses:
+
+```go
+import "encoding/xml"
+
+r.Handle("GET /users/{id}/xml", func(c *zen.Context) {
+    userID := c.Param("id")
+    user := struct {
+        XMLName xml.Name `xml:"user"`
+        ID      string   `xml:"id"`
+        Name    string   `xml:"name"`
+    }{
+        ID:   userID,
+        Name: "John Doe",
+    }
+    c.XML(http.StatusOK, user)
+})
+```
+
+Or HTML responses:
+
+```go
+r.Handle("GET /page", func(c *zen.Context) {
+    html := `
+        <!DOCTYPE html>
+        <html>
+        <head><title>My App</title></head>
+        <body><h1>Hello World</h1></body>
+        </html>
+    `
+    c.HTML(http.StatusOK, html)
+})
+```
+
+Or plain text responses:
+
+```go
+r.Handle("GET /health", func(c *zen.Context) {
+    c.String(http.StatusOK, "OK")
+})
+
+r.Handle("GET /token", func(c *zen.Context) {
+    c.String(http.StatusOK, "your-secret-token")
+})
+```
+
 You can also read query and path parameters:
 
 ```go
@@ -109,6 +155,9 @@ r.Handle("GET /users/{id}", func(c *zen.Context) {
 - `c.BindFiles(field)`
 - `c.Body()`
 - `c.JSON(status, data)`
+- `c.XML(status, data)`
+- `c.HTML(status, html)`
+- `c.String(status, text)`
 - `c.Error(status, message)`
 - `c.Set(key, value)`, `c.Get(key)`
 
