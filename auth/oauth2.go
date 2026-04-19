@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -35,8 +36,9 @@ type OAuth2Auth struct {
 
 // Authenticate validates the access token using OAuth2 token introspection.
 func (o *OAuth2Auth) Authenticate(r *http.Request) (User, error) {
-	if o.HTTPClient == nil {
-		o.HTTPClient = http.DefaultClient
+	client := o.HTTPClient
+	if client == nil {
+		client = &http.Client{Timeout: 10 * time.Second}
 	}
 
 	authHeader := r.Header.Get("Authorization")
@@ -49,7 +51,7 @@ func (o *OAuth2Auth) Authenticate(r *http.Request) (User, error) {
 		return User{}, fmt.Errorf("invalid authorization header format")
 	}
 
-	tokenInfo, err := o.introspectToken(token)
+	tokenInfo, err := o.introspectToken(r.Context(), client, token)
 	if err != nil {
 		return User{}, fmt.Errorf("failed to introspect token: %w", err)
 	}
@@ -83,12 +85,12 @@ func (o *OAuth2Auth) Authenticate(r *http.Request) (User, error) {
 }
 
 // introspectToken calls the OAuth2 token introspection endpoint.
-func (o *OAuth2Auth) introspectToken(token string) (*OAuth2TokenInfo, error) {
+func (o *OAuth2Auth) introspectToken(ctx context.Context, client *http.Client, token string) (*OAuth2TokenInfo, error) {
 	data := url.Values{}
 	data.Set("token", token)
 	data.Set("token_type_hint", "access_token")
 
-	req, err := http.NewRequest("POST", o.TokenIntrospectionEndpoint, strings.NewReader(data.Encode()))
+	req, err := http.NewRequestWithContext(ctx, "POST", o.TokenIntrospectionEndpoint, strings.NewReader(data.Encode()))
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +103,7 @@ func (o *OAuth2Auth) introspectToken(token string) (*OAuth2TokenInfo, error) {
 		req.SetBasicAuth(o.ClientID, o.ClientSecret)
 	}
 
-	resp, err := o.HTTPClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
