@@ -71,56 +71,38 @@ func (zh *zenHandler) ServeHTTP(_ http.ResponseWriter, r *http.Request) {
 // It wraps http.Server and http.ServeMux, adding middleware support and Context pooling.
 // The design prioritizes performance: middleware is pre-built at setup time (no per-request work),
 // and Context instances are pooled to reduce GC pressure.
-type RouterOption func(*Router)
 
-func WithServer(server *http.Server) RouterOption {
-	return func(r *Router) {
-		r.Server = server
-	}
+// Config holds configuration for the Router and underlying HTTP server.
+type Config struct {
+	// ReadTimeout is the maximum duration before timing out reads from the client connection.
+	// Default: 5 seconds (prevent slow-read attacks).
+	ReadTimeout time.Duration
+	// WriteTimeout is the maximum duration before timing out writes to the client.
+	// Default: 10 seconds (prevent slow-write attacks).
+	WriteTimeout time.Duration
+	// IdleTimeout is the maximum duration an idle connection can stay open.
+	// Default: 120 seconds (free resources from idle connections).
+	IdleTimeout time.Duration
+	// ReadHeaderTimeout is the maximum duration for reading request headers.
+	// Default: 2 seconds (prevent slowloris attacks).
+	ReadHeaderTimeout time.Duration
+	// MaxHeaderBytes is the maximum number of bytes the server will read parsing request headers.
+	// Default: 1 MB (prevent header-based attacks).
+	MaxHeaderBytes int
+	// Server allows replacing the http.Server entirely.
+	// If nil, one will be created with the other Config values.
+	Server *http.Server
 }
 
-func WithReadTimeout(timeout time.Duration) RouterOption {
-	return func(r *Router) {
-		if r.Server == nil {
-			r.Server = &http.Server{}
-		}
-		r.Server.ReadTimeout = timeout
-	}
-}
-
-func WithWriteTimeout(timeout time.Duration) RouterOption {
-	return func(r *Router) {
-		if r.Server == nil {
-			r.Server = &http.Server{}
-		}
-		r.Server.WriteTimeout = timeout
-	}
-}
-
-func WithIdleTimeout(timeout time.Duration) RouterOption {
-	return func(r *Router) {
-		if r.Server == nil {
-			r.Server = &http.Server{}
-		}
-		r.Server.IdleTimeout = timeout
-	}
-}
-
-func WithReadHeaderTimeout(timeout time.Duration) RouterOption {
-	return func(r *Router) {
-		if r.Server == nil {
-			r.Server = &http.Server{}
-		}
-		r.Server.ReadHeaderTimeout = timeout
-	}
-}
-
-func WithMaxHeaderBytes(bytes int) RouterOption {
-	return func(r *Router) {
-		if r.Server == nil {
-			r.Server = &http.Server{}
-		}
-		r.Server.MaxHeaderBytes = bytes
+// DefaultConfig returns a Config with production-ready secure defaults.
+// These defaults are suitable for most applications; customize as needed.
+func DefaultConfig() Config {
+	return Config{
+		ReadTimeout:       5 * time.Second,
+		WriteTimeout:      10 * time.Second,
+		IdleTimeout:       120 * time.Second,
+		ReadHeaderTimeout: 2 * time.Second,
+		MaxHeaderBytes:    1 << 20, // 1 MB
 	}
 }
 
@@ -137,7 +119,8 @@ type Router struct {
 	hasMiddleware bool
 }
 
-// New creates a new Router with performance-optimized and security-hardened defaults.
+// New creates a new Router with the given address and optional configuration.
+// If no config is provided, DefaultConfig() is used.
 //
 // Defaults:
 // - ReadTimeout: 5 seconds (prevent slow-read attacks)
@@ -146,39 +129,45 @@ type Router struct {
 // - ReadHeaderTimeout: 2 seconds (prevent slowloris attacks)
 // - MaxHeaderBytes: 1 MB (prevent header-based attacks)
 //
-// These timeouts are production-ready but can be customized via r.Server.
+// These timeouts are production-ready but can be customized via the config parameter.
 //
 // Example:
 //
 //	r := zen.New(":8080")
-//	r.Use(middleware.Logger, middleware.Recover)
-//	r.Handle("GET /", homeHandler)
-//	r.ListenAndServe()
-func New(addr string, opts ...RouterOption) *Router {
+//
+//	config := zen.DefaultConfig()
+//	config.ReadTimeout = 10 * time.Second
+//	r := zen.New(":8080", config)
+func New(addr string, config ...Config) *Router {
 	mux := http.NewServeMux()
 	r := &Router{
 		mux:           mux,
 		chain:         mux,
 		hasMiddleware: false,
 	}
-	r.Server = &http.Server{
-		Addr:              addr,
-		Handler:           r,
-		ReadTimeout:       5 * time.Second,
-		WriteTimeout:      10 * time.Second,
-		IdleTimeout:       120 * time.Second,
-		ReadHeaderTimeout: 2 * time.Second,
-		MaxHeaderBytes:    1 << 20,
+
+	// Use default config if not provided
+	cfg := DefaultConfig()
+	if len(config) > 0 {
+		cfg = config[0]
 	}
 
-	for _, opt := range opts {
-		opt(r)
-	}
-
-	if r.Server == nil {
-		r.Server = &http.Server{Addr: addr, Handler: r}
-	} else if r.Server.Handler == nil {
-		r.Server.Handler = r
+	// Use provided server or create new one
+	if cfg.Server != nil {
+		r.Server = cfg.Server
+		if r.Server.Handler == nil {
+			r.Server.Handler = r
+		}
+	} else {
+		r.Server = &http.Server{
+			Addr:              addr,
+			Handler:           r,
+			ReadTimeout:       cfg.ReadTimeout,
+			WriteTimeout:      cfg.WriteTimeout,
+			IdleTimeout:       cfg.IdleTimeout,
+			ReadHeaderTimeout: cfg.ReadHeaderTimeout,
+			MaxHeaderBytes:    cfg.MaxHeaderBytes,
+		}
 	}
 
 	return r

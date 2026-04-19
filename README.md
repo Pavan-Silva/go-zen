@@ -20,7 +20,7 @@ go get github.com/Pavan-Silva/go-zen
 
 ## Quick Start
 
-```go
+````go
 package main
 
 import (
@@ -32,40 +32,41 @@ import (
 )
 
 func main() {
-    r := zen.New(":8080",
-        zen.WithReadTimeout(10*time.Second),
-        zen.WithWriteTimeout(15*time.Second),
-    )
 
-    r.Use(middleware.Recover, middleware.Logger)
+## Configuration
 
-    r.Handle("GET /", func(c *zen.Context) {
-        c.JSON(http.StatusOK, map[string]string{"message": "Hello from Zen"})
-    })
+Customize server timeouts and limits by passing a config to `zen.New()`:
 
-    r.ListenAndServe()
+```go
+config := zen.DefaultConfig()
+config.ReadTimeout = 10 * time.Second
+config.WriteTimeout = 15 * time.Second
+config.IdleTimeout = 90 * time.Second
+
+r := zen.New(":8080", config)
+````
+
+Or create a config from scratch:
+
+```go
+config := zen.Config{
+    ReadTimeout:       8 * time.Second,
+    WriteTimeout:      12 * time.Second,
+    IdleTimeout:       90 * time.Second,
+    ReadHeaderTimeout: 2 * time.Second,
+    MaxHeaderBytes:    2 << 20,
 }
+
+r := zen.New(":8080", config)
 ```
 
-## Router and Server Options
-
-Zen creates an `http.Server` internally and exposes it directly via `r.Server`.
-Use `zen.New(addr, opts...)` to customize defaults or provide an existing server.
+You can also replace the server entirely:
 
 ```go
-r := zen.New(":8080",
-    zen.WithReadTimeout(8*time.Second),
-    zen.WithWriteTimeout(12*time.Second),
-    zen.WithIdleTimeout(90*time.Second),
-    zen.WithMaxHeaderBytes(2<<20),
-)
-```
-
-You can also replace the server completely:
-
-```go
-srv := &http.Server{Addr: ":8080"}
-r := zen.New(":8080", zen.WithServer(srv))
+config := zen.Config{
+    Server: &http.Server{Addr: ":8080"},
+}
+r := zen.New(":8080", config)
 ```
 
 ## Context and Handlers
