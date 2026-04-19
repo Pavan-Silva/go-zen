@@ -5,12 +5,21 @@ import (
 	"crypto/tls"
 	"fmt"
 	"mime/quotedprintable"
+	"net"
 	"net/mail"
 	"net/smtp"
 	"strings"
 	"sync"
 	"time"
 )
+
+// min returns the minimum of two integers.
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
 
 // Config holds SMTP configuration for sending emails.
 type Config struct {
@@ -149,12 +158,19 @@ func (d *Dialer) sendBulk(messages []Message, contentType string, opts ...BulkOp
 			client, err := d.dial()
 			if err != nil {
 				// If we can't connect, fail all messages this worker would have handled.
+				stopOnce.Do(func() { close(stop) })
 				for i := range queue {
 					results[i] = BulkResult{Message: messages[i], Err: fmt.Errorf("mail: dial failed: %w", err)}
 				}
 				return
 			}
-			defer client.Quit()
+
+			defer func(client *smtp.Client) {
+				err := client.Quit()
+				if err != nil {
+					return
+				}
+			}(client)
 
 			for i := range queue {
 				select {
@@ -181,17 +197,22 @@ func (d *Dialer) sendBulk(messages []Message, contentType string, opts ...BulkOp
 // dial opens a persistent SMTP connection, handling both STARTTLS (587) and
 // implicit TLS (465) depending on Config.UseTLS.
 func (d *Dialer) dial() (*smtp.Client, error) {
+	dialer := &net.Dialer{Timeout: 30 * time.Second}
 	tlsConfig := &tls.Config{ServerName: d.config.Host}
 
 	if d.config.UseTLS {
-		conn, err := tls.Dial("tcp", d.config.addr(), tlsConfig)
+		conn, err := tls.DialWithDialer(dialer, "tcp", d.config.addr(), tlsConfig)
 		if err != nil {
 			return nil, err
 		}
 		return smtp.NewClient(conn, d.config.Host)
 	}
 
-	client, err := smtp.Dial(d.config.addr())
+	conn, err := dialer.Dial("tcp", d.config.addr())
+	if err != nil {
+		return nil, err
+	}
+	client, err := smtp.NewClient(conn, d.config.Host)
 	if err != nil {
 		return nil, err
 	}
@@ -220,7 +241,6 @@ func (d *Dialer) sendWithClient(client *smtp.Client, msg Message, contentType st
 	if err != nil {
 		return err
 	}
-
 	if err := client.Reset(); err != nil {
 		return fmt.Errorf("mail: reset failed: %w", err)
 	}
@@ -280,7 +300,10 @@ func buildMessage(msg Message, contentType string) ([]byte, error) {
 	var buf bytes.Buffer
 
 	write := func(format string, args ...any) {
-		fmt.Fprintf(&buf, format+"\r\n", args...)
+		_, err := fmt.Fprintf(&buf, format+"\r\n", args...)
+		if err != nil {
+			return
+		}
 	}
 
 	fromAddr, err := mail.ParseAddress(msg.From)
@@ -315,6 +338,7 @@ func buildMessage(msg Message, contentType string) ([]byte, error) {
 	if _, err := qw.Write([]byte(msg.Body)); err != nil {
 		return nil, fmt.Errorf("mail: failed to encode body: %w", err)
 	}
+
 	if err := qw.Close(); err != nil {
 		return nil, fmt.Errorf("mail: failed to flush body: %w", err)
 	}
