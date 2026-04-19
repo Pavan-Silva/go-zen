@@ -130,25 +130,81 @@ Contexts are pooled and reused across requests for zero allocation overhead.
 
 ## Utilities
 
-Zen includes optional `env` and `config` packages for common app setup helpers:
+Zen includes optional `config` package for environment loading, typed configuration, and database helpers.
 
-- `env.Load()` / `env.LoadOverride()` to load `.env` files
-- `env.Get`, `env.Must`, `env.GetInt`, `env.GetBool`, `env.GetDuration`
-- `config.OpenDB`, `config.WithTransaction`, `config.CloseDB`
+### Environment Configuration
 
-### Environment helpers
+```go
+import "github.com/Pavan-Silva/go-zen/config"
+
+// Load environment variables with defaults and type conversion
+port := config.GetString("PORT", "8080")
+maxConns := config.GetInt("DB_MAX_CONNS", 25)
+debug := config.GetBool("DEBUG", false)
+timeout := config.GetDuration("TIMEOUT", 30*time.Second)
+
+// Require specific environment variables (panic if missing)
+apiKey := config.MustGetString("API_KEY")
+dbPort := config.MustGetInt("DB_PORT")
+```
+
+### Database Handling
+
+Zen provides a lightweight database wrapper around `database/sql` with connection pooling, transaction support, and reduced boilerplate:
 
 ```go
 import (
-    "github.com/Pavan-Silva/go-zen/env"
+    "context"
+    "github.com/Pavan-Silva/go-zen/config"
+    _ "github.com/lib/pq" // PostgreSQL driver
 )
 
-if err := env.Load(); err != nil {
-    panic(err)
+// Open database with automatic connection pooling
+db, err := config.Open("postgres", "user=app password=pass dbname=myapp sslmode=disable")
+if err != nil {
+    log.Fatal(err)
+}
+defer db.Close()
+
+// Configure connection pool
+db.SetPool(25, 5, 5*time.Minute)
+
+// Simple queries
+ctx := context.Background()
+var name string
+db.ScanRow(ctx, "SELECT name FROM users WHERE id = $1", []any{&name}, 42)
+
+// Multiple rows
+rows, _ := db.ScanAll(ctx, "SELECT id, name FROM users WHERE active = $1", true)
+defer rows.Close()
+
+for rows.Next() {
+    var id int
+    var name string
+    rows.Scan(&id, &name)
 }
 
-port := env.Get("PORT", "8080")
-maxActive, _ := env.GetInt("DB_MAX_ACTIVE", 25)
+// Insert/Update/Delete
+result, _ := db.Exec(ctx, "INSERT INTO users (name) VALUES ($1)", "Alice")
+id, _ := result.LastInsertId()
+
+// Transactions
+err = db.Tx(ctx, func(tx *config.Tx) error {
+    if _, err := tx.Exec(ctx, "INSERT INTO users (name) VALUES ($1)", "Bob"); err != nil {
+        return err
+    }
+    if _, err := tx.Exec(ctx, "UPDATE users SET active = $1 WHERE name = $2", true, "Bob"); err != nil {
+        return err
+    }
+    return nil
+})
+
+// Handle NULL values safely
+var nullable config.Nullable[string]
+db.ScanRow(ctx, "SELECT bio FROM users WHERE id = $1", []any{&nullable}, 42)
+if nullable.Valid {
+    fmt.Println("Bio:", nullable.Value)
+}
 ```
 
 ## Optional Streaming Packages
@@ -1121,8 +1177,8 @@ zen/
 │   ├── oidc.go         # OIDC authentication
 │   └── oauth2.go       # OAuth2 token introspection
 ├── config/             # Optional app configuration helpers
-│   ├── db.go           # Database connection helpers and transactions
-│   └── env.go          # Environment loading and typed env helpers
+│   ├── env.go          # Environment loading and typed env helpers
+│   └── db.go           # Database wrapper with connection pooling and query helpers
 ├── middleware/         # Built-in middleware
 │   ├── logger.go       # Request logging with metrics
 │   ├── recover.go      # Panic recovery
