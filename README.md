@@ -119,6 +119,17 @@ Middleware executes in registration order and is pre-chained at startup.
 
 ```go
 r.Use(middleware.Recover, middleware.Logger, middleware.CORS(corsConfig))
+
+// Limit request body to 2MB
+r.Use(middleware.BodyLimit("2M"))
+
+// Or with custom config and skipper
+config := middleware.BodyLimitConfig()
+config.Limit = "1M"
+config.Skipper = func(r *http.Request) bool {
+    return r.URL.Path == "/upload/large"
+}
+r.Use(middleware.BodyLimitWithConfig(config))
 ```
 
 ### Built-in middleware
@@ -126,6 +137,7 @@ r.Use(middleware.Recover, middleware.Logger, middleware.CORS(corsConfig))
 - `middleware.Logger` — request logging with method, path, status, latency, client IP, and response size
 - `middleware.Recover` — recovers from panics and returns a 500 response
 - `middleware.CORS` — flexible CORS support for origins, methods, headers, and credentials
+- `middleware.BodyLimit` — limits request body size with support for skippers
 
 ## Route Groups
 
