@@ -13,6 +13,7 @@ Zen provides routing, request binding, middleware, and simple helpers with a min
 - Optional `mail` package for SMTP email sending using `net/mail` and `net/smtp`
 - Optional `config` package for env loading and DB helpers
 - Optional `auth` package for authentication across HTTP, WebSocket, and SSE
+- Optional `cron` package for scheduled job execution
 
 ## Features
 
@@ -231,6 +232,51 @@ if err != nil {
 ```
 
 For HTML emails, use `mail.SendHTML()` with the same API.
+
+## Cron Jobs
+
+Zen provides an optional `cron` package for efficient scheduled job execution using cron expressions.
+
+```go
+import "github.com/Pavan-Silva/go-zen/cron"
+
+scheduler := cron.New()
+
+// Add a job that runs every 5 minutes
+err := scheduler.AddJob("*/5 * * * *", func() {
+    fmt.Println("Job executed at", time.Now())
+})
+if err != nil {
+    log.Fatal(err)
+}
+
+// Start the scheduler
+scheduler.Start()
+
+// Stop when done
+defer scheduler.Stop()
+```
+
+### Cron Expression Format
+
+The cron package supports standard cron expressions with 5 fields:
+
+```
+* * * * *
+│ │ │ │ │
+│ │ │ │ └─ Day of week (0-6, Sunday=0)
+│ │ │ └─── Month (1-12)
+│ │ └───── Day of month (1-31)
+│ └─────── Hour (0-23)
+└───────── Minute (0-59)
+```
+
+Examples:
+
+- `"*/5 * * * *"` - Every 5 minutes
+- `"0 * * * *"` - Every hour at minute 0
+- `"0 9 * * 1"` - Every Monday at 9:00 AM
+- `"30 14 1 * *"` - 1st of every month at 2:30 PM
 
 ## Authentication
 
@@ -1033,6 +1079,8 @@ zen/
 ├── form.go             # Form binding with reflection caching
 ├── mail/               # Optional SMTP email sending
 │   └── mail.go         # Email sending with net/mail validation
+├── cron/               # Optional cron job scheduling
+│   └── cron.go         # Efficient cron expression parsing and execution
 ├── auth/               # Optional authentication helpers
 │   └── auth.go          # Authenticators for HTTP, WS, SSE
 ├── config/             # Optional app configuration helpers

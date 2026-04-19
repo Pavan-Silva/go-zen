@@ -12,6 +12,7 @@ dist/
 # Excluded directories
 loadtest/
 example/
+examples/
 
 # Loadtest (legacy)
 loadtest/.build
