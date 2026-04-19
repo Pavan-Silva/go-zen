@@ -134,6 +134,22 @@ r.Handle("GET /token", func(c *zen.Context) {
 })
 ```
 
+Or no-content responses:
+
+```go
+r.Handle("DELETE /items/{id}", func(c *zen.Context) {
+    c.NoContent(http.StatusNoContent)
+})
+```
+
+Or redirects:
+
+```go
+r.Handle("GET /old-path", func(c *zen.Context) {
+    c.Redirect(http.StatusMovedPermanently, "/new-path")
+})
+```
+
 You can also read query and path parameters:
 
 ```go
@@ -158,6 +174,8 @@ r.Handle("GET /users/{id}", func(c *zen.Context) {
 - `c.XML(status, data)`
 - `c.HTML(status, html)`
 - `c.String(status, text)`
+- `c.NoContent(status)`
+- `c.Redirect(status, location)`
 - `c.Error(status, message)`
 - `c.Set(key, value)`, `c.Get(key)`
 
