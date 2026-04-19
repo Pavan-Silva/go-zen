@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"encoding/xml"
+	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"path/filepath"
 	"sync"
 )
 
@@ -156,6 +159,80 @@ func (c *Context) NoContent(status int) {
 //	c.Redirect(http.StatusMovedPermanently, "https://example.com/new")
 func (c *Context) Redirect(status int, location string) {
 	http.Redirect(c.Response, c.Request, location, status)
+}
+
+// File sends the requested file as the HTTP response body.
+// The content type is inferred automatically and errors are handled by http.ServeFile.
+//
+// Example:
+//
+//	c.File("/tmp/report.pdf")
+func (c *Context) File(filePath string) {
+	http.ServeFile(c.Response, c.Request, filePath)
+}
+
+// Attachment sends the requested file as a downloadable attachment.
+// The Content-Disposition header is set with the provided attachment name.
+// If attachmentName is empty, the file base name is used.
+//
+// Example:
+//
+//	c.Attachment("/tmp/report.pdf", "monthly-report.pdf")
+func (c *Context) Attachment(filePath, attachmentName string) {
+	if attachmentName == "" {
+		attachmentName = filepath.Base(filePath)
+	}
+	c.Response.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", attachmentName))
+	http.ServeFile(c.Response, c.Request, filePath)
+}
+
+// Inline sends the requested file to be displayed inline by the browser.
+// The Content-Disposition header is set to inline.
+//
+// Example:
+//
+//	c.Inline("/tmp/image.png")
+func (c *Context) Inline(filePath string) {
+	c.Response.Header().Set("Content-Disposition", "inline")
+	http.ServeFile(c.Response, c.Request, filePath)
+}
+
+// Blob writes a byte slice as the response body with the given content type.
+// The response Content-Type is set to the provided MIME type.
+//
+// Example:
+//
+//	data := []byte("id,name\n1,John Doe")
+//	c.Blob(http.StatusOK, "text/csv", data)
+func (c *Context) Blob(status int, contentType string, data []byte) error {
+	c.Response.Header().Set("Content-Type", contentType)
+	c.Response.WriteHeader(status)
+	if _, err := c.Response.Write(data); err != nil {
+		log.Printf("zen: response write error: %v", err)
+		return err
+	}
+	return nil
+}
+
+// Stream copies data from an io.Reader to the response body with the given content type.
+// The response Content-Type is set to the provided MIME type.
+//
+// Example:
+//
+//	f, err := os.Open("/tmp/image.png")
+//	if err != nil {
+//	    return err
+//	}
+//	defer f.Close()
+//	return c.Stream(http.StatusOK, "image/png", f)
+func (c *Context) Stream(status int, contentType string, body io.Reader) error {
+	c.Response.Header().Set("Content-Type", contentType)
+	c.Response.WriteHeader(status)
+	if _, err := io.Copy(c.Response, body); err != nil {
+		log.Printf("zen: response stream error: %v", err)
+		return err
+	}
+	return nil
 }
 
 // Error writes a plain text error message to the response with the given HTTP status.
