@@ -298,6 +298,8 @@ type Authenticator interface {
 - `JWTAuth` - JWT token authentication
 - `APIKeyAuth` - API key via header or query param
 - `SessionAuth` - Session-based authentication
+- `OIDCAuth` - OpenID Connect authentication via userinfo endpoint
+- `OAuth2Auth` - OAuth2 token introspection authentication
 
 ### HTTP Authentication
 
@@ -362,6 +364,35 @@ r.Use(auth.RequireRole("admin", nil))
 r.Handle("GET /admin", func(c *zen.Context) {
     // Only accessible to users with "admin" role
 })
+```
+
+### OIDC Authentication
+
+OIDC authentication validates access tokens by calling the provider's userinfo endpoint:
+
+```go
+import "github.com/Pavan-Silva/go-zen/auth"
+
+oidcAuth := &auth.OIDCAuth{
+    Issuer:   "https://accounts.google.com",
+    ClientID: "your-client-id",
+}
+
+r.Use(auth.RequireAuth(oidcAuth))
+```
+
+### OAuth2 Token Introspection
+
+OAuth2 authentication validates access tokens using RFC 7662 token introspection:
+
+```go
+oauth2Auth := &auth.OAuth2Auth{
+    TokenIntrospectionEndpoint: "https://auth.example.com/oauth2/introspect",
+    ClientID:                   "your-client-id",
+    ClientSecret:               "your-client-secret",
+}
+
+r.Use(auth.RequireAuth(oauth2Auth))
 ```
 
 ## Route Groups
@@ -1082,7 +1113,13 @@ zen/
 ├── cron/               # Optional cron job scheduling
 │   └── cron.go         # Efficient cron expression parsing and execution
 ├── auth/               # Optional authentication helpers
-│   └── auth.go          # Authenticators for HTTP, WS, SSE
+│   ├── auth.go         # Core authentication interfaces and middleware
+│   ├── basic.go        # HTTP Basic authentication
+│   ├── jwt.go          # JWT token authentication
+│   ├── api_key.go      # API key authentication
+│   ├── session.go      # Session-based authentication
+│   ├── oidc.go         # OIDC authentication
+│   └── oauth2.go       # OAuth2 token introspection
 ├── config/             # Optional app configuration helpers
 │   ├── db.go           # Database connection helpers and transactions
 │   └── env.go          # Environment loading and typed env helpers
