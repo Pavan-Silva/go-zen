@@ -187,6 +187,6 @@ type contextAwareHandler struct {
 // ServeHTTP implements http.Handler by creating a Context, running the chain, and releasing.
 func (h *contextAwareHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	c, r := newContext(w, r)
+	defer releaseContext(c)
 	h.chain.ServeHTTP(w, r)
-	releaseContext(c)
 }

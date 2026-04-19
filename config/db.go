@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"reflect"
 	"sync"
 	"time"
 )
@@ -236,11 +237,28 @@ func NullableTime(v time.Time) Nullable[time.Time] {
 
 // Scan implements sql.Scanner for Nullable types.
 func (n *Nullable[T]) Scan(value any) error {
+	var zero T
 	if value == nil {
+		n.Value = zero
 		n.Valid = false
 		return nil
 	}
-	n.Value = value.(T)
-	n.Valid = true
-	return nil
+
+	val := reflect.ValueOf(value)
+	typ := reflect.TypeOf(zero)
+
+	if val.Type().AssignableTo(typ) {
+		n.Value = value.(T)
+		n.Valid = true
+		return nil
+	}
+
+	if val.Type().ConvertibleTo(typ) {
+		converted := val.Convert(typ).Interface()
+		n.Value = converted.(T)
+		n.Valid = true
+		return nil
+	}
+
+	return fmt.Errorf("cannot scan %T into %T", value, zero)
 }

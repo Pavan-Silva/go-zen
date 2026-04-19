@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 )
 
 // OIDCUserInfo represents the user information returned by the userinfo endpoint.
@@ -37,11 +38,14 @@ type OIDCAuth struct {
 
 // Authenticate validates the access token by calling the userinfo endpoint.
 func (o *OIDCAuth) Authenticate(r *http.Request) (User, error) {
-	if o.HTTPClient == nil {
-		o.HTTPClient = http.DefaultClient
+	client := o.HTTPClient
+	if client == nil {
+		client = &http.Client{Timeout: 10 * time.Second}
 	}
-	if o.UserInfoEndpoint == "" {
-		o.UserInfoEndpoint = o.Issuer + "/oauth2/v2/userinfo"
+
+	userInfoEndpoint := o.UserInfoEndpoint
+	if userInfoEndpoint == "" {
+		userInfoEndpoint = o.Issuer + "/oauth2/v2/userinfo"
 	}
 
 	authHeader := r.Header.Get("Authorization")
@@ -54,7 +58,7 @@ func (o *OIDCAuth) Authenticate(r *http.Request) (User, error) {
 		return User{}, fmt.Errorf("invalid authorization header format")
 	}
 
-	userInfo, err := o.getUserInfo(token)
+	userInfo, err := o.getUserInfo(r.Context(), client, token, userInfoEndpoint)
 	if err != nil {
 		return User{}, fmt.Errorf("failed to get user info: %w", err)
 	}
@@ -82,8 +86,8 @@ func (o *OIDCAuth) Authenticate(r *http.Request) (User, error) {
 }
 
 // getUserInfo calls the OIDC userinfo endpoint with the access token.
-func (o *OIDCAuth) getUserInfo(token string) (*OIDCUserInfo, error) {
-	req, err := http.NewRequestWithContext(context.Background(), "GET", o.UserInfoEndpoint, nil)
+func (o *OIDCAuth) getUserInfo(ctx context.Context, client *http.Client, token, endpoint string) (*OIDCUserInfo, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", endpoint, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -91,7 +95,7 @@ func (o *OIDCAuth) getUserInfo(token string) (*OIDCUserInfo, error) {
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/json")
 
-	resp, err := o.HTTPClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}

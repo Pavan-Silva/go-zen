@@ -13,14 +13,6 @@ import (
 	"time"
 )
 
-// min returns the minimum of two integers.
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 // Config holds SMTP configuration for sending emails.
 type Config struct {
 	Host     string // SMTP server host (e.g., "smtp.gmail.com")
@@ -150,10 +142,7 @@ func (d *Dialer) sendBulk(messages []Message, contentType string, opts ...BulkOp
 	workers := min(options.workers, len(messages))
 
 	for range workers {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-
+		wg.Go(func() {
 			// Each worker holds its own persistent SMTP connection.
 			client, err := d.dial()
 			if err != nil {
@@ -187,7 +176,7 @@ func (d *Dialer) sendBulk(messages []Message, contentType string, opts ...BulkOp
 					stopOnce.Do(func() { close(stop) })
 				}
 			}
-		}()
+		})
 	}
 
 	wg.Wait()

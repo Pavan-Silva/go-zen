@@ -3,6 +3,7 @@ package auth
 import (
 	"errors"
 	"net/http"
+	"sync"
 )
 
 // SessionAuth implements session-based authentication using cookies.
@@ -26,6 +27,7 @@ func (s *SessionAuth) Authenticate(r *http.Request) (User, error) {
 
 // InMemorySessionStore is a simple in-memory session store for development.
 type InMemorySessionStore struct {
+	mu       sync.RWMutex
 	sessions map[string]User
 }
 
@@ -36,7 +38,9 @@ func NewInMemorySessionStore() *InMemorySessionStore {
 }
 
 func (s *InMemorySessionStore) Get(sessionID string) (User, error) {
+	s.mu.RLock()
 	user, ok := s.sessions[sessionID]
+	s.mu.RUnlock()
 	if !ok {
 		return User{}, errors.New("invalid session")
 	}
@@ -44,5 +48,7 @@ func (s *InMemorySessionStore) Get(sessionID string) (User, error) {
 }
 
 func (s *InMemorySessionStore) Set(sessionID string, user User) {
+	s.mu.Lock()
 	s.sessions[sessionID] = user
+	s.mu.Unlock()
 }

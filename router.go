@@ -69,6 +69,59 @@ func (zh *zenHandler) ServeHTTP(_ http.ResponseWriter, r *http.Request) {
 // It wraps http.Server and http.ServeMux, adding middleware support and Context pooling.
 // The design prioritizes performance: middleware is pre-built at setup time (no per-request work),
 // and Context instances are pooled to reduce GC pressure.
+type RouterOption func(*Router)
+
+func WithServer(server *http.Server) RouterOption {
+	return func(r *Router) {
+		r.Server = server
+	}
+}
+
+func WithReadTimeout(timeout time.Duration) RouterOption {
+	return func(r *Router) {
+		if r.Server == nil {
+			r.Server = &http.Server{}
+		}
+		r.Server.ReadTimeout = timeout
+	}
+}
+
+func WithWriteTimeout(timeout time.Duration) RouterOption {
+	return func(r *Router) {
+		if r.Server == nil {
+			r.Server = &http.Server{}
+		}
+		r.Server.WriteTimeout = timeout
+	}
+}
+
+func WithIdleTimeout(timeout time.Duration) RouterOption {
+	return func(r *Router) {
+		if r.Server == nil {
+			r.Server = &http.Server{}
+		}
+		r.Server.IdleTimeout = timeout
+	}
+}
+
+func WithReadHeaderTimeout(timeout time.Duration) RouterOption {
+	return func(r *Router) {
+		if r.Server == nil {
+			r.Server = &http.Server{}
+		}
+		r.Server.ReadHeaderTimeout = timeout
+	}
+}
+
+func WithMaxHeaderBytes(bytes int) RouterOption {
+	return func(r *Router) {
+		if r.Server == nil {
+			r.Server = &http.Server{}
+		}
+		r.Server.MaxHeaderBytes = bytes
+	}
+}
+
 type Router struct {
 	// http.Server embedded for direct access to server configuration and lifecycle.
 	*http.Server
@@ -99,7 +152,7 @@ type Router struct {
 //	r.Use(middleware.Logger, middleware.Recover)
 //	r.Handle("GET /", homeHandler)
 //	r.ListenAndServe()
-func New(addr string) *Router {
+func New(addr string, opts ...RouterOption) *Router {
 	mux := http.NewServeMux()
 	r := &Router{
 		mux:           mux,
@@ -115,6 +168,17 @@ func New(addr string) *Router {
 		ReadHeaderTimeout: 2 * time.Second,
 		MaxHeaderBytes:    1 << 20,
 	}
+
+	for _, opt := range opts {
+		opt(r)
+	}
+
+	if r.Server == nil {
+		r.Server = &http.Server{Addr: addr, Handler: r}
+	} else if r.Server.Handler == nil {
+		r.Server.Handler = r
+	}
+
 	return r
 }
 
@@ -129,8 +193,8 @@ func New(addr string) *Router {
 func (s *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if s.hasMiddleware {
 		c, r := newContext(w, r)
+		defer releaseContext(c)
 		s.chain.ServeHTTP(w, r)
-		releaseContext(c)
 	} else {
 		s.mux.ServeHTTP(w, r)
 	}
