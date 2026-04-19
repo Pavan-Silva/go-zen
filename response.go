@@ -50,3 +50,21 @@ func (c *Context) JSON(status int, data any) {
 
 	jsonBufPool.Put(buf)
 }
+
+// Error writes a plain text error message to the response with the given HTTP status.
+// Unlike JSON(), this sends plain text without JSON encoding, similar to http.Error().
+// The response Content-Type header is set to "text/plain; charset=utf-8".
+//
+// This is the preferred method for simple error responses where JSON structure
+// is not needed. For structured error responses, use JSON() with a plain map or
+// custom struct.
+//
+// Example:
+//
+//	c.Error(http.StatusBadRequest, "invalid email format")
+//	c.Error(http.StatusUnauthorized, "authentication required")
+//	c.Error(http.StatusInternalServerError, "database connection failed")
+func (c *Context) Error(status int, message string) {
+	http.Error(c.Response, message, status)
+}
+

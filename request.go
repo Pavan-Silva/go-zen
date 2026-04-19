@@ -28,7 +28,7 @@ const maxBodyBytes = 1 << 20
 //	}
 //	var req SignupRequest
 //	if err := c.BindJSON(&req); err != nil {
-//	    c.SendError(BadRequest(err.Error()))
+//	    c.Error(http.StatusBadRequest, err.Error())
 //	    return
 //	}
 func (c *Context) BindJSON(dest any) error {
@@ -108,7 +108,7 @@ func (c *Context) Param(key string) string {
 //
 //	data, err := c.Body()
 //	if err != nil {
-//	    c.SendError(InternalError("failed to read body"))
+//	    c.Error(http.StatusInternalServerError, "failed to read body")
 //	    return
 //	}
 //	// Process raw bytes, e.g. XML parsing, custom format, etc.

@@ -72,7 +72,7 @@ func encodeSSEData(data any) (string, error) {
 func Handle(r *zen.Router, pattern string, handler func(*zen.Context) error) {
 	r.Handle(pattern, func(c *zen.Context) {
 		if err := handler(c); err != nil {
-			c.SendError(zen.InternalError(err.Error()))
+			c.Error(http.StatusInternalServerError, err.Error())
 		}
 	})
 }
@@ -84,13 +84,13 @@ func HandleWithAuth(r *zen.Router, pattern string, authenticator auth.Authentica
 	r.Handle(pattern, func(c *zen.Context) {
 		user, err := auth.AuthenticateSSE(authenticator, c.Request)
 		if err != nil {
-			c.SendError(zen.Unauthorized())
+			c.Error(http.StatusUnauthorized, "authentication required")
 			return
 		}
 
 		c.Set("user", user)
 		if err := handler(c); err != nil {
-			c.SendError(zen.InternalError(err.Error()))
+			c.Error(http.StatusInternalServerError, err.Error())
 		}
 	})
 }
