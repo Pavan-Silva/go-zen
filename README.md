@@ -107,7 +107,7 @@ r.Handle("GET /users/{id}/xml", func(c *zen.Context) {
 })
 ```
 
-Or HTML responses:
+HTML responses:
 
 ```go
 r.Handle("GET /page", func(c *zen.Context) {
@@ -122,7 +122,7 @@ r.Handle("GET /page", func(c *zen.Context) {
 })
 ```
 
-Or plain text responses:
+Plain text responses:
 
 ```go
 r.Handle("GET /health", func(c *zen.Context) {
@@ -134,7 +134,7 @@ r.Handle("GET /token", func(c *zen.Context) {
 })
 ```
 
-Or no-content responses:
+No-content responses:
 
 ```go
 r.Handle("DELETE /items/{id}", func(c *zen.Context) {
@@ -142,11 +142,51 @@ r.Handle("DELETE /items/{id}", func(c *zen.Context) {
 })
 ```
 
-Or redirects:
+Redirects:
 
 ```go
 r.Handle("GET /old-path", func(c *zen.Context) {
     c.Redirect(http.StatusMovedPermanently, "/new-path")
+})
+```
+
+Serve files:
+
+```go
+r.Handle("GET /download/report", func(c *zen.Context) {
+    c.File("/tmp/report.pdf")
+})
+
+r.Handle("GET /download/attachment", func(c *zen.Context) {
+    c.Attachment("/tmp/report.pdf", "monthly-report.pdf")
+})
+
+r.Handle("GET /image", func(c *zen.Context) {
+    c.Inline("/tmp/image.png")
+})
+```
+
+Blob responses:
+
+```go
+r.Handle("GET /csv", func(c *zen.Context) {
+    data := []byte(`0306703,0035866,NO_ACTION,06/19/2006
+0086003,"0005866",UPDATED,06/19/2006`)
+    c.Blob(http.StatusOK, "text/csv", data)
+})
+```
+
+Or Stream responses:
+
+```go
+r.Handle("GET /image-stream", func(c *zen.Context) {
+    f, err := os.Open("/tmp/image.png")
+    if err != nil {
+        c.Error(http.StatusInternalServerError, err.Error())
+        return
+    }
+    defer f.Close()
+    _ = c.Stream(http.StatusOK, "image/png", f)
 })
 ```
 
@@ -176,6 +216,11 @@ r.Handle("GET /users/{id}", func(c *zen.Context) {
 - `c.String(status, text)`
 - `c.NoContent(status)`
 - `c.Redirect(status, location)`
+- `c.File(path)`
+- `c.Attachment(path, attachmentName)`
+- `c.Inline(path)`
+- `c.Blob(status, contentType, data)`
+- `c.Stream(status, contentType, body)`
 - `c.Error(status, message)`
 - `c.Set(key, value)`, `c.Get(key)`
 
