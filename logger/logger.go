@@ -3,14 +3,14 @@ package logger
 import (
 	"fmt"
 	"io"
-	"log"
 	"os"
-	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 )
 
 // Level represents the severity of log entries
-type Level int
+type Level int32
 
 const (
 	TRACE Level = iota
@@ -41,52 +41,78 @@ func (l Level) String() string {
 	}
 }
 
-// Logger provides structured logging with optional color support and plain framework-style formatting.
-type Logger struct {
-	level    Level
-	logger   *log.Logger
-}
-
-// New creates a new logger with the specified level, output writer, and optional color support.
-func New(level Level, out io.Writer) *Logger {
-	return &Logger{
-		level:    level,
-		logger:   log.New(out, "", 0), // We'll handle formatting ourselves
+// paddedString returns the level string padded to 5 characters for alignment.
+// Padding is static to avoid per-call allocations.
+func (l Level) paddedString() string {
+	switch l {
+	case TRACE:
+		return "TRACE"
+	case DEBUG:
+		return "DEBUG"
+	case INFO:
+		return "INFO "
+	case WARN:
+		return "WARN "
+	case ERROR:
+		return "ERROR"
+	case FATAL:
+		return "FATAL"
+	default:
+		return "UNKNO"
 	}
 }
 
-// Default creates a logger with INFO level and stderr output. Colors are disabled by default.
+// Logger provides structured logging with plain framework-style formatting.
+type Logger struct {
+	level  atomic.Int32
+	out    io.Writer
+	mu     sync.Mutex // protects writes to out
+	exitFn func(int)  // injectable for testing; defaults to os.Exit
+}
+
+// New creates a new logger with the specified level and output writer.
+func New(level Level, out io.Writer) *Logger {
+	l := &Logger{
+		out:    out,
+		exitFn: os.Exit,
+	}
+	l.level.Store(int32(level))
+	return l
+}
+
+// Default creates a logger with INFO level and stderr output.
 func Default() *Logger {
 	return New(INFO, os.Stderr)
 }
 
-// SetLevel changes the minimum log level
+// SetLevel changes the minimum log level atomically.
 func (l *Logger) SetLevel(level Level) {
-	l.level = level
+	l.level.Store(int32(level))
 }
 
 // log writes a log entry if the level is enabled
 func (l *Logger) log(level Level, message string, args ...any) {
-	if level < l.level {
+	if Level(l.level.Load()) > level {
 		return
 	}
 
-	// Format the message
-	timestamp := time.Now().Format("2006-01-02 15:04:05.000")
-	levelStr := level.String()
-
-	// Pad level to 5 characters for alignment
-	if len(levelStr) < 5 {
-		levelStr += strings.Repeat(" ", 5-len(levelStr))
+	var msg string
+	if len(args) == 0 {
+		msg = message
+	} else {
+		msg = fmt.Sprintf(message, args...)
 	}
 
-	prefix := fmt.Sprintf("[%s]", levelStr)
-	formatted := fmt.Sprintf("%s %s %s", timestamp, prefix, fmt.Sprintf(message, args...))
+	timestamp := time.Now().Format("2006-01-02 15:04:05.000")
+	line := fmt.Sprintf("%s [%s] %s\n", timestamp, level.paddedString(), msg)
 
-	l.logger.Println(formatted)
+	l.mu.Lock()
+	//nolint:errcheck // matching stdlib log behaviour of ignoring write errors
+	_, _ = io.WriteString(l.out, line)
+	l.mu.Unlock()
 
 	if level == FATAL {
-		os.Exit(1)
+		l.exitFn(1)
 	}
 }
 
