@@ -1,11 +1,11 @@
 package middleware
 
 import (
-	"log"
 	"net/http"
 	"time"
 
 	"github.com/Pavan-Silva/go-zen"
+	"github.com/Pavan-Silva/go-zen/logger"
 )
 
 // Logger logs HTTP requests with method, path, status code, and response time.
@@ -24,8 +24,8 @@ func Logger(c *zen.Context, next http.Handler) {
 	next.ServeHTTP(rw, c.Request)
 
 	duration := time.Since(start)
-	log.Printf(
-		"%s %s %d %v | ip=%s size=%d resp=%d bytes",
+	logger.Info(
+		"HTTP: %s %s %d %v | ip=%s size=%d resp=%d bytes",
 		c.Request.Method,
 		c.Request.URL.Path,
 		rw.status,

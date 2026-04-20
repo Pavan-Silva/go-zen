@@ -6,10 +6,11 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"path/filepath"
 	"sync"
+
+	"github.com/Pavan-Silva/go-zen/logger"
 )
 
 // responseBufPool reuses bytes.Buffer instances for response encoding to reduce allocations.
@@ -41,7 +42,7 @@ func (c *Context) JSON(status int, data any) {
 
 	if err := json.NewEncoder(buf).Encode(data); err != nil {
 		responseBufPool.Put(buf)
-		log.Printf("zen: JSON encode error: %v", err)
+		logger.Error("HTTP: JSON encode error: %v", err)
 		http.Error(c.Response, `{"error":"internal server error"}`, http.StatusInternalServerError)
 		return
 	}
@@ -49,7 +50,7 @@ func (c *Context) JSON(status int, data any) {
 	c.Response.Header().Set("Content-Type", "application/json")
 	c.Response.WriteHeader(status)
 	if _, err := c.Response.Write(buf.Bytes()); err != nil {
-		log.Printf("zen: response write error: %v", err)
+		logger.Error("HTTP: response write error: %v", err)
 	}
 
 	responseBufPool.Put(buf)
@@ -79,7 +80,7 @@ func (c *Context) XML(status int, data any) {
 
 	if err := xml.NewEncoder(buf).Encode(data); err != nil {
 		responseBufPool.Put(buf)
-		log.Printf("zen: XML encode error: %v", err)
+		logger.Error("HTTP: XML encode error: %v", err)
 		http.Error(c.Response, "internal server error", http.StatusInternalServerError)
 		return
 	}
@@ -87,7 +88,7 @@ func (c *Context) XML(status int, data any) {
 	c.Response.Header().Set("Content-Type", "application/xml")
 	c.Response.WriteHeader(status)
 	if _, err := c.Response.Write(buf.Bytes()); err != nil {
-		log.Printf("zen: response write error: %v", err)
+		logger.Error("HTTP: response write error: %v", err)
 	}
 
 	responseBufPool.Put(buf)
@@ -115,7 +116,7 @@ func (c *Context) HTML(status int, html string) {
 	c.Response.Header().Set("Content-Type", "text/html; charset=utf-8")
 	c.Response.WriteHeader(status)
 	if _, err := c.Response.Write([]byte(html)); err != nil {
-		log.Printf("zen: response write error: %v", err)
+		logger.Error("HTTP: response write error: %v", err)
 	}
 }
 
@@ -136,7 +137,7 @@ func (c *Context) String(status int, text string) {
 	c.Response.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	c.Response.WriteHeader(status)
 	if _, err := c.Response.Write([]byte(text)); err != nil {
-		log.Printf("zen: response write error: %v", err)
+		logger.Error("HTTP: response write error: %v", err)
 	}
 }
 
@@ -208,7 +209,7 @@ func (c *Context) Blob(status int, contentType string, data []byte) error {
 	c.Response.Header().Set("Content-Type", contentType)
 	c.Response.WriteHeader(status)
 	if _, err := c.Response.Write(data); err != nil {
-		log.Printf("zen: response write error: %v", err)
+		logger.Error("HTTP: response write error: %v", err)
 		return err
 	}
 	return nil
@@ -229,7 +230,7 @@ func (c *Context) Stream(status int, contentType string, body io.Reader) error {
 	c.Response.Header().Set("Content-Type", contentType)
 	c.Response.WriteHeader(status)
 	if _, err := io.Copy(c.Response, body); err != nil {
-		log.Printf("zen: response stream error: %v", err)
+		logger.Error("HTTP: response stream error: %v", err)
 		return err
 	}
 	return nil
