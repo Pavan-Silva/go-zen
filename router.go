@@ -314,7 +314,6 @@ func (s *Router) StaticFS(prefix string, filesystem fs.FS) {
 //	r.ListenAndServe()  // Blocks until Ctrl+C
 func (s *Router) ListenAndServe() {
 	fmt.Print(system.Banner(s.Addr))
-	logger.Info("Server: listening on %s", s.Addr)
 
 	go func() {
 		if err := s.Server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -335,7 +334,6 @@ func (s *Router) ListenAndServe() {
 //	r.ListenAndServeTLS("cert.pem", "key.pem")  // Blocks until Ctrl+C
 func (s *Router) ListenAndServeTLS(certFile, keyFile string) {
 	fmt.Print(system.Banner(s.Addr))
-	logger.Info("Server: listening on %s", s.Addr)
 
 	go func() {
 		if err := s.Server.ListenAndServeTLS(certFile, keyFile); err != nil && !errors.Is(err, http.ErrServerClosed) {
