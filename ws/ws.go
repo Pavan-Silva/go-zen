@@ -1,11 +1,11 @@
 package ws
 
 import (
-	"log"
 	"net/http"
 
 	"github.com/Pavan-Silva/go-zen"
 	"github.com/Pavan-Silva/go-zen/auth"
+	"github.com/Pavan-Silva/go-zen/logger"
 	"golang.org/x/net/websocket"
 )
 
@@ -28,7 +28,7 @@ func (c *Conn) WriteJSON(message any) error {
 func (c *Conn) Close() {
 	err := c.conn.Close()
 	if err != nil {
-		log.Printf("ws: failed to close connection: %v", err)
+		logger.Error("WebSocket: failed to close connection: %v", err)
 	}
 }
 
@@ -38,7 +38,7 @@ func Handler(fn func(*zen.Context, *Conn)) http.Handler {
 		c := zen.FromRequest(conn.Request())
 		if c == nil {
 			if err := conn.Close(); err != nil {
-				log.Printf("ws: failed to close connection: %v", err)
+				logger.Error("ws: failed to close connection: %v", err)
 			}
 			return
 		}
@@ -59,7 +59,7 @@ func HandleWithAuth(r *zen.Router, pattern string, authenticator auth.Authentica
 		c := zen.FromRequest(conn.Request())
 		if c == nil {
 			if err := conn.Close(); err != nil {
-				log.Printf("ws: failed to close connection: %v", err)
+				logger.Error("WebSocket: failed to close connection: %v", err)
 			}
 			return
 		}
@@ -67,7 +67,7 @@ func HandleWithAuth(r *zen.Router, pattern string, authenticator auth.Authentica
 		user, err := auth.AuthenticateWS(authenticator, conn.Request())
 		if err != nil {
 			if cerr := conn.Close(); cerr != nil {
-				log.Printf("ws: failed to close connection after auth failure: %v", cerr)
+				logger.Error("WebSocket: failed to close connection after auth failure: %v", cerr)
 			}
 			return
 		}

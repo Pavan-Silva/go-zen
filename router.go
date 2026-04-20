@@ -3,8 +3,8 @@ package zen
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io/fs"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Pavan-Silva/go-zen/logger"
 	"github.com/Pavan-Silva/go-zen/system"
 )
 
@@ -312,11 +313,12 @@ func (s *Router) StaticFS(prefix string, filesystem fs.FS) {
 //	r.Handle("GET /", homeHandler)
 //	r.ListenAndServe()  // Blocks until Ctrl+C
 func (s *Router) ListenAndServe() {
-	log.Print(system.Banner(s.Addr))
+	fmt.Print(system.Banner(s.Addr))
+	logger.Info("Server: listening on %s", s.Addr)
 
 	go func() {
 		if err := s.Server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Fatalf("zen: server error: %v", err)
+			logger.Fatal("Server: error: %v", err)
 		}
 	}()
 
@@ -332,11 +334,12 @@ func (s *Router) ListenAndServe() {
 //	r.Handle("GET /", homeHandler)
 //	r.ListenAndServeTLS("cert.pem", "key.pem")  // Blocks until Ctrl+C
 func (s *Router) ListenAndServeTLS(certFile, keyFile string) {
-	log.Print(system.Banner(s.Addr))
+	fmt.Print(system.Banner(s.Addr))
+	logger.Info("Server: listening on %s", s.Addr)
 
 	go func() {
 		if err := s.Server.ListenAndServeTLS(certFile, keyFile); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Fatalf("zen: server error: %v", err)
+			logger.Fatal("Server: error: %v", err)
 		}
 	}()
 
@@ -355,6 +358,6 @@ func (s *Router) gracefulShutdown() {
 	defer cancel()
 
 	if err := s.Server.Shutdown(ctx); err != nil {
-		log.Fatalf("zen: shutdown error: %v", err)
+		logger.Fatal("Server: shutdown error: %v", err)
 	}
 }

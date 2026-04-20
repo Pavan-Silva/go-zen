@@ -1,11 +1,11 @@
 package middleware
 
 import (
-	"log"
 	"net/http"
 	"runtime/debug"
 
 	"github.com/Pavan-Silva/go-zen"
+	"github.com/Pavan-Silva/go-zen/logger"
 )
 
 // Recover is panic recovery middleware that catches panics and sends a 500 response.
@@ -21,8 +21,8 @@ import (
 func Recover(c *zen.Context, next http.Handler) {
 	defer func() {
 		if err := recover(); err != nil {
-			log.Printf(
-				"zen: panic recovered: %v | method=%s path=%s ip=%s\n%s",
+			logger.Error(
+				"HTTP: panic recovered: %v | method=%s path=%s ip=%s\n%s",
 				err,
 				c.Request.Method,
 				c.Request.URL.Path,
