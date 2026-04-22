@@ -374,14 +374,78 @@ sse.Handle(r, "GET /events", func(c *zen.Context) error {
 
 ### WebSocket
 
+Zen provides a full-featured WebSocket implementation with connection management, room-based broadcasting, and Redis pub/sub for horizontal scaling.
+
 ```go
 import "github.com/Pavan-Silva/go-zen/ws"
 
-ws.Handle(r, "GET /ws", func(c *zen.Context, conn *ws.Conn) {
-    var msg map[string]any
-    conn.ReadJSON(&msg)
-    conn.WriteJSON(map[string]string{"pong": "ok"})
+server := ws.NewServer()
+server.Run()
+defer server.Shutdown()
+
+server.Register(r, "GET /ws")
+```
+
+#### With Authentication
+
+```go
+jwtAuth := &auth.JWTAuth{Secret: []byte("key")}
+server.RegisterWithAuth(r, "GET /ws", jwtAuth)
+```
+
+#### Client Communication
+
+```go
+server.Register(r, "GET /ws", func(c *zen.Context) {
+    // Use server.Handle for non-auth handlers
 })
+
+// In handler, receive from client:
+func handler(client *ws.Client) {
+    for {
+        msg, ok := <-client.Send
+        if !ok {
+            break
+        }
+        // Process message
+    }
+}
+```
+
+#### Rooms (Room-based Broadcasting)
+
+Clients can join rooms to receive targeted broadcasts:
+
+```json
+{"type": "join", "room": "notifications"}
+```
+
+```json
+{"type": "leave", "room": "notifications"}
+```
+
+```json
+{"type": "message", "room": "notifications", "content": {"text": "Hello!"}}
+```
+
+#### Redis Pub/Sub for Horizontal Scaling
+
+For multi-instance deployments, use RedisHub:
+
+```go
+import "github.com/Pavan-Silva/go-zen/ws"
+
+rh, err := ws.NewRedisHub(ws.RedisConfig{
+    Addr: "localhost:6379",
+}, "ws:broadcast")
+if err != nil {
+    log.Fatal(err)
+}
+rh.Run()
+defer rh.Shutdown()
+
+rh.Register(r, "GET /ws")
+```
 ```
 
 ## Authentication
