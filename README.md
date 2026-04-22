@@ -10,7 +10,7 @@ Zen gives you modern request routing, binding, middleware, and reusable helpers 
 - Fast request lifecycle with pooled contexts and zero-allocation middleware chaining
 - Secure defaults for timeouts, header limits, and graceful shutdown
 - Built-in request binding for JSON, forms, multipart files, and raw bodies
-- Optional helper packages for auth, config, mail, cron, SSE, and WebSocket
+- Optional helper packages for auth, Env, SSE, and WebSocket
 
 ## Installation
 
@@ -470,76 +470,6 @@ ws.HandleWithAuth(r, "GET /ws", myAuthenticator, func(c *zen.Context, conn *ws.C
     conn.WriteJSON(map[string]string{"welcome": user.Username})
 })
 ```
-
-## Configuration Helpers
-
-Zen includes environment and database helpers in the `config` package.
-
-### Environment helpers
-
-```go
-port := config.GetString("PORT", "8080")
-maxConns := config.GetInt("DB_MAX_CONNS", 25)
-debug := config.GetBool("DEBUG", false)
-timeout := config.GetDuration("TIMEOUT", 30*time.Second)
-apiKey := config.MustGetString("API_KEY")
-```
-
-### Database wrapper
-
-```go
-ctx := context.Background()
-db, err := config.Open("postgres", "user=app password=secret dbname=mydb sslmode=disable")
-if err != nil {
-    log.Fatal(err)
-}
-defer db.Close()
-
-db.SetPool(25, 5, 5*time.Minute)
-
-var name string
-if err := db.ScanRow(ctx, "SELECT name FROM users WHERE id = $1", []any{&name}, 42); err != nil {
-    log.Fatal(err)
-}
-
-err = db.Tx(ctx, func(tx *config.Tx) error {
-    if _, err := tx.Exec(ctx, "UPDATE users SET active = $1 WHERE id = $2", true, 42); err != nil {
-        return err
-    }
-    return nil
-})
-if err != nil {
-    log.Fatal(err)
-}
-```
-
-Transaction support and query helpers are included for common SQL workflows.
-
-## Mail
-
-The optional `mail` package provides SMTP email sending with both single and bulk delivery.
-
-```go
-mailer := mail.NewDialer(mail.Config{Host: "smtp.example.com", Port: 587, Username: "user", Password: "pass"})
-err := mailer.Send(mail.Message{From: "noreply@example.com", To: []string{"user@example.com"}, Subject: "Hello", Body: "Welcome"})
-```
-
-## Cron
-
-The optional `cron` package provides a lightweight scheduler for periodic jobs.
-
-```go
-scheduler := cron.New()
-scheduler.AddJob("*/5 * * * *", func() {
-    log.Println("run every 5 minutes")
-})
-scheduler.Start()
-```
-
-## Examples
-
-The repository includes working example apps in the `example/` and `examples/` folders.
-Explore those directories for ready-to-run server, auth, SSE, and cron examples.
 
 ## Contributing
 

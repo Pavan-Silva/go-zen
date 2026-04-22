@@ -61,3 +61,21 @@ func MustGetInt(key string) int {
 	}
 	panic(fmt.Sprintf("environment variable %s is not a valid int: %s", key, v))
 }
+
+// MustGetBool parses the environment variable as bool or panics.
+func MustGetBool(key string) bool {
+	v := MustGetString(key)
+	if b, err := strconv.ParseBool(v); err == nil {
+		return b
+	}
+	panic(fmt.Sprintf("environment variable %s is not a valid bool: %s", key, v))
+}
+
+// MustGetDuration parses the environment variable as time.Duration or panics.
+func MustGetDuration(key string) time.Duration {
+	v := MustGetString(key)
+	if d, err := time.ParseDuration(v); err == nil {
+		return d
+	}
+	panic(fmt.Sprintf("environment variable %s is not a valid duration: %s", key, v))
+}
