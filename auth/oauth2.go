@@ -8,6 +8,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/golang-jwt/jwt/v5"
 )
 
 // OAuth2TokenInfo represents token information from introspection.
@@ -32,6 +34,8 @@ type OAuth2Auth struct {
 	ClientSecret string
 	// HTTPClient for making requests (optional)
 	HTTPClient *http.Client
+	// ClaimsFunc for custom mapping (optional)
+	ClaimsFunc func(claims jwt.MapClaims) User
 }
 
 // Authenticate validates the access token using OAuth2 token introspection.
@@ -65,20 +69,32 @@ func (o *OAuth2Auth) Authenticate(r *http.Request) (User, error) {
 		return User{}, fmt.Errorf("token has expired")
 	}
 
+	claims := jwt.MapClaims{
+		"sub":        tokenInfo.Subject,
+		"client_id":  tokenInfo.ClientID,
+		"username":  tokenInfo.Username,
+		"scope":      tokenInfo.Scope,
+		"token_type": tokenInfo.TokenType,
+		"exp":        tokenInfo.ExpiresAt,
+		"iat":        tokenInfo.IssuedAt,
+	}
+
+	if o.ClaimsFunc != nil {
+		return o.ClaimsFunc(claims), nil
+	}
+
 	user := User{
 		ID:       tokenInfo.Subject,
 		Username: tokenInfo.Username,
-		Claims: map[string]any{
-			"client_id":  tokenInfo.ClientID,
-			"scope":      tokenInfo.Scope,
-			"token_type": tokenInfo.TokenType,
-			"exp":        tokenInfo.ExpiresAt,
-			"iat":        tokenInfo.IssuedAt,
-		},
+		Claims:   claims,
 	}
 
 	if user.Username == "" {
 		user.Username = tokenInfo.Subject
+	}
+
+	if tokenInfo.Scope != "" {
+		user.Roles = strings.Split(tokenInfo.Scope, " ")
 	}
 
 	return user, nil

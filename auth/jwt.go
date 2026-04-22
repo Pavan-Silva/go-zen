@@ -14,7 +14,7 @@ import (
 type JWTAuth struct {
 	Secret        []byte
 	SigningMethod jwt.SigningMethod
-	ClaimsFunc    func(claims jwt.MapClaims) User
+	ClaimsFunc   func(claims jwt.MapClaims) User
 }
 
 func (j *JWTAuth) Authenticate(r *http.Request) (User, error) {
@@ -43,7 +43,7 @@ func (j *JWTAuth) Authenticate(r *http.Request) (User, error) {
 		if j.ClaimsFunc != nil {
 			return j.ClaimsFunc(claims), nil
 		}
-		return User{}, nil
+		return DefaultUserMapper(claims), nil
 	}
 
 	return User{}, errors.New("invalid token")
