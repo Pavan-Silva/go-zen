@@ -10,7 +10,7 @@ Zen gives you modern request routing, binding, middleware, and reusable helpers 
 - Fast request lifecycle with pooled contexts and zero-allocation middleware chaining
 - Secure defaults for timeouts, header limits, and graceful shutdown
 - Built-in request binding for JSON, forms, multipart files, and raw bodies
-- Optional helper packages for auth, Env, SSE, and WebSocket
+- Optional helper packages for auth, Env, and SSE
 
 ## Installation
 
@@ -360,7 +360,7 @@ Built-in validation runs automatically during `BindJSON` when destination is a s
 
 ## Streaming and Real-time
 
-Zen supports SSE and WebSockets through optional packages.
+Zen supports SSE through an optional package. WebSockets integrate with any library via `HandleRaw`.
 
 ### SSE
 
@@ -370,88 +370,62 @@ import "github.com/Pavan-Silva/go-zen/sse"
 sse.Handle(r, "GET /events", func(c *zen.Context) error {
     return sse.Send(c, "message", map[string]string{"hello": "world"})
 })
-```
 
-### WebSocket
-
-Zen provides a full-featured WebSocket implementation with connection management, room-based broadcasting, and Redis pub/sub for horizontal scaling.
-
-```go
-import "github.com/Pavan-Silva/go-zen/ws"
-
-server := ws.NewServer()
-server.Run()
-defer server.Shutdown()
-
-server.Register(r, "GET /ws")
-```
-
-#### With Authentication
-
-```go
-jwtAuth := &auth.JWTAuth{Secret: []byte("key")}
-server.RegisterWithAuth(r, "GET /ws", jwtAuth)
-```
-
-#### Client Communication
-
-```go
-server.Register(r, "GET /ws", func(c *zen.Context) {
-    // Use server.Handle for non-auth handlers
+sse.HandleWithAuth(r, "GET /events", jwtAuth, func(c *zen.Context) error {
+    user := c.Get("user").(auth.User)
+    return sse.Send(c, "message", map[string]any{"from": user.ID})
 })
-
-// In handler, receive from client:
-func handler(client *ws.Client) {
-    for {
-        msg, ok := <-client.Send
-        if !ok {
-            break
-        }
-        // Process message
-    }
-}
 ```
 
-#### Rooms (Room-based Broadcasting)
+### WebSocket Integration
 
-Clients can join rooms to receive targeted broadcasts:
-
-```json
-{"type": "join", "room": "notifications"}
-```
-
-```json
-{"type": "leave", "room": "notifications"}
-```
-
-```json
-{"type": "message", "room": "notifications", "content": {"text": "Hello!"}}
-```
-
-#### Redis Pub/Sub for Horizontal Scaling
-
-For multi-instance deployments, use RedisHub:
+Zen doesn't include a WebSocket implementation. Instead, use `HandleRaw` to integrate any WebSocket library. The auth package provides helpers for authenticated routes.
 
 ```go
-import "github.com/Pavan-Silva/go-zen/ws"
+import "github.com/gorilla/websocket"
 
-rh, err := ws.NewRedisHub(ws.RedisConfig{
-    Addr: "localhost:6379",
-}, "ws:broadcast")
-if err != nil {
-    log.Fatal(err)
-}
-rh.Run()
-defer rh.Shutdown()
+upgrader := websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }}
 
-rh.Register(r, "GET /ws")
+r.HandleRaw("GET /ws", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+    conn, err := upgrader.Upgrade(w, req, nil)
+    if err != nil { return }
+    defer conn.Close()
+    // handle connection
+}))
 ```
+
+With authentication using `auth.WithAuthFunc`:
+
+```go
+import "github.com/Pavan-Silva/go-zen/auth"
+
+jwtAuth := &auth.JWTAuth{Secret: []byte("your-secret-key")}
+
+r.HandleRaw("GET /ws", auth.WithAuthFunc(func(w http.ResponseWriter, req *http.Request, user auth.User) {
+    log.Printf("user %s connected", user.ID)
+    conn, err := upgrader.Upgrade(w, req, nil)
+    if err != nil { return }
+    defer conn.Close()
+    // handle connection - user.ID available for authorization
+}, jwtAuth))
+```
+
+Low-level helpers are also available:
+
+```go
+// Wrap any http.Handler
+r.HandleRaw("GET /ws", auth.WithAuth(handler, jwtAuth))
+
+// Get user info in handler
+r.HandleRaw("GET /ws", auth.WithAuthFunc(func(w, r, user) {
+    // user.ID, user.Username, user.Roles available
+}, jwtAuth))
 ```
 
 ## Authentication
 
 The optional `auth` package supports multiple authenticator types: basic auth, JWT, OAuth2, OIDC, and session-based.
-All can be used with HTTP, WebSocket, and SSE routes.
+All can be used with HTTP and SSE routes.
 
 ### Basic Auth
 
@@ -463,7 +437,7 @@ r.Use(auth.RequireAuth(basicAuth))
 ### JWT
 
 ```go
-jwtAuth := &auth.JWTAuth{SecretKey: "your-secret-key"}
+jwtAuth := &auth.JWTAuth{Secret: []byte("your-secret-key")}
 r.Use(auth.RequireAuth(jwtAuth))
 ```
 
