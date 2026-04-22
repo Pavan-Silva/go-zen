@@ -3,6 +3,7 @@ package auth
 import (
 	"crypto/subtle"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/Pavan-Silva/go-zen"
@@ -31,12 +32,7 @@ type User struct {
 
 // HasRole checks if the user has a specific role.
 func (u User) HasRole(role string) bool {
-	for _, r := range u.Roles {
-		if r == role {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(u.Roles, role)
 }
 
 // Middleware creates HTTP middleware that authenticates requests.
