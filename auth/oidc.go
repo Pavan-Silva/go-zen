@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/golang-jwt/jwt/v5"
 )
 
 // OIDCUserInfo represents the user information returned by the userinfo endpoint.
@@ -34,6 +36,8 @@ type OIDCAuth struct {
 	UserInfoEndpoint string
 	// HTTPClient for making requests (optional, defaults to http.DefaultClient)
 	HTTPClient *http.Client
+	// ClaimsFunc for custom mapping (optional)
+	ClaimsFunc func(claims jwt.MapClaims) User
 }
 
 // Authenticate validates the access token by calling the userinfo endpoint.
@@ -63,26 +67,23 @@ func (o *OIDCAuth) Authenticate(r *http.Request) (User, error) {
 		return User{}, fmt.Errorf("failed to get user info: %w", err)
 	}
 
-	// Map OIDC claims to User struct
-	user := User{
-		ID:       userInfo.Sub,
-		Username: userInfo.PreferredUsername,
-		Claims: map[string]any{
-			"name":           userInfo.Name,
-			"email":          userInfo.Email,
-			"email_verified": userInfo.EmailVerified,
-			"given_name":     userInfo.GivenName,
-			"family_name":    userInfo.FamilyName,
-			"picture":        userInfo.Picture,
-			"locale":         userInfo.Locale,
-		},
+	claims := jwt.MapClaims{
+		"sub":                userInfo.Sub,
+		"name":               userInfo.Name,
+		"preferred_username": userInfo.PreferredUsername,
+		"email":              userInfo.Email,
+		"email_verified":     userInfo.EmailVerified,
+		"given_name":         userInfo.GivenName,
+		"family_name":        userInfo.FamilyName,
+		"picture":            userInfo.Picture,
+		"locale":             userInfo.Locale,
 	}
 
-	if user.Username == "" {
-		user.Username = userInfo.Email
+	if o.ClaimsFunc != nil {
+		return o.ClaimsFunc(claims), nil
 	}
 
-	return user, nil
+	return DefaultUserMapper(claims), nil
 }
 
 // getUserInfo calls the OIDC userinfo endpoint with the access token.
