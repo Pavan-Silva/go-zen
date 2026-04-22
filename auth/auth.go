@@ -1,12 +1,16 @@
 package auth
 
 import (
+	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/base64"
+	"fmt"
 	"net/http"
 	"slices"
 	"strings"
 
 	"github.com/Pavan-Silva/go-zen"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // Authenticator defines the interface for authentication logic.
@@ -63,7 +67,7 @@ func MiddlewareWithSkipper(auth Authenticator, onError func(*zen.Context), skip 
 			return
 		}
 
-		c.Set("user", user)
+		c.Set("user", &user)
 		next.ServeHTTP(c.Response, c.Request)
 	}
 }
@@ -94,7 +98,7 @@ func RequireRole(role string, onError func(*zen.Context)) func(*zen.Context, htt
 			return
 		}
 
-		user, ok := userVal.(User)
+		user, ok := userVal.(*User)
 		if !ok || !user.HasRole(role) {
 			onError(c)
 			return
@@ -108,8 +112,8 @@ func RequireRole(role string, onError func(*zen.Context)) func(*zen.Context, htt
 // Returns nil if not authenticated.
 func GetUser(c *zen.Context) *User {
 	if userVal := c.Get("user"); userVal != nil {
-		if user, ok := userVal.(User); ok {
-			return &user
+		if user, ok := userVal.(*User); ok {
+			return user
 		}
 	}
 	return nil
@@ -128,12 +132,21 @@ func SkipPaths(paths ...string) SkipFunc {
 }
 
 // SkipPrefixes returns a SkipFunc that bypasses authentication for matching path prefixes.
+// Uses sorted prefix slice with binary search for O(log n) lookups.
 func SkipPrefixes(prefixes ...string) SkipFunc {
+	slices.Sort(prefixes)
+
 	return func(r *http.Request) bool {
-		for _, prefix := range prefixes {
-			if strings.HasPrefix(r.URL.Path, prefix) {
-				return true
-			}
+		path := r.URL.Path
+		idx, found := slices.BinarySearch(prefixes, path)
+		if found {
+			return true
+		}
+		if idx > 0 && strings.HasPrefix(path, prefixes[idx-1]) {
+			return true
+		}
+		if idx < len(prefixes) && strings.HasPrefix(path, prefixes[idx]) {
+			return true
 		}
 		return false
 	}
@@ -153,17 +166,77 @@ func SkipMethodsAndPaths(method string, paths ...string) SkipFunc {
 
 // AuthenticateWS authenticates a WebSocket connection.
 // Call this in your WebSocket handler before proceeding.
-func AuthenticateWS(auth Authenticator, r *http.Request) (User, error) {
-	return auth.Authenticate(r)
+func AuthenticateWS(auth Authenticator, r *http.Request) (*User, error) {
+	user, err := auth.Authenticate(r)
+	if err != nil {
+		return nil, err
+	}
+	return &user, nil
 }
 
 // AuthenticateSSE authenticates an SSE request.
 // Call this in your SSE handler before proceeding.
-func AuthenticateSSE(auth Authenticator, r *http.Request) (User, error) {
-	return auth.Authenticate(r)
+func AuthenticateSSE(auth Authenticator, r *http.Request) (*User, error) {
+	user, err := auth.Authenticate(r)
+	if err != nil {
+		return nil, err
+	}
+	return &user, nil
 }
 
-// ValidatePassword securely compares passwords using constant-time comparison.
-func ValidatePassword(hashed, plain string) bool {
-	return subtle.ConstantTimeCompare([]byte(hashed), []byte(plain)) == 1
+// ValidatePassword securely validates a plaintext password against a stored hash.
+// It hashes the plain password using the same algorithm as storedHash and compares
+// using constant-time comparison to prevent timing attacks.
+// The storedHash should be in the format: algorithm$salt$hash (e.g., "sha256$salt$hash").
+func ValidatePassword(storedHash, plain string) bool {
+	if storedHash == "" || plain == "" {
+		return false
+	}
+
+	before, after, ok := strings.Cut(storedHash, "$")
+	if !ok {
+		return false
+	}
+
+	algorithm := before
+	rest := after
+	parts := strings.SplitN(rest, "$", 2)
+	if len(parts) != 2 {
+		return false
+	}
+
+	salt := parts[0]
+	existingHash := parts[1]
+
+	newHash, err := hashPassword(algorithm, plain, salt)
+	if err != nil {
+		return false
+	}
+
+	return subtle.ConstantTimeCompare([]byte(existingHash), []byte(newHash)) == 1
+}
+
+// HashPassword hashes a password using the specified algorithm.
+// Supported algorithms: "sha256", "bcrypt".
+// For bcrypt, salt is optional as bcrypt generates its own internally.
+func hashPassword(algorithm, password, salt string) (string, error) {
+	switch algorithm {
+	case "sha256":
+		if salt == "" {
+			return "", fmt.Errorf("salt is required for sha256")
+		}
+		data := []byte(password + salt)
+		hash := make([]byte, 32)
+		copy(hash, data)
+		for range 10000 {
+			h := sha256.Sum256(hash)
+			copy(hash, h[:])
+		}
+		return base64.RawURLEncoding.EncodeToString(hash), nil
+	case "bcrypt":
+		hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+		return string(hash), err
+	default:
+		return "", fmt.Errorf("unsupported hashing algorithm: %s", algorithm)
+	}
 }
