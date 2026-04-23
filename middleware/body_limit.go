@@ -89,6 +89,12 @@ func BodyLimitWithConfig(config BodyLimitMiddlewareConfig) zen.MiddlewareFunc {
 			return
 		}
 
+		// If content length is known and already over limit, fail fast.
+		if c.Request.ContentLength > limit {
+			http.Error(c.Response, http.StatusText(http.StatusRequestEntityTooLarge), http.StatusRequestEntityTooLarge)
+			return
+		}
+
 		// Wrap the request body with MaxBytesReader
 		c.Request.Body = http.MaxBytesReader(c.Response, c.Request.Body, limit)
 

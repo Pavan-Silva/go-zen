@@ -41,8 +41,12 @@ type middlewareHandler struct {
 
 // ServeHTTP implements http.Handler by calling the middleware function.
 // The Context is guaranteed to exist because Router.ServeHTTP creates it first.
-func (mh *middlewareHandler) ServeHTTP(_ http.ResponseWriter, r *http.Request) {
-	mh.m(FromRequest(r), mh.next)
+func (mh *middlewareHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	c := FromRequest(r)
+	if c != nil {
+		c.Response = w
+	}
+	mh.m(c, mh.next)
 }
 
 // zenHandler wraps a zen-style handler (func(*Context)).
@@ -52,8 +56,12 @@ type zenHandler struct {
 }
 
 // ServeHTTP implements http.Handler by extracting the Context and calling the handler.
-func (zh *zenHandler) ServeHTTP(_ http.ResponseWriter, r *http.Request) {
-	zh.fn(FromRequest(r))
+func (zh *zenHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	c := FromRequest(r)
+	if c != nil {
+		c.Response = w
+	}
+	zh.fn(c)
 }
 
 // contextAwareHandler wraps a middleware chain with Context creation/release.
@@ -66,6 +74,13 @@ type contextAwareHandler struct {
 
 // ServeHTTP implements http.Handler by creating a Context, running the chain, and releasing.
 func (h *contextAwareHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// Reuse existing Context when one is already attached (e.g. global middleware path).
+	if c := FromRequest(r); c != nil {
+		c.Response = w
+		h.chain.ServeHTTP(w, r)
+		return
+	}
+
 	c, r := newContext(w, r)
 	defer releaseContext(c)
 	h.chain.ServeHTTP(w, r)

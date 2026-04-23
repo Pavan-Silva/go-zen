@@ -12,6 +12,10 @@ type BasicAuth struct {
 }
 
 func (b *BasicAuth) Authenticate(r *http.Request) (User, error) {
+	if b == nil || b.Validate == nil {
+		return User{}, errors.New("basic auth validator is not configured")
+	}
+
 	username, password, ok := r.BasicAuth()
 	if !ok {
 		return User{}, errors.New("missing basic auth")

@@ -34,17 +34,19 @@ type OIDCAuth struct {
 	ClientID string
 	// UserInfoEndpoint is the userinfo endpoint URL (optional, defaults to issuer + "/oauth2/v2/userinfo" for Google)
 	UserInfoEndpoint string
-	// HTTPClient for making requests (optional, defaults to http.DefaultClient)
+	// HTTPClient for making requests (optional, defaults to a shared client with timeout)
 	HTTPClient *http.Client
 	// ClaimsFunc for custom mapping (optional)
 	ClaimsFunc func(claims jwt.MapClaims) User
 }
 
+var defaultAuthHTTPClient = &http.Client{Timeout: 10 * time.Second}
+
 // Authenticate validates the access token by calling the userinfo endpoint.
 func (o *OIDCAuth) Authenticate(r *http.Request) (User, error) {
 	client := o.HTTPClient
 	if client == nil {
-		client = &http.Client{Timeout: 10 * time.Second}
+		client = defaultAuthHTTPClient
 	}
 
 	userInfoEndpoint := o.UserInfoEndpoint

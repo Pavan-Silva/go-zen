@@ -123,17 +123,14 @@ func New(addr string, config ...Config) *Router {
 }
 
 // ServeHTTP is the main entry point for every HTTP request.
-// If middleware is registered, it creates a zen Context once, attaches it to the request,
-// and passes it through the middleware chain. Otherwise, it delegates directly to the mux.
-//
-// This design ensures:
-// - Context is created/destroyed exactly once per request (minimal overhead).
-// - Middleware is pre-built at setup time (no per-request chain building).
-// - No-middleware code path (bypass) is ultra-fast (direct mux call).
+// It creates a zen Context once per request so zen handlers and middleware always
+// receive a non-nil Context. The request is then passed through the middleware
+// chain (if configured) or directly to the mux.
 func (s *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	c, r := newContext(w, r)
+	defer releaseContext(c)
+
 	if s.hasMiddleware {
-		c, r := newContext(w, r)
-		defer releaseContext(c)
 		s.chain.ServeHTTP(w, r)
 	} else {
 		s.mux.ServeHTTP(w, r)
