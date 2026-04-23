@@ -360,20 +360,15 @@ Built-in validation runs automatically during `BindJSON` when destination is a s
 
 ## Streaming and Real-time
 
-Zen supports SSE through an optional package. WebSockets integrate with any library via `HandleRaw`.
+Zen supports SSE directly via `Context.SSEvent`. WebSockets integrate with any library via `HandleRaw`.
 
 ### SSE
 
 ```go
-import "github.com/Pavan-Silva/go-zen/sse"
-
-sse.Handle(r, "GET /events", func(c *zen.Context) error {
-    return sse.Send(c, "message", map[string]string{"hello": "world"})
-})
-
-sse.HandleWithAuth(r, "GET /events", jwtAuth, func(c *zen.Context) error {
-    user := c.Get("user").(auth.User)
-    return sse.Send(c, "message", map[string]any{"from": user.ID})
+r.Handle("GET /events", func(c *zen.Context) {
+    if err := c.SSEvent("message", map[string]string{"hello": "world"}); err != nil {
+        c.Error(http.StatusInternalServerError, err.Error())
+    }
 })
 ```
 
@@ -494,9 +489,19 @@ r.Handle("GET /admin/users", func(c *zen.Context) {
 ### SSE authentication
 
 ```go
-sse.HandleWithAuth(r, "GET /events", myAuthenticator, func(c *zen.Context) error {
+myAuthenticator := &auth.JWTAuth{Secret: []byte("your-secret-key")}
+r.Handle("GET /events", func(c *zen.Context) {
+    authUser, err := myAuthenticator.Authenticate(c.Request)
+    if err != nil {
+        c.Error(http.StatusUnauthorized, http.StatusText(http.StatusUnauthorized))
+        return
+    }
+    c.Set("user", &authUser)
+
     user := auth.GetUser(c)
-    return sse.Send(c, "welcome", map[string]string{"user": user.Username})
+    if err := c.SSEvent("welcome", map[string]string{"user": user.Username}); err != nil {
+        c.Error(http.StatusInternalServerError, err.Error())
+    }
 })
 ```
 
