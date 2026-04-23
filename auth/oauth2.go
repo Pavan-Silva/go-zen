@@ -42,7 +42,7 @@ type OAuth2Auth struct {
 func (o *OAuth2Auth) Authenticate(r *http.Request) (User, error) {
 	client := o.HTTPClient
 	if client == nil {
-		client = &http.Client{Timeout: 10 * time.Second}
+		client = defaultAuthHTTPClient
 	}
 
 	authHeader := r.Header.Get("Authorization")

@@ -18,6 +18,16 @@ type JWTAuth struct {
 }
 
 func (j *JWTAuth) Authenticate(r *http.Request) (User, error) {
+	if j == nil {
+		return User{}, errors.New("jwt auth is not configured")
+	}
+	if j.SigningMethod == nil {
+		return User{}, errors.New("jwt signing method is not configured")
+	}
+	if len(j.Secret) == 0 {
+		return User{}, errors.New("jwt secret is not configured")
+	}
+
 	authHeader := r.Header.Get("Authorization")
 	if authHeader == "" {
 		return User{}, errors.New("missing authorization header")

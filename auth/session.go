@@ -17,6 +17,13 @@ type SessionStore interface {
 }
 
 func (s *SessionAuth) Authenticate(r *http.Request) (User, error) {
+	if s == nil || s.Store == nil {
+		return User{}, errors.New("session store is not configured")
+	}
+	if s.CookieName == "" {
+		return User{}, errors.New("session cookie name is not configured")
+	}
+
 	cookie, err := r.Cookie(s.CookieName)
 	if err != nil {
 		return User{}, errors.New("missing session cookie")

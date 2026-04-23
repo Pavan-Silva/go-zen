@@ -113,7 +113,7 @@ func (c *Context) Param(key string) string {
 //	}
 //	// Process raw bytes, e.g. XML parsing, custom format, etc.
 func (c *Context) Body() ([]byte, error) {
-	lr := io.LimitReader(c.Request.Body, maxBodyBytes)
+	lr := io.LimitReader(c.Request.Body, maxBodyBytes+1)
 	b, err := io.ReadAll(lr)
 	closeErr := c.Request.Body.Close()
 	if err != nil {
@@ -121,6 +121,12 @@ func (c *Context) Body() ([]byte, error) {
 			return nil, fmt.Errorf("%w; body close error: %v", err, closeErr)
 		}
 		return nil, err
+	}
+	if int64(len(b)) > maxBodyBytes {
+		if closeErr != nil {
+			return nil, fmt.Errorf("http: request body too large (max %d bytes); body close error: %v", maxBodyBytes, closeErr)
+		}
+		return nil, fmt.Errorf("http: request body too large (max %d bytes)", maxBodyBytes)
 	}
 	if closeErr != nil {
 		return nil, closeErr
@@ -141,22 +147,22 @@ func (c *Context) Body() ([]byte, error) {
 //	// file.Filename, file.Size, file.Header (e.g., Content-Type available)
 func (c *Context) BindFile(fieldName string) (*multipart.FileHeader, []byte, error) {
 	if err := c.Request.ParseMultipartForm(maxBodyBytes); err != nil {
-		return nil, nil, fmt.Errorf("zen: ParseMultipartForm error: %w", err)
+		return nil, nil, fmt.Errorf("http: ParseMultipartForm error: %w", err)
 	}
 
 	file, header, err := c.Request.FormFile(fieldName)
 	if err != nil {
-		return nil, nil, fmt.Errorf("zen: FormFile error: %w", err)
+		return nil, nil, fmt.Errorf("http: FormFile error: %w", err)
 	}
 	defer func() {
 		if cerr := file.Close(); cerr != nil && err == nil {
-			err = fmt.Errorf("zen: file close error: %w", cerr)
+			err = fmt.Errorf("http: file close error: %w", cerr)
 		}
 	}()
 
 	content, err := io.ReadAll(io.LimitReader(file, maxBodyBytes))
 	if err != nil {
-		return nil, nil, fmt.Errorf("zen: file read error: %w", err)
+		return nil, nil, fmt.Errorf("http: file read error: %w", err)
 	}
 
 	return header, content, nil
@@ -177,28 +183,28 @@ func (c *Context) BindFile(fieldName string) (*multipart.FileHeader, []byte, err
 //	}
 func (c *Context) BindFiles(fieldName string) ([]UploadedFile, error) {
 	if err := c.Request.ParseMultipartForm(maxBodyBytes); err != nil {
-		return nil, fmt.Errorf("zen: ParseMultipartForm error: %w", err)
+		return nil, fmt.Errorf("http: ParseMultipartForm error: %w", err)
 	}
 
 	formFiles := c.Request.MultipartForm.File[fieldName]
 	if len(formFiles) == 0 {
-		return nil, fmt.Errorf("zen: no files found for field %q", fieldName)
+		return nil, fmt.Errorf("http: no files found for field %q", fieldName)
 	}
 
 	var result []UploadedFile
 	for _, header := range formFiles {
 		file, err := header.Open()
 		if err != nil {
-			return nil, fmt.Errorf("zen: open file error: %w", err)
+			return nil, fmt.Errorf("http: open file error: %w", err)
 		}
 
 		content, err := io.ReadAll(io.LimitReader(file, maxBodyBytes))
 		closeErr := file.Close()
 		if err != nil {
-			return nil, fmt.Errorf("zen: file read error: %w", err)
+			return nil, fmt.Errorf("http: file read error: %w", err)
 		}
 		if closeErr != nil {
-			return nil, fmt.Errorf("zen: file close error: %w", closeErr)
+			return nil, fmt.Errorf("http: file close error: %w", closeErr)
 		}
 
 		result = append(result, UploadedFile{

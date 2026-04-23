@@ -13,6 +13,10 @@ type APIKeyAuth struct {
 }
 
 func (a *APIKeyAuth) Authenticate(r *http.Request) (User, error) {
+	if a == nil || a.Validate == nil {
+		return User{}, errors.New("api key validator is not configured")
+	}
+
 	var key string
 
 	if a.HeaderName != "" {

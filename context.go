@@ -61,6 +61,10 @@ func (c *Context) reset(w http.ResponseWriter, r *http.Request) {
 	c.Response = w
 	c.Request = r
 	c.queryCache = nil
+	// Clear inline slots to avoid retaining references across pooled requests.
+	for i := 0; i < c.storeLen; i++ {
+		c.store[i] = kv{}
+	}
 	c.storeLen = 0
 	// Clear overflow map by deleting all keys (keeps capacity for next use).
 	for k := range c.overflow {
