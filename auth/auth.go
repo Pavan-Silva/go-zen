@@ -52,7 +52,7 @@ func Middleware(auth Authenticator, onError func(*zen.Context)) func(*zen.Contex
 func MiddlewareWithSkipper(auth Authenticator, onError func(*zen.Context), skip SkipFunc) func(*zen.Context, http.Handler) {
 	if onError == nil {
 		onError = func(c *zen.Context) {
-			c.Error(http.StatusUnauthorized, "authentication required")
+			c.Error(http.StatusUnauthorized, http.StatusText(http.StatusUnauthorized))
 		}
 	}
 
@@ -88,7 +88,7 @@ func RequireAuth(auth Authenticator, skip ...SkipFunc) func(*zen.Context, http.H
 func RequireRole(role string, onError func(*zen.Context)) func(*zen.Context, http.Handler) {
 	if onError == nil {
 		onError = func(c *zen.Context) {
-			c.Error(http.StatusForbidden, "insufficient permissions")
+			c.Error(http.StatusForbidden, http.StatusText(http.StatusForbidden))
 		}
 	}
 
@@ -285,7 +285,7 @@ func DefaultUserMapper(claims jwt.MapClaims) User {
 func WithAuth(handler http.Handler, auth Authenticator) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if _, err := auth.Authenticate(r); err != nil {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 			return
 		}
 		handler.ServeHTTP(w, r)
@@ -298,7 +298,7 @@ func WithAuthFunc(handler func(w http.ResponseWriter, r *http.Request, user User
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		user, err := auth.Authenticate(r)
 		if err != nil {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 			return
 		}
 		handler(w, r, user)
