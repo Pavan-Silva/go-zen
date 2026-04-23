@@ -13,7 +13,7 @@ import (
 
 const contentType = "text/event-stream;charset=utf-8"
 
-var ErrFlusherUnsupported = errors.New("zen/sse: SSE requires http.Flusher")
+var ErrFlusherUnsupported = errors.New("sse: SSE requires http.Flusher")
 
 // Send writes a Server-Sent Event to the client.
 // It sets required SSE headers and flushes the response.
@@ -84,7 +84,7 @@ func HandleWithAuth(r *zen.Router, pattern string, authenticator auth.Authentica
 	r.Handle(pattern, func(c *zen.Context) {
 		user, err := auth.AuthenticateSSE(authenticator, c.Request)
 		if err != nil {
-			c.Error(http.StatusUnauthorized, "authentication required")
+			c.Error(http.StatusUnauthorized, http.StatusText(http.StatusUnauthorized))
 			return
 		}
 

@@ -16,58 +16,6 @@ import (
 	"github.com/Pavan-Silva/go-zen/system"
 )
 
-// MiddlewareFunc is the zen-native middleware signature.
-// Middleware receives the zen Context and the next handler in the chain.
-// Call next.ServeHTTP() to pass control downstream; return without calling it to
-// short-circuit execution (useful for auth, logging, etc).
-//
-// Middleware is zero-allocation by design: no closures are created per request,
-// and the Context is guaranteed to be non-nil due to the Router's ServeHTTP logic.
-//
-// Example:
-//
-//	func Logger(c *zen.Context, next http.Handler) {
-//	    start := time.Now()
-//	    log.Printf("%s %s", c.Request.Method, c.Request.URL.Path)
-//	    next.ServeHTTP(c.Response, c.Request)
-//	    log.Printf("took %v", time.Since(start))
-//	}
-//
-//	func RequireAuth(c *zen.Context, next http.Handler) {
-//	    token := c.Request.Header.Get("Authorization")
-//	    if token == "" {
-//	        c.Error(http.StatusUnauthorized, "unauthorized")
-//	        return  // short-circuit: don't call next
-//	    }
-//	    next.ServeHTTP(c.Response, c.Request)
-//	}
-type MiddlewareFunc func(*Context, http.Handler)
-
-// middlewareHandler is a chain node in the middleware stack.
-// It holds a MiddlewareFunc and the next handler, written to avoid allocations.
-// Per-request work is minimal: extract Context from request and call the middleware.
-type middlewareHandler struct {
-	m    MiddlewareFunc
-	next http.Handler
-}
-
-// ServeHTTP implements http.Handler by calling the middleware function.
-// The Context is guaranteed to exist because Router.ServeHTTP creates it first.
-func (mh *middlewareHandler) ServeHTTP(_ http.ResponseWriter, r *http.Request) {
-	mh.m(FromRequest(r), mh.next)
-}
-
-// zenHandler wraps a zen-style handler (func(*Context)).
-// It's registered on the mux to extract the Context from the request exactly once.
-type zenHandler struct {
-	fn func(*Context)
-}
-
-// ServeHTTP implements http.Handler by extracting the Context and calling the handler.
-func (zh *zenHandler) ServeHTTP(_ http.ResponseWriter, r *http.Request) {
-	zh.fn(FromRequest(r))
-}
-
 // Router is the main entry point for a zen application.
 // It wraps http.Server and http.ServeMux, adding middleware support and Context pooling.
 // The design prioritizes performance: middleware is pre-built at setup time (no per-request work),

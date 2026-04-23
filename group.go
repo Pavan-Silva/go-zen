@@ -175,18 +175,3 @@ func (r *Router) handleWithMiddleware(pattern string, handler func(*Context), mi
 	// Wrap with context creation and release
 	r.mux.Handle(pattern, &contextAwareHandler{chain: h})
 }
-
-// contextAwareHandler wraps a middleware chain with Context creation/release.
-// This handler is used when routes have group-level middleware attached.
-// It ensures the Context is created once and available to all middleware/handlers,
-// and is properly released back to the pool after the request.
-type contextAwareHandler struct {
-	chain http.Handler
-}
-
-// ServeHTTP implements http.Handler by creating a Context, running the chain, and releasing.
-func (h *contextAwareHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	c, r := newContext(w, r)
-	defer releaseContext(c)
-	h.chain.ServeHTTP(w, r)
-}
