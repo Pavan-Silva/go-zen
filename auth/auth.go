@@ -165,26 +165,6 @@ func SkipMethodsAndPaths(method string, paths ...string) SkipFunc {
 	}
 }
 
-// AuthenticateWS authenticates a WebSocket connection.
-// Call this in your WebSocket handler before proceeding.
-func AuthenticateWS(auth Authenticator, r *http.Request) (*User, error) {
-	user, err := auth.Authenticate(r)
-	if err != nil {
-		return nil, err
-	}
-	return &user, nil
-}
-
-// AuthenticateSSE authenticates an SSE request.
-// Call this in your SSE handler before proceeding.
-func AuthenticateSSE(auth Authenticator, r *http.Request) (*User, error) {
-	user, err := auth.Authenticate(r)
-	if err != nil {
-		return nil, err
-	}
-	return &user, nil
-}
-
 // ValidatePassword securely validates a plaintext password against a stored hash.
 // It hashes the plain password using the same algorithm as storedHash and compares
 // using constant-time comparison to prevent timing attacks.
