@@ -40,6 +40,10 @@ type OAuth2Auth struct {
 
 // Authenticate validates the access token using OAuth2 token introspection.
 func (o *OAuth2Auth) Authenticate(r *http.Request) (User, error) {
+	if o == nil {
+		return User{}, fmt.Errorf("oauth2 auth is not configured")
+	}
+
 	client := o.HTTPClient
 	if client == nil {
 		client = defaultAuthHTTPClient

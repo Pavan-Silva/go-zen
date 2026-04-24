@@ -44,6 +44,10 @@ var defaultAuthHTTPClient = &http.Client{Timeout: 10 * time.Second}
 
 // Authenticate validates the access token by calling the userinfo endpoint.
 func (o *OIDCAuth) Authenticate(r *http.Request) (User, error) {
+	if o == nil {
+		return User{}, fmt.Errorf("oidc auth is not configured")
+	}
+
 	client := o.HTTPClient
 	if client == nil {
 		client = defaultAuthHTTPClient
