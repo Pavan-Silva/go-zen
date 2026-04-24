@@ -8,8 +8,9 @@ import (
 	"reflect"
 )
 
-// maxBodyBytes limits request body size to 1MB to prevent memory exhaustion attacks.
-const maxBodyBytes = 1 << 20
+// defaultMultipartMemory defines the maximum memory used when parsing multipart form data.
+// Default is 32 MiB.
+const defaultMultipartMemory int64 = 32 << 20
 
 // BindJSON parses the request body as JSON and decodes it into dest.
 // If dest is a struct, it also runs struct validation using the registered validator.
@@ -32,14 +33,25 @@ const maxBodyBytes = 1 << 20
 //	    return
 //	}
 func (c *Context) BindJSON(dest any) error {
-	lr := io.LimitReader(c.Request.Body, maxBodyBytes)
+	dec := json.NewDecoder(c.Request.Body)
 	var err error
-	if err = json.NewDecoder(lr).Decode(dest); err != nil {
+	if err = dec.Decode(dest); err != nil {
 		closeErr := c.Request.Body.Close()
 		if closeErr != nil {
 			return fmt.Errorf("%w; body close error: %v", err, closeErr)
 		}
 		return err
+	}
+	// Ensure there is no trailing data after a single JSON value.
+	if err = dec.Decode(&struct{}{}); err != io.EOF {
+		closeErr := c.Request.Body.Close()
+		if closeErr != nil {
+			return fmt.Errorf("request body must contain only one JSON object; body close error: %v", closeErr)
+		}
+		if err == nil {
+			return fmt.Errorf("request body must contain only one JSON object")
+		}
+		return fmt.Errorf("request body must contain only one JSON object: %w", err)
 	}
 
 	if err = c.Request.Body.Close(); err != nil {
@@ -47,7 +59,7 @@ func (c *Context) BindJSON(dest any) error {
 	}
 
 	val := reflect.ValueOf(dest)
-	if val.Kind() == reflect.Ptr {
+	if val.Kind() == reflect.Pointer {
 		val = val.Elem()
 	}
 	if val.Kind() == reflect.Struct {
@@ -113,20 +125,13 @@ func (c *Context) Param(key string) string {
 //	}
 //	// Process raw bytes, e.g. XML parsing, custom format, etc.
 func (c *Context) Body() ([]byte, error) {
-	lr := io.LimitReader(c.Request.Body, maxBodyBytes+1)
-	b, err := io.ReadAll(lr)
+	b, err := io.ReadAll(c.Request.Body)
 	closeErr := c.Request.Body.Close()
 	if err != nil {
 		if closeErr != nil {
 			return nil, fmt.Errorf("%w; body close error: %v", err, closeErr)
 		}
 		return nil, err
-	}
-	if int64(len(b)) > maxBodyBytes {
-		if closeErr != nil {
-			return nil, fmt.Errorf("http: request body too large (max %d bytes); body close error: %v", maxBodyBytes, closeErr)
-		}
-		return nil, fmt.Errorf("http: request body too large (max %d bytes)", maxBodyBytes)
 	}
 	if closeErr != nil {
 		return nil, closeErr
@@ -146,7 +151,7 @@ func (c *Context) Body() ([]byte, error) {
 //	}
 //	// file.Filename, file.Size, file.Header (e.g., Content-Type available)
 func (c *Context) BindFile(fieldName string) (*multipart.FileHeader, []byte, error) {
-	if err := c.Request.ParseMultipartForm(maxBodyBytes); err != nil {
+	if err := c.Request.ParseMultipartForm(defaultMultipartMemory); err != nil {
 		return nil, nil, fmt.Errorf("http: ParseMultipartForm error: %w", err)
 	}
 
@@ -160,7 +165,7 @@ func (c *Context) BindFile(fieldName string) (*multipart.FileHeader, []byte, err
 		}
 	}()
 
-	content, err := io.ReadAll(io.LimitReader(file, maxBodyBytes))
+	content, err := io.ReadAll(file)
 	if err != nil {
 		return nil, nil, fmt.Errorf("http: file read error: %w", err)
 	}
@@ -182,7 +187,7 @@ func (c *Context) BindFile(fieldName string) (*multipart.FileHeader, []byte, err
 //	    fmt.Println(file.Header.Filename, len(file.Content))
 //	}
 func (c *Context) BindFiles(fieldName string) ([]UploadedFile, error) {
-	if err := c.Request.ParseMultipartForm(maxBodyBytes); err != nil {
+	if err := c.Request.ParseMultipartForm(defaultMultipartMemory); err != nil {
 		return nil, fmt.Errorf("http: ParseMultipartForm error: %w", err)
 	}
 
@@ -198,7 +203,7 @@ func (c *Context) BindFiles(fieldName string) ([]UploadedFile, error) {
 			return nil, fmt.Errorf("http: open file error: %w", err)
 		}
 
-		content, err := io.ReadAll(io.LimitReader(file, maxBodyBytes))
+		content, err := io.ReadAll(file)
 		closeErr := file.Close()
 		if err != nil {
 			return nil, fmt.Errorf("http: file read error: %w", err)

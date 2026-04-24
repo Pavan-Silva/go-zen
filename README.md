@@ -245,6 +245,16 @@ config.Skipper = func(r *http.Request) bool {
 r.Use(middleware.BodyLimitWithConfig(config))
 ```
 
+You can also apply a per-handler body limit manually:
+
+```go
+r.Handle("POST /upload", func(c *zen.Context) {
+    const maxUploadSize = int64(10 << 20) // 10MB
+    c.Request.Body = http.MaxBytesReader(c.Response, c.Request.Body, maxUploadSize)
+    // proceed with BindJSON / Body / BindFile...
+})
+```
+
 ### Built-in middleware
 
 - `middleware.Logger` — request logging with method, path, status, latency, client IP, and response size
