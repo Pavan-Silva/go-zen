@@ -43,7 +43,7 @@ config.ReadTimeout = 10 * time.Second
 config.WriteTimeout = 15 * time.Second
 config.IdleTimeout = 90 * time.Second
 
-r := zen.New(":8080", config)
+app := zen.New(":8080", config)
 ````
 
 Or create a config from scratch:
@@ -57,7 +57,7 @@ config := zen.Config{
     MaxHeaderBytes:    2 << 20,
 }
 
-r := zen.New(":8080", config)
+app := zen.New(":8080", config)
 ```
 
 You can also replace the server entirely:
@@ -66,7 +66,7 @@ You can also replace the server entirely:
 config := zen.Config{
     Server: &http.Server{Addr: ":8080"},
 }
-r := zen.New(":8080", config)
+app := zen.New(":8080", config)
 ```
 
 ## Context and Handlers
@@ -74,7 +74,7 @@ r := zen.New(":8080", config)
 Handlers receive a `*zen.Context` and use request/response helpers directly.
 
 ```go
-r.Handle("POST /users", func(c *zen.Context) {
+app.Handle("POST /users", func(c *zen.Context) {
     var payload struct {
         Name  string `json:"name" validate:"required"`
         Email string `json:"email" validate:"required,email"`
@@ -94,7 +94,7 @@ You can also return XML responses:
 ```go
 import "encoding/xml"
 
-r.Handle("GET /users/{id}/xml", func(c *zen.Context) {
+app.Handle("GET /users/{id}/xml", func(c *zen.Context) {
     userID := c.Param("id")
     user := struct {
         XMLName xml.Name `xml:"user"`
@@ -111,7 +111,7 @@ r.Handle("GET /users/{id}/xml", func(c *zen.Context) {
 HTML responses:
 
 ```go
-r.Handle("GET /page", func(c *zen.Context) {
+app.Handle("GET /page", func(c *zen.Context) {
     html := `
         <!DOCTYPE html>
         <html>
@@ -126,11 +126,11 @@ r.Handle("GET /page", func(c *zen.Context) {
 Plain text responses:
 
 ```go
-r.Handle("GET /health", func(c *zen.Context) {
+app.Handle("GET /health", func(c *zen.Context) {
     c.String(http.StatusOK, "OK")
 })
 
-r.Handle("GET /token", func(c *zen.Context) {
+app.Handle("GET /token", func(c *zen.Context) {
     c.String(http.StatusOK, "your-secret-token")
 })
 ```
@@ -138,7 +138,7 @@ r.Handle("GET /token", func(c *zen.Context) {
 No-content responses:
 
 ```go
-r.Handle("DELETE /items/{id}", func(c *zen.Context) {
+app.Handle("DELETE /items/{id}", func(c *zen.Context) {
     c.NoContent(http.StatusNoContent)
 })
 ```
@@ -146,7 +146,7 @@ r.Handle("DELETE /items/{id}", func(c *zen.Context) {
 Redirects:
 
 ```go
-r.Handle("GET /old-path", func(c *zen.Context) {
+app.Handle("GET /old-path", func(c *zen.Context) {
     c.Redirect(http.StatusMovedPermanently, "/new-path")
 })
 ```
@@ -154,15 +154,15 @@ r.Handle("GET /old-path", func(c *zen.Context) {
 Serve files:
 
 ```go
-r.Handle("GET /download/report", func(c *zen.Context) {
+app.Handle("GET /download/report", func(c *zen.Context) {
     c.File("/tmp/report.pdf")
 })
 
-r.Handle("GET /download/attachment", func(c *zen.Context) {
+app.Handle("GET /download/attachment", func(c *zen.Context) {
     c.Attachment("/tmp/report.pdf", "monthly-report.pdf")
 })
 
-r.Handle("GET /image", func(c *zen.Context) {
+app.Handle("GET /image", func(c *zen.Context) {
     c.Inline("/tmp/image.png")
 })
 ```
@@ -170,7 +170,7 @@ r.Handle("GET /image", func(c *zen.Context) {
 Blob responses:
 
 ```go
-r.Handle("GET /csv", func(c *zen.Context) {
+app.Handle("GET /csv", func(c *zen.Context) {
     data := []byte(`0306703,0035866,NO_ACTION,06/19/2006
 0086003,"0005866",UPDATED,06/19/2006`)
     c.Blob(http.StatusOK, "text/csv", data)
@@ -180,7 +180,7 @@ r.Handle("GET /csv", func(c *zen.Context) {
 Or Stream responses:
 
 ```go
-r.Handle("GET /image-stream", func(c *zen.Context) {
+app.Handle("GET /image-stream", func(c *zen.Context) {
     f, err := os.Open("/tmp/image.png")
     if err != nil {
         c.Error(http.StatusInternalServerError, err.Error())
@@ -194,7 +194,7 @@ r.Handle("GET /image-stream", func(c *zen.Context) {
 You can also read query and path parameters:
 
 ```go
-r.Handle("GET /users/{id}", func(c *zen.Context) {
+app.Handle("GET /users/{id}", func(c *zen.Context) {
     page := c.QueryParam("page")
     userID := c.Param("id")
     c.JSON(http.StatusOK, map[string]string{"id": userID, "page": page})
@@ -208,8 +208,8 @@ r.Handle("GET /users/{id}", func(c *zen.Context) {
 - `c.Param(name)`
 - `c.BindJSON(dest)`
 - `c.BindForm(dest)`
-- `c.BindFile(field)`
-- `c.BindFiles(field)`
+- `c.FormFile(field)`
+- `c.FormFiles(field)`
 - `c.Body()`
 - `c.JSON(status, data)`
 - `c.XML(status, data)`
@@ -231,10 +231,10 @@ Global middleware is registered with `r.Use(...)`.
 Middleware executes in registration order and is pre-chained at startup.
 
 ```go
-r.Use(middleware.Recover, middleware.Logger, middleware.CORS(corsConfig))
+app.Use(middleware.Recover, middleware.Logger, middleware.CORS(corsConfig))
 
 // Limit request body to 2MB
-r.Use(middleware.BodyLimit("2M"))
+app.Use(middleware.BodyLimit("2M"))
 
 // Or with custom config and skipper
 config := middleware.BodyLimitConfig()
@@ -242,16 +242,16 @@ config.Limit = "1M"
 config.Skipper = func(r *http.Request) bool {
     return r.URL.Path == "/upload/large"
 }
-r.Use(middleware.BodyLimitWithConfig(config))
+app.Use(middleware.BodyLimitWithConfig(config))
 ```
 
 You can also apply a per-handler body limit manually:
 
 ```go
-r.Handle("POST /upload", func(c *zen.Context) {
+app.Handle("POST /upload", func(c *zen.Context) {
     const maxUploadSize = int64(10 << 20) // 10MB
     c.Request.Body = http.MaxBytesReader(c.Response, c.Request.Body, maxUploadSize)
-    // proceed with BindJSON / Body / BindFile...
+    // proceed with BindJSON / Body / FormFile...
 })
 ```
 
@@ -271,7 +271,7 @@ Zen provides built-in support for serving static files and directories.
 Serve a single file for a specific route:
 
 ```go
-r.File("GET /", "public/index.html")
+app.File("GET /", "public/index.html")
 ```
 
 ### Directory Serving
@@ -279,8 +279,8 @@ r.File("GET /", "public/index.html")
 Serve files from a local directory:
 
 ```go
-r.Static("/images", "assets/images")
-r.Static("/css", "public/css")
+app.Static("/images", "assets/images")
+app.Static("/css", "public/css")
 ```
 
 ### Embedded Files
@@ -297,13 +297,13 @@ import (
 var images embed.FS
 
 func main() {
-    r := zen.New(":8080")
+    app := zen.New(":8080")
 
     // Serve embedded files
     imagesFS, _ := fs.Sub(images, "assets/images")
-    r.StaticFS("/images", imagesFS)
+    app.StaticFS("/images", imagesFS)
 
-    r.ListenAndServe()
+    app.Run()
 }
 ```
 
@@ -312,7 +312,7 @@ func main() {
 Use route groups to apply prefixes and middleware to sets of handlers.
 
 ```go
-api := r.Group("/api", authMiddleware)
+api := app.Group("/api", authMiddleware)
 api.Handle("GET /users", listUsers)
 api.Handle("POST /users", createUser)
 
@@ -327,7 +327,7 @@ Group middleware is inherited by subgroup routes.
 Zen supports request binding for JSON, form data, multipart uploads, and raw request bodies.
 
 ```go
-r.Handle("POST /submit", func(c *zen.Context) {
+app.Handle("POST /submit", func(c *zen.Context) {
     var form struct {
         Name  string `form:"name" validate:"required"`
         Email string `form:"email" validate:"required,email"`
@@ -343,8 +343,8 @@ r.Handle("POST /submit", func(c *zen.Context) {
 ```
 
 ```go
-r.Handle("POST /upload", func(c *zen.Context) {
-    header, content, err := c.BindFile("avatar")
+app.Handle("POST /upload", func(c *zen.Context) {
+    header, content, err := c.FormFile("avatar")
     if err != nil {
         c.Error(http.StatusBadRequest, err.Error())
         return
@@ -355,7 +355,7 @@ r.Handle("POST /upload", func(c *zen.Context) {
 ```
 
 ```go
-r.Handle("POST /data", func(c *zen.Context) {
+app.Handle("POST /data", func(c *zen.Context) {
     body, err := c.Body()
     if err != nil {
         c.Error(http.StatusInternalServerError, "failed to read body")
@@ -375,7 +375,7 @@ Zen supports SSE directly via `Context.SSEvent`. WebSockets integrate with any l
 ### SSE
 
 ```go
-r.Handle("GET /events", func(c *zen.Context) {
+app.Handle("GET /events", func(c *zen.Context) {
     if err := c.SSEvent("message", map[string]string{"hello": "world"}); err != nil {
         c.Error(http.StatusInternalServerError, err.Error())
     }
@@ -391,7 +391,7 @@ import "github.com/gorilla/websocket"
 
 upgrader := websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }}
 
-r.HandleRaw("GET /ws", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+app.HandleRaw("GET /ws", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
     conn, err := upgrader.Upgrade(w, req, nil)
     if err != nil { return }
     defer conn.Close()
@@ -406,7 +406,7 @@ import "github.com/Pavan-Silva/go-zen/auth"
 
 jwtAuth := &auth.JWTAuth{Secret: []byte("your-secret-key")}
 
-r.HandleRaw("GET /ws", auth.WithAuthFunc(func(w http.ResponseWriter, req *http.Request, user auth.User) {
+app.HandleRaw("GET /ws", auth.WithAuthFunc(func(w http.ResponseWriter, req *http.Request, user auth.User) {
     log.Printf("user %s connected", user.ID)
     conn, err := upgrader.Upgrade(w, req, nil)
     if err != nil { return }
@@ -419,10 +419,10 @@ Low-level helpers are also available:
 
 ```go
 // Wrap any http.Handler
-r.HandleRaw("GET /ws", auth.WithAuth(handler, jwtAuth))
+app.HandleRaw("GET /ws", auth.WithAuth(handler, jwtAuth))
 
 // Get user info in handler
-r.HandleRaw("GET /ws", auth.WithAuthFunc(func(w, r, user) {
+app.HandleRaw("GET /ws", auth.WithAuthFunc(func(w, r, user) {
     // user.ID, user.Username, user.Roles available
 }, jwtAuth))
 ```
@@ -436,14 +436,14 @@ All can be used with HTTP and SSE routes.
 
 ```go
 basicAuth := &auth.BasicAuth{ValidatePassword: auth.ValidatePassword}
-r.Use(auth.RequireAuth(basicAuth))
+app.Use(auth.RequireAuth(basicAuth))
 ```
 
 ### JWT
 
 ```go
 jwtAuth := &auth.JWTAuth{Secret: []byte("your-secret-key")}
-r.Use(auth.RequireAuth(jwtAuth))
+app.Use(auth.RequireAuth(jwtAuth))
 ```
 
 ### OAuth2 Token Introspection
@@ -454,7 +454,7 @@ oauth2Auth := &auth.OAuth2Auth{
     ClientID: "your-client-id",
     ClientSecret: "your-client-secret",
 }
-r.Use(auth.RequireAuth(oauth2Auth))
+app.Use(auth.RequireAuth(oauth2Auth))
 ```
 
 ### OIDC
@@ -465,7 +465,7 @@ oidcAuth := &auth.OIDCAuth{
     ClientID: "your-client-id",
     UserInfoEndpoint: "https://www.googleapis.com/oauth2/v2/userinfo",
 }
-r.Use(auth.RequireAuth(oidcAuth))
+app.Use(auth.RequireAuth(oidcAuth))
 ```
 
 ### Session-based
@@ -473,7 +473,7 @@ r.Use(auth.RequireAuth(oidcAuth))
 ```go
 sessionStore := auth.NewInMemorySessionStore()
 sessionAuth := &auth.SessionAuth{CookieName: "session_id", Store: sessionStore}
-r.Use(auth.RequireAuth(sessionAuth))
+app.Use(auth.RequireAuth(sessionAuth))
 ```
 
 ### Using authenticated users
@@ -481,7 +481,7 @@ r.Use(auth.RequireAuth(sessionAuth))
 Access the authenticated user in any handler:
 
 ```go
-r.Handle("GET /profile", func(c *zen.Context) {
+app.Handle("GET /profile", func(c *zen.Context) {
     user := auth.GetUser(c)
     c.JSON(http.StatusOK, user)
 })
@@ -490,8 +490,8 @@ r.Handle("GET /profile", func(c *zen.Context) {
 Require specific roles with role-based middleware:
 
 ```go
-r.Use(auth.RequireRole("admin"))
-r.Handle("GET /admin/users", func(c *zen.Context) {
+app.Use(auth.RequireRole("admin"))
+app.Handle("GET /admin/users", func(c *zen.Context) {
     c.JSON(http.StatusOK, map[string]string{"access": "admin only"})
 })
 ```
@@ -500,7 +500,7 @@ r.Handle("GET /admin/users", func(c *zen.Context) {
 
 ```go
 myAuthenticator := &auth.JWTAuth{Secret: []byte("your-secret-key")}
-r.Handle("GET /events", func(c *zen.Context) {
+app.Handle("GET /events", func(c *zen.Context) {
     authUser, err := myAuthenticator.Authenticate(c.Request)
     if err != nil {
         c.Error(http.StatusUnauthorized, http.StatusText(http.StatusUnauthorized))
@@ -512,15 +512,6 @@ r.Handle("GET /events", func(c *zen.Context) {
     if err := c.SSEvent("welcome", map[string]string{"user": user.Username}); err != nil {
         c.Error(http.StatusInternalServerError, err.Error())
     }
-})
-```
-
-### WebSocket authentication
-
-```go
-ws.HandleWithAuth(r, "GET /ws", myAuthenticator, func(c *zen.Context, conn *ws.Conn) {
-    user := auth.GetUser(c)
-    conn.WriteJSON(map[string]string{"welcome": user.Username})
 })
 ```
 

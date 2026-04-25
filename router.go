@@ -246,7 +246,7 @@ func (s *Router) StaticFS(prefix string, filesystem fs.FS) {
 	}
 }
 
-// ListenAndServe starts the HTTP server and blocks until SIGINT or SIGTERM is received.
+// Run starts the HTTP server and blocks until SIGINT or SIGTERM is received.
 // Then performs a graceful shutdown with a 5-second timeout.
 //
 // The server is started in a background goroutine so that signal handling can proceed.
@@ -256,8 +256,8 @@ func (s *Router) StaticFS(prefix string, filesystem fs.FS) {
 //
 //	r := zen.New(":8080")
 //	r.Handle("GET /", homeHandler)
-//	r.ListenAndServe()  // Blocks until Ctrl+C
-func (s *Router) ListenAndServe() {
+//	r.Run()  // Blocks until Ctrl+C
+func (s *Router) Run() {
 	fmt.Print(system.Banner(s.Addr))
 
 	go func() {
@@ -269,15 +269,15 @@ func (s *Router) ListenAndServe() {
 	s.gracefulShutdown()
 }
 
-// ListenAndServeTLS starts an HTTPS server with the given certificate and key files.
-// Similar to ListenAndServe, it blocks until shutdown and performs graceful shutdown.
+// RunTLS starts an HTTPS server with the given certificate and key files.
+// Similar to Run, it blocks until shutdown and performs graceful shutdown.
 //
 // Example:
 //
 //	r := zen.New(":8443")
 //	r.Handle("GET /", homeHandler)
-//	r.ListenAndServeTLS("cert.pem", "key.pem")  // Blocks until Ctrl+C
-func (s *Router) ListenAndServeTLS(certFile, keyFile string) {
+//	r.RunTLS("cert.pem", "key.pem")  // Blocks until Ctrl+C
+func (s *Router) RunTLS(certFile, keyFile string) {
 	fmt.Print(system.Banner(s.Addr))
 
 	go func() {

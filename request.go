@@ -139,18 +139,18 @@ func (c *Context) Body() ([]byte, error) {
 	return b, nil
 }
 
-// BindFile retrieves a single file from a multipart form upload by field name.
+// FormFile retrieves a single file from a multipart form upload by field name.
 // It returns the file header and the file content as []byte.
 //
 // Example:
 //
-//	file, content, err := c.BindFile("avatar")
+//	file, content, err := c.FormFile("avatar")
 //	if err != nil {
 //	    c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
 //	    return
 //	}
 //	// file.Filename, file.Size, file.Header (e.g., Content-Type available)
-func (c *Context) BindFile(fieldName string) (*multipart.FileHeader, []byte, error) {
+func (c *Context) FormFile(fieldName string) (*multipart.FileHeader, []byte, error) {
 	if err := c.Request.ParseMultipartForm(defaultMultipartMemory); err != nil {
 		return nil, nil, fmt.Errorf("http: ParseMultipartForm error: %w", err)
 	}
@@ -173,12 +173,12 @@ func (c *Context) BindFile(fieldName string) (*multipart.FileHeader, []byte, err
 	return header, content, nil
 }
 
-// BindFiles retrieves all files from a multipart form upload by field name.
+// FormFiles retrieves all files from a multipart form upload by field name.
 // It returns a slice of file headers paired with their content.
 //
 // Example:
 //
-//	files, err := c.BindFiles("attachments")
+//	files, err := c.FormFiles("attachments")
 //	if err != nil {
 //	    c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
 //	    return
@@ -186,7 +186,7 @@ func (c *Context) BindFile(fieldName string) (*multipart.FileHeader, []byte, err
 //	for _, file := range files {
 //	    fmt.Println(file.Header.Filename, len(file.Content))
 //	}
-func (c *Context) BindFiles(fieldName string) ([]UploadedFile, error) {
+func (c *Context) FormFiles(fieldName string) ([]UploadedFile, error) {
 	if err := c.Request.ParseMultipartForm(defaultMultipartMemory); err != nil {
 		return nil, fmt.Errorf("http: ParseMultipartForm error: %w", err)
 	}
