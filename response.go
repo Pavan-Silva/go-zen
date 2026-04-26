@@ -2,8 +2,6 @@ package zen
 
 import (
 	"bytes"
-	"encoding/json"
-	"encoding/xml"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,83 +14,6 @@ import (
 // responseBufPool reuses bytes.Buffer instances for response encoding to reduce allocations.
 // This is critical for high-throughput servers where JSON/XML responses are common.
 var responseBufPool = sync.Pool{New: func() any { return new(bytes.Buffer) }}
-
-// JSON encodes data as JSON and writes it to the response with the given HTTP status.
-// The response Content-Type header is automatically set to "application/json".
-// Uses a buffer pool to minimize allocations for each response.
-//
-// If encoding fails, logs the error and sends a 500 error response instead.
-// Write errors are logged but not returned (they indicate connection issues).
-//
-// Example:
-//
-//	c.JSON(http.StatusOK, map[string]any{
-//	    "id":   user.ID,
-//	    "name": user.Name,
-//	})
-//
-//	c.JSON(http.StatusCreated, user)
-//
-//	c.JSON(http.StatusBadRequest, map[string]string{
-//	    "error": "invalid email format",
-//	})
-func (c *Context) JSON(status int, data any) {
-	buf := responseBufPool.Get().(*bytes.Buffer)
-	buf.Reset()
-
-	if err := json.NewEncoder(buf).Encode(data); err != nil {
-		responseBufPool.Put(buf)
-		logger.Error("HTTP: JSON encode error: %v", err)
-		http.Error(c.Response, `{"error":"internal server error"}`, http.StatusInternalServerError)
-		return
-	}
-
-	c.Response.Header().Set("Content-Type", "application/json")
-	c.Response.WriteHeader(status)
-	if _, err := c.Response.Write(buf.Bytes()); err != nil {
-		logger.Error("HTTP: response write error: %v", err)
-	}
-
-	responseBufPool.Put(buf)
-}
-
-// XML encodes data as XML and writes it to the response with the given HTTP status.
-// The response Content-Type header is automatically set to "application/xml".
-// Uses a buffer pool to minimize allocations for each response.
-//
-// If encoding fails, logs the error and sends a 500 error response instead.
-// Write errors are logged but not returned (they indicate connection issues).
-//
-// Example:
-//
-//	type User struct {
-//	    XMLName xml.Name `xml:"user"`
-//	    ID      int      `xml:"id"`
-//	    Name    string   `xml:"name"`
-//	}
-//
-//	c.XML(http.StatusOK, User{ID: 1, Name: "John"})
-//
-//	c.XML(http.StatusCreated, user)
-func (c *Context) XML(status int, data any) {
-	buf := responseBufPool.Get().(*bytes.Buffer)
-	buf.Reset()
-
-	if err := xml.NewEncoder(buf).Encode(data); err != nil {
-		responseBufPool.Put(buf)
-		logger.Error("HTTP: XML encode error: %v", err)
-		http.Error(c.Response, "internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	c.Response.Header().Set("Content-Type", "application/xml")
-	c.Response.WriteHeader(status)
-	if _, err := c.Response.Write(buf.Bytes()); err != nil {
-		logger.Error("HTTP: response write error: %v", err)
-	}
-
-	responseBufPool.Put(buf)
-}
 
 // HTML writes an HTML string directly to the response with the given HTTP status.
 // The response Content-Type header is automatically set to "text/html; charset=utf-8".
@@ -252,4 +173,3 @@ func (c *Context) Stream(status int, contentType string, body io.Reader) error {
 func (c *Context) Error(status int, message string) {
 	http.Error(c.Response, message, status)
 }
-

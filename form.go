@@ -1,12 +1,72 @@
 package zen
 
 import (
+	"errors"
 	"fmt"
+	"io"
+	"mime/multipart"
 	"reflect"
 	"strconv"
 	"strings"
 	"sync"
 )
+
+// defaultMultipartMemory defines the maximum memory used when parsing multipart form data.
+// Default is 32 MiB.
+const defaultMultipartMemory int64 = 32 << 20
+
+// UploadedFile represents a file uploaded in a multipart request.
+type UploadedFile struct {
+	Header  *multipart.FileHeader
+	Content []byte
+}
+
+// ErrInvalidBindTarget is returned by BindForm when dest is not a pointer to a struct.
+// This is a programming error (e.g., passing a bare struct instead of &struct).
+// Using a sentinel error avoids allocation and allows exact comparison with errors.Is.
+//
+// Example:
+//
+//	var person Person  // Wrong: bare struct
+//	if err := c.BindForm(person); err != nil {  // Will be ErrInvalidBindTarget
+//	    ...
+//	}
+//
+//	var person Person
+//	if err := c.BindForm(&person); err != nil {  // Correct
+//	    ...
+//	}
+var ErrInvalidBindTarget = errors.New("http: BindForm dest must be a pointer to a struct")
+
+// FormError is returned by BindForm when a form value cannot be parsed into
+// the target field's type (e.g., "abc" into an int field).
+//
+// Unlike generic errors, FormError provides structured access to the field name
+// and underlying cause, allowing callers to generate precise error messages
+// without string parsing.
+//
+// Example:
+//
+//	err := c.BindForm(&data)
+//	if err != nil {
+//	    var fe *zen.FormError
+//	    if errors.As(err, &fe) {
+//	        // Structured error: fe.Field and fe.Err
+//	        c.JSON(http.StatusBadRequest, map[string]string{
+//	            "field": fe.Field,
+//	            "error": fe.Err.Error(),  // e.g., "value out of range"
+//	        })
+//	        return
+//	    }
+//	    // Handle other errors (validation, parsing, etc)
+//	}
+type FormError struct {
+	// Field is the form key that failed (resolved from "json" tag or field name).
+	Field string
+
+	// Err is the underlying conversion error from strconv (e.g., strconv.ErrRange).
+	Err error
+}
 
 // fieldInfo caches reflection metadata needed to bind form fields to structs.
 // By pre-computing this once per type, we avoid expensive reflection on every request.
@@ -42,7 +102,7 @@ func getFormFields(t reflect.Type) []fieldInfo {
 	numField := t.NumField()
 	fields := make([]fieldInfo, 0, numField)
 
-	for i := 0; i < numField; i++ {
+	for i := range numField {
 		field := t.Field(i)
 
 		// Skip unexported fields (PkgPath != "") and embedded fields (Anonymous).
@@ -159,7 +219,7 @@ func getSetFunc(kind reflect.Kind) func(reflect.Value, string) error {
 //	}
 func (c *Context) BindForm(dest any) error {
 	if err := c.Request.ParseForm(); err != nil {
-		return fmt.Errorf("zen: ParseForm error: %w", err)
+		return fmt.Errorf("http: ParseForm error: %w", err)
 	}
 
 	if err := mapFormValues(c.Request.Form, dest); err != nil {
@@ -183,7 +243,7 @@ func (c *Context) BindForm(dest any) error {
 // if a field value fails to convert.
 func mapFormValues(values map[string][]string, dest any) error {
 	rv := reflect.ValueOf(dest)
-	if rv.Kind() != reflect.Ptr || rv.Elem().Kind() != reflect.Struct {
+	if rv.Kind() != reflect.Pointer || rv.Elem().Kind() != reflect.Struct {
 		return ErrInvalidBindTarget
 	}
 
@@ -202,3 +262,98 @@ func mapFormValues(values map[string][]string, dest any) error {
 	}
 	return nil
 }
+
+// FormFile retrieves a single file from a multipart form upload by field name.
+// It returns the file header and the file content as []byte.
+//
+// Example:
+//
+//	file, content, err := c.FormFile("avatar")
+//	if err != nil {
+//	    c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+//	    return
+//	}
+//	// file.Filename, file.Size, file.Header (e.g., Content-Type available)
+func (c *Context) FormFile(fieldName string) (*multipart.FileHeader, []byte, error) {
+	if err := c.Request.ParseMultipartForm(defaultMultipartMemory); err != nil {
+		return nil, nil, fmt.Errorf("http: ParseMultipartForm error: %w", err)
+	}
+
+	file, header, err := c.Request.FormFile(fieldName)
+	if err != nil {
+		return nil, nil, fmt.Errorf("http: FormFile error: %w", err)
+	}
+	defer func() {
+		if cerr := file.Close(); cerr != nil && err == nil {
+			err = fmt.Errorf("http: file close error: %w", cerr)
+		}
+	}()
+
+	content, err := io.ReadAll(file)
+	if err != nil {
+		return nil, nil, fmt.Errorf("http: file read error: %w", err)
+	}
+
+	return header, content, nil
+}
+
+// FormFiles retrieves all files from a multipart form upload by field name.
+// It returns a slice of file headers paired with their content.
+//
+// Example:
+//
+//	files, err := c.FormFiles("attachments")
+//	if err != nil {
+//	    c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+//	    return
+//	}
+//	for _, file := range files {
+//	    fmt.Println(file.Header.Filename, len(file.Content))
+//	}
+func (c *Context) FormFiles(fieldName string) ([]UploadedFile, error) {
+	if err := c.Request.ParseMultipartForm(defaultMultipartMemory); err != nil {
+		return nil, fmt.Errorf("http: ParseMultipartForm error: %w", err)
+	}
+
+	formFiles := c.Request.MultipartForm.File[fieldName]
+	if len(formFiles) == 0 {
+		return nil, fmt.Errorf("http: no files found for field %q", fieldName)
+	}
+
+	var result []UploadedFile
+	for _, header := range formFiles {
+		file, err := header.Open()
+		if err != nil {
+			return nil, fmt.Errorf("http: open file error: %w", err)
+		}
+
+		content, err := io.ReadAll(file)
+		closeErr := file.Close()
+		if err != nil {
+			return nil, fmt.Errorf("http: file read error: %w", err)
+		}
+		if closeErr != nil {
+			return nil, fmt.Errorf("http: file close error: %w", closeErr)
+		}
+
+		result = append(result, UploadedFile{
+			Header:  header,
+			Content: content,
+		})
+	}
+
+	return result, nil
+}
+
+// Error implements the error interface.
+func (e *FormError) Error() string {
+	return "BindForm field \"" + e.Field + "\": " + e.Err.Error()
+}
+
+// Unwrap returns the underlying cause error, enabling errors.Is/As to traverse
+// the error chain. This allows callers to match specific strconv errors:
+//
+//	if errors.Is(err, strconv.ErrRange) {
+//	    // Field value was out of range for its type
+//	}
+func (e *FormError) Unwrap() error { return e.Err }
