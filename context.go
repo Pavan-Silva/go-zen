@@ -45,8 +45,6 @@ type Context struct {
 	Response http.ResponseWriter
 	// Request is the *http.Request for this request.
 	Request *http.Request
-	// queryCache caches parsed query parameters (lazy initialization).
-	queryCache map[string]string
 	// store holds the first inlineSlots key-value pairs inline to avoid allocations.
 	store [inlineSlots]kv
 	// storeLen tracks how many slots are used in store.
@@ -60,7 +58,6 @@ type Context struct {
 func (c *Context) reset(w http.ResponseWriter, r *http.Request) {
 	c.Response = w
 	c.Request = r
-	c.queryCache = nil
 	// Clear inline slots to avoid retaining references across pooled requests.
 	for i := 0; i < c.storeLen; i++ {
 		c.store[i] = kv{}

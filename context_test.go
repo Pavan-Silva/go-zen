@@ -81,7 +81,6 @@ func TestContext_Reset(t *testing.T) {
 
 	c.Set("a", 1)
 	c.Set("b", 2)
-	c.queryCache = map[string]string{"q": "v"}
 
 	c.reset(nil, nil)
 
@@ -90,9 +89,6 @@ func TestContext_Reset(t *testing.T) {
 	}
 	if len(c.overflow) != 0 {
 		t.Fatalf("overflow len = %d, want 0", len(c.overflow))
-	}
-	if c.queryCache != nil {
-		t.Fatal("queryCache not cleared")
 	}
 }
 
