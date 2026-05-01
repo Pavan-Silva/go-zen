@@ -9,10 +9,6 @@ import (
 	"sync"
 )
 
-// defaultMultipartMemory defines the maximum memory used when parsing multipart form data.
-// Default is 32 MiB.
-const defaultMultipartMemory int64 = 32 << 20
-
 // ErrInvalidBindTarget is returned by BindForm when dest is not a pointer to a struct.
 // This is a programming error (e.g., passing a bare struct instead of &struct).
 // Using a sentinel error avoids allocation and allows exact comparison with errors.Is.
