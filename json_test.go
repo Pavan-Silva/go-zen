@@ -1,0 +1,203 @@
+package zen
+
+import (
+	"encoding/json"
+	"net/http/httptest"
+	"strings"
+	"testing"
+)
+
+type testJSONUser struct {
+	Name  string `json:"name" validate:"required"`
+	Email string `json:"email" validate:"required,email"`
+	Age   int    `json:"age" validate:"gte=0"`
+}
+
+func TestBindJSON_Valid(t *testing.T) {
+	r := New(":0")
+	var captured testJSONUser
+	r.Handle("POST /user", func(c *Context) {
+		if err := c.BindJSON(&captured); err != nil {
+			c.Error(400, err.Error())
+			return
+		}
+		c.JSON(200, captured)
+	})
+
+	body := strings.NewReader(`{"name":"John","email":"john@example.com","age":30}`)
+	req := httptest.NewRequest("POST", "/user", body)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 200 {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	if captured.Name != "John" {
+		t.Fatalf("name = %q, want %q", captured.Name, "John")
+	}
+}
+
+func TestBindJSON_Malformed(t *testing.T) {
+	r := New(":0")
+	var captured testJSONUser
+	r.Handle("POST /user", func(c *Context) {
+		if err := c.BindJSON(&captured); err != nil {
+			c.Error(400, err.Error())
+			return
+		}
+		c.String(200, "ok")
+	})
+
+	body := strings.NewReader(`{invalid json}`)
+	req := httptest.NewRequest("POST", "/user", body)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 400 {
+		t.Fatalf("status = %d, want 400", w.Code)
+	}
+}
+
+func TestBindJSON_TrailingData(t *testing.T) {
+	r := New(":0")
+	var captured testJSONUser
+	r.Handle("POST /user", func(c *Context) {
+		if err := c.BindJSON(&captured); err != nil {
+			c.Error(400, err.Error())
+			return
+		}
+		c.String(200, "ok")
+	})
+
+	body := strings.NewReader(`{"name":"John"}{"name":"Jane"}`)
+	req := httptest.NewRequest("POST", "/user", body)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 400 {
+		t.Fatalf("status = %d, want 400; body: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "only one JSON") {
+		t.Fatalf("error message should mention single object; got: %s", w.Body.String())
+	}
+}
+
+func TestBindJSON_Validation(t *testing.T) {
+	r := New(":0")
+	var captured testJSONUser
+	r.Handle("POST /user", func(c *Context) {
+		if err := c.BindJSON(&captured); err != nil {
+			c.Error(400, err.Error())
+			return
+		}
+		c.String(200, "ok")
+	})
+
+	body := strings.NewReader(`{"name":"","email":"invalid"}`)
+	req := httptest.NewRequest("POST", "/user", body)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 400 {
+		t.Fatalf("status = %d, want 400; body: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestBindJSON_NonStruct(t *testing.T) {
+	r := New(":0")
+	var captured map[string]any
+	r.Handle("POST /map", func(c *Context) {
+		if err := c.BindJSON(&captured); err != nil {
+			c.Error(400, err.Error())
+			return
+		}
+		c.JSON(200, captured)
+	})
+
+	body := strings.NewReader(`{"key":"value"}`)
+	req := httptest.NewRequest("POST", "/map", body)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 200 {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	if captured["key"] != "value" {
+		t.Fatalf("map = %v", captured)
+	}
+}
+
+func TestJSON_Response(t *testing.T) {
+	r := New(":0")
+	r.Handle("GET /json", func(c *Context) {
+		c.JSON(201, map[string]any{"id": 1, "name": "test"})
+	})
+
+	req := httptest.NewRequest("GET", "/json", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 201 {
+		t.Fatalf("status = %d, want 201", w.Code)
+	}
+	if ct := w.Header().Get("Content-Type"); ct != "application/json" {
+		t.Fatalf("Content-Type = %q, want %q", ct, "application/json")
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("response not valid JSON: %v", err)
+	}
+	if resp["name"] != "test" {
+		t.Fatalf("name = %v", resp["name"])
+	}
+}
+
+func TestJSON_EncodeError(t *testing.T) {
+	r := New(":0")
+	r.Handle("GET /bad", func(c *Context) {
+		c.JSON(200, make(chan int))
+	})
+
+	req := httptest.NewRequest("GET", "/bad", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 500 {
+		t.Fatalf("status = %d, want 500", w.Code)
+	}
+}
+
+func BenchmarkBindJSON(b *testing.B) {
+	r := New(":0")
+	var captured testJSONUser
+	r.Handle("POST /user", func(c *Context) {
+		c.BindJSON(&captured)
+		c.String(200, "ok")
+	})
+
+	body := strings.NewReader(`{"name":"John","email":"john@example.com","age":30}`)
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		req := httptest.NewRequest("POST", "/user", body)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+	}
+}
+
+func BenchmarkJSON(b *testing.B) {
+	r := New(":0")
+	r.Handle("GET /json", func(c *Context) {
+		c.JSON(200, map[string]any{"id": 1, "name": "benchmark", "active": true})
+	})
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		req := httptest.NewRequest("GET", "/json", nil)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+	}
+}
