@@ -24,8 +24,9 @@ func TestCORS_Default(t *testing.T) {
 	if w.Code != 200 {
 		t.Fatalf("status = %d, want 200", w.Code)
 	}
-	if w.Header().Get("Access-Control-Allow-Origin") != "*" {
-		t.Fatalf("ACAO = %q, want *", w.Header().Get("Access-Control-Allow-Origin"))
+	// Default config has no allowed origins, so CORS headers should not be set
+	if w.Header().Get("Access-Control-Allow-Origin") != "" {
+		t.Fatalf("ACAO should not be set for default config")
 	}
 }
 
@@ -71,8 +72,11 @@ func TestCORS_OriginNotAllowed(t *testing.T) {
 }
 
 func TestCORS_Preflight(t *testing.T) {
+	cfg := DefaultCORSConfig()
+	cfg.AllowedOrigins = []string{"https://example.com"}
+	
 	r := zen.New(":0")
-	r.Use(CORS(DefaultCORSConfig()))
+	r.Use(CORS(cfg))
 	r.Handle("GET /api", func(c *zen.Context) {
 		c.String(200, "ok")
 	})
@@ -113,6 +117,7 @@ func TestCORS_AllowCredentials(t *testing.T) {
 
 func TestCORS_NoCredentials_UsesWildcard(t *testing.T) {
 	cfg := DefaultCORSConfig()
+	cfg.AllowedOrigins = []string{"https://example.com"}
 	cfg.AllowCredentials = false
 
 	r := zen.New(":0")
