@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"reflect"
 
 	"github.com/Pavan-Silva/go-zen/logger"
 )
@@ -43,7 +42,7 @@ func (c *Context) BindXML(dest any) error {
 	}
 
 	// Ensure there is no trailing data after a single XML element.
-	if err = dec.Decode(&struct{}{}); err != io.EOF {
+	if _, err = dec.Token(); err != io.EOF {
 		closeErr := c.Request.Body.Close()
 		if closeErr != nil {
 			return fmt.Errorf("request body must contain only one XML element; body close error: %v", closeErr)
@@ -58,14 +57,7 @@ func (c *Context) BindXML(dest any) error {
 		return err
 	}
 
-	val := reflect.ValueOf(dest)
-	if val.Kind() == reflect.Pointer {
-		val = val.Elem()
-	}
-	if val.Kind() == reflect.Struct {
-		return validatorInstance().Struct(dest)
-	}
-	return nil
+	return validateStruct(dest)
 }
 
 // XML encodes data as XML and writes it to the response with the given HTTP status.
@@ -93,7 +85,7 @@ func (c *Context) XML(status int, data any) {
 	if err := xml.NewEncoder(buf).Encode(data); err != nil {
 		responseBufPool.Put(buf)
 		logger.Error("HTTP: XML encode error: %v", err)
-		http.Error(c.Response, "internal server error", http.StatusInternalServerError)
+		http.Error(c.Response, `<error>internal server error</error>`, http.StatusInternalServerError)
 		return
 	}
 

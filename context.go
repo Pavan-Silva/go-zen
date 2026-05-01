@@ -126,10 +126,8 @@ func (c *Context) Get(key string) any {
 // This function allocates a new Context from the pool exactly once per request.
 func newContext(w http.ResponseWriter, r *http.Request) (*Context, *http.Request) {
 	c := contextPool.Get().(*Context)
-	c.reset(w, r)
-	// Store the Context in the request context so middleware/handlers can access it via FromRequest.
 	r = r.WithContext(context.WithValue(r.Context(), zenCtxKey{}, c))
-	c.Request = r
+	c.reset(w, r)
 	return c, r
 }
 

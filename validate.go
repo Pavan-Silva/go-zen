@@ -72,3 +72,16 @@ func validatorInstance() *validator.Validate {
 	})
 	return validateInst
 }
+
+// validateStruct runs struct validation on dest if it is (or points to) a struct.
+// This shared helper avoids duplicating reflection logic across BindJSON, BindXML, and BindForm.
+func validateStruct(dest any) error {
+	val := reflect.ValueOf(dest)
+	if val.Kind() == reflect.Pointer {
+		val = val.Elem()
+	}
+	if val.Kind() == reflect.Struct {
+		return validatorInstance().Struct(dest)
+	}
+	return nil
+}

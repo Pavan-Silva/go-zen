@@ -49,14 +49,9 @@ func (o *OAuth2Auth) Authenticate(r *http.Request) (User, error) {
 		client = defaultAuthHTTPClient
 	}
 
-	authHeader := r.Header.Get("Authorization")
-	if authHeader == "" {
-		return User{}, fmt.Errorf("missing authorization header")
-	}
-
-	token := strings.TrimPrefix(authHeader, "Bearer ")
-	if token == authHeader {
-		return User{}, fmt.Errorf("invalid authorization header format")
+	token, err := bearerTokenFromRequest(r)
+	if err != nil {
+		return User{}, err
 	}
 
 	tokenInfo, err := o.introspectToken(r.Context(), client, token)
@@ -76,15 +71,11 @@ func (o *OAuth2Auth) Authenticate(r *http.Request) (User, error) {
 	claims := jwt.MapClaims{
 		"sub":        tokenInfo.Subject,
 		"client_id":  tokenInfo.ClientID,
-		"username":  tokenInfo.Username,
+		"username":   tokenInfo.Username,
 		"scope":      tokenInfo.Scope,
 		"token_type": tokenInfo.TokenType,
 		"exp":        tokenInfo.ExpiresAt,
 		"iat":        tokenInfo.IssuedAt,
-	}
-
-	if o.ClaimsFunc != nil {
-		return o.ClaimsFunc(claims), nil
 	}
 
 	user := User{
@@ -101,7 +92,7 @@ func (o *OAuth2Auth) Authenticate(r *http.Request) (User, error) {
 		user.Roles = strings.Split(tokenInfo.Scope, " ")
 	}
 
-	return user, nil
+	return userFromClaims(o.ClaimsFunc, claims), nil
 }
 
 // introspectToken calls the OAuth2 token introspection endpoint.

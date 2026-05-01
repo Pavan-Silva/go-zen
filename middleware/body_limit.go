@@ -9,16 +9,13 @@ import (
 	"github.com/Pavan-Silva/go-zen"
 )
 
-// SkipFunc defines a function to skip middleware.
-type SkipFunc func(*http.Request) bool
-
 // BodyLimitConfig holds configuration for BodyLimit middleware.
 type BodyLimitMiddlewareConfig struct {
 	// Limit is the maximum allowed request body size.
 	// Can be a number (bytes) or with suffix: K, M, G (e.g., "2M", "1K").
 	Limit string
 	// Skipper defines a function to skip middleware.
-	Skipper SkipFunc
+	Skipper zen.SkipFunc
 }
 
 // DefaultBodyLimitConfig returns a BodyLimitConfig with default values.

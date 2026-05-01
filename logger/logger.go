@@ -149,6 +149,12 @@ func (l *Logger) Fatal(message string, args ...any) {
 // Global logger instance
 var defaultLogger = Default()
 
+// SetDefault replaces the global logger instance.
+// Useful for testing or redirecting logs to a custom output.
+func SetDefault(l *Logger) {
+	defaultLogger = l
+}
+
 // SetLevel sets the global logger level
 func SetLevel(level Level) {
 	defaultLogger.SetLevel(level)

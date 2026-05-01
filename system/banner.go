@@ -4,7 +4,9 @@ import (
 	"fmt"
 )
 
-var Version = "dev" // override at build time using -ldflags
+// Version is the current release version.
+// Override at build time with: -ldflags "-X github.com/Pavan-Silva/go-zen/system.Version=v1.0.0"
+var Version = "dev"
 
 // Banner prints a minimal startup banner.
 func Banner(addr string) string {
