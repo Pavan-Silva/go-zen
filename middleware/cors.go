@@ -28,11 +28,11 @@ type CORSConfig struct {
 	MaxAge int
 }
 
-// DefaultCORSConfig returns a CORSConfig with production-ready defaults.
+// DefaultCORSConfig returns a CORSConfig with secure defaults.
 // Customize fields as needed for your API.
 //
 // Default values:
-// - AllowedOrigins: ["*"] (open to all - change for production APIs)
+// - AllowedOrigins: [] (empty - no CORS by default, must be explicitly configured)
 // - AllowedMethods: [GET, POST, PUT, DELETE, PATCH, OPTIONS]
 // - AllowedHeaders: [Content-Type, Authorization]
 // - ExposeHeaders: [Content-Length, Date]
@@ -47,7 +47,7 @@ type CORSConfig struct {
 //	r.Use(middleware.CORS(config))
 func DefaultCORSConfig() CORSConfig {
 	return CORSConfig{
-		AllowedOrigins: []string{"*"},
+		AllowedOrigins: []string{},
 		AllowedMethods: []string{"GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"},
 		AllowedHeaders: []string{"Content-Type", "Authorization"},
 		ExposeHeaders:  []string{"Content-Length", "Date"},
