@@ -1,19 +1,13 @@
 package zen
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"net/http"
 	"path/filepath"
-	"sync"
 
 	"github.com/Pavan-Silva/go-zen/logger"
 )
-
-// responseBufPool reuses bytes.Buffer instances for response encoding to reduce allocations.
-// This is critical for high-throughput servers where JSON/XML responses are common.
-var responseBufPool = sync.Pool{New: func() any { return new(bytes.Buffer) }}
 
 // HTML writes an HTML string directly to the response with the given HTTP status.
 // The response Content-Type header is automatically set to "text/html; charset=utf-8".
@@ -69,7 +63,6 @@ func (c *Context) String(status int, text string) {
 //
 //	c.NoContent(http.StatusNoContent)
 func (c *Context) NoContent(status int) {
-	c.Response.Header().Set("Content-Length", "0")
 	c.Response.WriteHeader(status)
 }
 

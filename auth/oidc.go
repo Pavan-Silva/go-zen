@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
-	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -40,8 +38,6 @@ type OIDCAuth struct {
 	ClaimsFunc func(claims jwt.MapClaims) User
 }
 
-var defaultAuthHTTPClient = &http.Client{Timeout: 10 * time.Second}
-
 // Authenticate validates the access token by calling the userinfo endpoint.
 func (o *OIDCAuth) Authenticate(r *http.Request) (User, error) {
 	if o == nil {
@@ -58,14 +54,9 @@ func (o *OIDCAuth) Authenticate(r *http.Request) (User, error) {
 		userInfoEndpoint = o.Issuer + "/oauth2/v2/userinfo"
 	}
 
-	authHeader := r.Header.Get("Authorization")
-	if authHeader == "" {
-		return User{}, fmt.Errorf("missing authorization header")
-	}
-
-	token := strings.TrimPrefix(authHeader, "Bearer ")
-	if token == authHeader {
-		return User{}, fmt.Errorf("invalid authorization header format")
+	token, err := bearerTokenFromRequest(r)
+	if err != nil {
+		return User{}, err
 	}
 
 	userInfo, err := o.getUserInfo(r.Context(), client, token, userInfoEndpoint)
@@ -85,11 +76,7 @@ func (o *OIDCAuth) Authenticate(r *http.Request) (User, error) {
 		"locale":             userInfo.Locale,
 	}
 
-	if o.ClaimsFunc != nil {
-		return o.ClaimsFunc(claims), nil
-	}
-
-	return DefaultUserMapper(claims), nil
+	return userFromClaims(o.ClaimsFunc, claims), nil
 }
 
 // getUserInfo calls the OIDC userinfo endpoint with the access token.

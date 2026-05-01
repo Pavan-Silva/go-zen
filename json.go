@@ -6,10 +6,14 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"reflect"
+	"sync"
 
 	"github.com/Pavan-Silva/go-zen/logger"
 )
+
+// responseBufPool reuses bytes.Buffer instances for response encoding to reduce allocations.
+// This is critical for high-throughput servers where JSON/XML responses are common.
+var responseBufPool = sync.Pool{New: func() any { return new(bytes.Buffer) }}
 
 // BindJSON parses the request body as JSON and decodes it into dest.
 // If dest is a struct, it also runs struct validation using the registered validator.
@@ -43,7 +47,7 @@ func (c *Context) BindJSON(dest any) error {
 	}
 
 	// Ensure there is no trailing data after a single JSON value.
-	if err = dec.Decode(&struct{}{}); err != io.EOF {
+	if _, err = dec.Token(); err != io.EOF {
 		closeErr := c.Request.Body.Close()
 		if closeErr != nil {
 			return fmt.Errorf("request body must contain only one JSON object; body close error: %v", closeErr)
@@ -58,14 +62,7 @@ func (c *Context) BindJSON(dest any) error {
 		return err
 	}
 
-	val := reflect.ValueOf(dest)
-	if val.Kind() == reflect.Pointer {
-		val = val.Elem()
-	}
-	if val.Kind() == reflect.Struct {
-		return validatorInstance().Struct(dest)
-	}
-	return nil
+	return validateStruct(dest)
 }
 
 // JSON encodes data as JSON and writes it to the response with the given HTTP status.

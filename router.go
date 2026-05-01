@@ -38,6 +38,9 @@ type Config struct {
 	// MaxHeaderBytes is the maximum number of bytes the server will read parsing request headers.
 	// Default: 1 MB (prevent header-based attacks).
 	MaxHeaderBytes int
+	// ShutdownTimeout is the maximum duration for graceful shutdown.
+	// Default: 5 seconds.
+	ShutdownTimeout time.Duration
 	// Server allows replacing the http.Server entirely.
 	// If nil, one will be created with the other Config values.
 	Server *http.Server
@@ -52,6 +55,7 @@ func DefaultConfig() Config {
 		IdleTimeout:       120 * time.Second,
 		ReadHeaderTimeout: 2 * time.Second,
 		MaxHeaderBytes:    1 << 20, // 1 MB
+		ShutdownTimeout:   5 * time.Second,
 	}
 }
 
@@ -66,6 +70,8 @@ type Router struct {
 	chain http.Handler
 	// hasMiddleware tracks whether any middleware is registered (optimization for bypass).
 	hasMiddleware bool
+	// shutdownTimeout is the maximum duration for graceful shutdown.
+	shutdownTimeout time.Duration
 }
 
 // New creates a new Router with the given address and optional configuration.
@@ -90,15 +96,19 @@ type Router struct {
 func New(addr string, config ...Config) *Router {
 	mux := http.NewServeMux()
 	r := &Router{
-		mux:           mux,
-		chain:         mux,
-		hasMiddleware: false,
+		mux:             mux,
+		chain:           mux,
+		hasMiddleware:   false,
+		shutdownTimeout: 5 * time.Second,
 	}
 
 	// Use default config if not provided
 	cfg := DefaultConfig()
 	if len(config) > 0 {
 		cfg = config[0]
+		if cfg.ShutdownTimeout > 0 {
+			r.shutdownTimeout = cfg.ShutdownTimeout
+		}
 	}
 
 	// Use provided server or create new one
@@ -247,7 +257,7 @@ func (s *Router) StaticFS(prefix string, filesystem fs.FS) {
 }
 
 // Run starts the HTTP server and blocks until SIGINT or SIGTERM is received.
-// Then performs a graceful shutdown with a 5-second timeout.
+// Then performs a graceful shutdown with a configurable timeout.
 //
 // The server is started in a background goroutine so that signal handling can proceed.
 // Fatal errors are logged; normal shutdown is silent.
@@ -258,15 +268,7 @@ func (s *Router) StaticFS(prefix string, filesystem fs.FS) {
 //	r.Handle("GET /", homeHandler)
 //	r.Run()  // Blocks until Ctrl+C
 func (s *Router) Run() {
-	fmt.Print(system.Banner(s.Addr))
-
-	go func() {
-		if err := s.Server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			logger.Fatal("Server: error: %v", err)
-		}
-	}()
-
-	s.gracefulShutdown()
+	s.runServer(s.Server.ListenAndServe)
 }
 
 // RunTLS starts an HTTPS server with the given certificate and key files.
@@ -278,10 +280,17 @@ func (s *Router) Run() {
 //	r.Handle("GET /", homeHandler)
 //	r.RunTLS("cert.pem", "key.pem")  // Blocks until Ctrl+C
 func (s *Router) RunTLS(certFile, keyFile string) {
+	s.runServer(func() error {
+		return s.Server.ListenAndServeTLS(certFile, keyFile)
+	})
+}
+
+// runServer starts the server and handles graceful shutdown.
+func (s *Router) runServer(listen func() error) {
 	fmt.Print(system.Banner(s.Addr))
 
 	go func() {
-		if err := s.Server.ListenAndServeTLS(certFile, keyFile); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		if err := listen(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Fatal("Server: error: %v", err)
 		}
 	}()
@@ -290,14 +299,13 @@ func (s *Router) RunTLS(certFile, keyFile string) {
 }
 
 // gracefulShutdown waits for SIGINT or SIGTERM, then shuts down the server.
-// The shutdown has a 5-second timeout; contexts that don't finish in time are forced.
-// Fatal errors are logged.
+// The shutdown timeout is configurable via Config.ShutdownTimeout.
 func (s *Router) gracefulShutdown() {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), s.shutdownTimeout)
 	defer cancel()
 
 	if err := s.Server.Shutdown(ctx); err != nil {

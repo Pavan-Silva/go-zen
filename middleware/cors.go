@@ -81,7 +81,7 @@ func DefaultCORSConfig() CORSConfig {
 func CORS(config CORSConfig) zen.MiddlewareFunc {
 	return func(c *zen.Context, next http.Handler) {
 		origin := c.Request.Header.Get("Origin")
-		
+
 		// Check if origin is allowed
 		if !isOriginAllowed(origin, config.AllowedOrigins) {
 			// Origin not allowed; proceed without CORS headers
@@ -89,8 +89,15 @@ func CORS(config CORSConfig) zen.MiddlewareFunc {
 			return
 		}
 
+		// CORS spec: Access-Control-Allow-Credentials: true is incompatible
+		// with Access-Control-Allow-Origin: *. Validate this combination.
+		allowOrigin := origin
+		if !config.AllowCredentials {
+			allowOrigin = "*"
+		}
+
 		// Set CORS headers for allowed origins
-		c.Response.Header().Set("Access-Control-Allow-Origin", origin)
+		c.Response.Header().Set("Access-Control-Allow-Origin", allowOrigin)
 		c.Response.Header().Set("Access-Control-Allow-Methods", strings.Join(config.AllowedMethods, ", "))
 		c.Response.Header().Set("Access-Control-Allow-Headers", strings.Join(config.AllowedHeaders, ", "))
 		c.Response.Header().Set("Access-Control-Expose-Headers", strings.Join(config.ExposeHeaders, ", "))

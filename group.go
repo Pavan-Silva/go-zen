@@ -91,24 +91,23 @@ func (g *Group) HandleRaw(pattern string, handler http.Handler) {
 // This is needed when concatenating group prefix + route path.
 // Examples: "/api" + "/users" → "/api/users", "/" + "/users" → "/users"
 //
-// Uses a single-pass string replacement for efficiency (no loops).
 // The cleanPath function is called at route registration time (setup), not per-request.
 func cleanPath(path string) string {
 	if path == "/" {
 		return "/"
 	}
-	return strings.NewReplacer("//", "/").Replace(path)
+	return strings.ReplaceAll(path, "//", "/")
 }
 
 // splitMethodPath splits a Go 1.22+ pattern into method and path components.
 // Format: "METHOD /path/{param}" → ("METHOD", "/path/{param}")
 // If pattern contains no space, returns ("", pattern) (assumes it's just a path).
 func splitMethodPath(pattern string) (method, path string) {
-	idx := strings.IndexByte(pattern, ' ')
-	if idx == -1 {
+	before, after, ok := strings.Cut(pattern, " ")
+	if !ok {
 		return "", pattern
 	}
-	return pattern[:idx], pattern[idx+1:]
+	return before, after
 }
 
 // Use appends middleware to this group. The middleware only applies to routes

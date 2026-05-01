@@ -1,19 +1,16 @@
 package auth
 
 import (
-	"crypto/sha256"
-	"crypto/subtle"
-	"encoding/base64"
-	"fmt"
 	"net/http"
 	"slices"
-	"strings"
+	"time"
 
 	"github.com/Pavan-Silva/go-zen"
-	"github.com/golang-jwt/jwt/v5"
-	"golang.org/x/crypto/bcrypt"
-	"golang.org/x/crypto/pbkdf2"
 )
+
+// defaultAuthHTTPClient is the shared HTTP client used by auth providers
+// (OAuth2, OIDC) when no custom client is configured.
+var defaultAuthHTTPClient = &http.Client{Timeout: 10 * time.Second}
 
 // Authenticator defines the interface for authentication logic.
 // Implement this to provide custom authentication for HTTP, WebSocket, and SSE.
@@ -23,10 +20,6 @@ type Authenticator interface {
 	// For WS/SSE: called with the http.Request.
 	Authenticate(r *http.Request) (User, error)
 }
-
-// SkipFunc decides whether a request should bypass authentication.
-// It receives the current request and returns true for routes to skip.
-type SkipFunc func(*http.Request) bool
 
 // User represents authenticated user information.
 type User struct {
@@ -41,16 +34,33 @@ func (u User) HasRole(role string) bool {
 	return slices.Contains(u.Roles, role)
 }
 
-// Middleware creates HTTP middleware that authenticates requests.
+// RequireAuth creates authentication middleware.
 // It stores the authenticated User in the zen.Context under the key "user".
-// On failure, it calls the onError function (defaults to sending 401).
-func Middleware(auth Authenticator, onError func(*zen.Context)) func(*zen.Context, http.Handler) {
-	return MiddlewareWithSkipper(auth, onError, nil)
+// On failure, it sends a 401 response (customizable via WithOnError option).
+// Optional skip functions bypass authentication for selected routes.
+//
+// Example:
+//
+//	r.Use(auth.RequireAuth(jwtAuth))
+//	r.Use(auth.RequireAuth(jwtAuth, auth.SkipPaths("/health")))
+func RequireAuth(auth Authenticator, skip ...zen.SkipFunc) func(*zen.Context, http.Handler) {
+	var skipper zen.SkipFunc
+	if len(skip) > 0 {
+		skipper = skip[0]
+	}
+	return MiddlewareWithSkipper(auth, nil, skipper)
+}
+
+// Middleware is a convenience alias that calls RequireAuth.
+// Deprecated: Use RequireAuth for new code.
+// This exists for backward compatibility.
+func Middleware(auth Authenticator, _ func(*zen.Context)) func(*zen.Context, http.Handler) {
+	return RequireAuth(auth)
 }
 
 // MiddlewareWithSkipper creates HTTP middleware that authenticates requests and can skip selected routes.
 // If skip returns true, authentication is bypassed and the request proceeds.
-func MiddlewareWithSkipper(auth Authenticator, onError func(*zen.Context), skip SkipFunc) func(*zen.Context, http.Handler) {
+func MiddlewareWithSkipper(auth Authenticator, onError func(*zen.Context), skip zen.SkipFunc) func(*zen.Context, http.Handler) {
 	if onError == nil {
 		onError = func(c *zen.Context) {
 			c.Error(http.StatusUnauthorized, http.StatusText(http.StatusUnauthorized))
@@ -72,16 +82,6 @@ func MiddlewareWithSkipper(auth Authenticator, onError func(*zen.Context), skip 
 		c.Set("user", &user)
 		next.ServeHTTP(c.Response, c.Request)
 	}
-}
-
-// RequireAuth is a convenience middleware that requires authentication.
-// It accepts an optional SkipFunc so the same method can also skip selected routes.
-func RequireAuth(auth Authenticator, skip ...SkipFunc) func(*zen.Context, http.Handler) {
-	var skipper SkipFunc
-	if len(skip) > 0 {
-		skipper = skip[0]
-	}
-	return MiddlewareWithSkipper(auth, nil, skipper)
 }
 
 // RequireRole creates middleware that requires a specific role.
@@ -119,211 +119,4 @@ func GetUser(c *zen.Context) *User {
 		}
 	}
 	return nil
-}
-
-// SkipPaths returns a SkipFunc that bypasses authentication for exact path matches.
-func SkipPaths(paths ...string) SkipFunc {
-	allowed := make(map[string]struct{}, len(paths))
-	for _, p := range paths {
-		allowed[p] = struct{}{}
-	}
-	return func(r *http.Request) bool {
-		_, ok := allowed[r.URL.Path]
-		return ok
-	}
-}
-
-// SkipPrefixes returns a SkipFunc that bypasses authentication for matching path prefixes.
-func SkipPrefixes(prefixes ...string) SkipFunc {
-	normalized := make([]string, 0, len(prefixes))
-	for _, prefix := range prefixes {
-		if prefix == "" {
-			continue
-		}
-		if prefix != "/" {
-			prefix = strings.TrimSuffix(prefix, "/")
-			if prefix == "" {
-				prefix = "/"
-			}
-		}
-		normalized = append(normalized, prefix)
-	}
-
-	return func(r *http.Request) bool {
-		path := r.URL.Path
-		for _, prefix := range normalized {
-			if hasPathPrefix(path, prefix) {
-				return true
-			}
-		}
-		return false
-	}
-}
-
-func hasPathPrefix(path, prefix string) bool {
-	if prefix == "/" {
-		return true
-	}
-	if path == prefix {
-		return true
-	}
-	return strings.HasPrefix(path, prefix+"/")
-}
-
-// SkipMethodsAndPaths returns a SkipFunc that bypasses authentication for specific method/path pairs.
-func SkipMethodsAndPaths(method string, paths ...string) SkipFunc {
-	allowed := make(map[string]struct{}, len(paths))
-	for _, p := range paths {
-		allowed[method+" "+p] = struct{}{}
-	}
-	return func(r *http.Request) bool {
-		_, ok := allowed[r.Method+" "+r.URL.Path]
-		return ok
-	}
-}
-
-// ValidatePassword securely validates a plaintext password against a stored hash.
-// It hashes the plain password using the same algorithm as storedHash and compares
-// using constant-time comparison to prevent timing attacks.
-// The storedHash should be in the format: algorithm$salt$hash (e.g., "sha256$salt$hash").
-func ValidatePassword(storedHash, plain string) bool {
-	if storedHash == "" || plain == "" {
-		return false
-	}
-
-	// Support standard bcrypt hashes directly.
-	if strings.HasPrefix(storedHash, "$2a$") || strings.HasPrefix(storedHash, "$2b$") || strings.HasPrefix(storedHash, "$2y$") {
-		return bcrypt.CompareHashAndPassword([]byte(storedHash), []byte(plain)) == nil
-	}
-
-	before, after, ok := strings.Cut(storedHash, "$")
-	if !ok {
-		return false
-	}
-
-	algorithm := before
-	rest := after
-	parts := strings.SplitN(rest, "$", 2)
-	if len(parts) != 2 {
-		return false
-	}
-
-	salt := parts[0]
-	existingHash := parts[1]
-
-	newHash, err := hashPassword(algorithm, plain, salt)
-	if err != nil {
-		return false
-	}
-
-	// Keep compatibility with legacy sha256 hashes generated by earlier versions.
-	if algorithm == "sha256" {
-		legacyHash, legacyErr := hashPasswordLegacySHA256(plain, salt)
-		if legacyErr == nil && subtle.ConstantTimeCompare([]byte(existingHash), []byte(legacyHash)) == 1 {
-			return true
-		}
-	}
-
-	if algorithm == "bcrypt" {
-		return bcrypt.CompareHashAndPassword([]byte(existingHash), []byte(plain)) == nil
-	}
-
-	return subtle.ConstantTimeCompare([]byte(existingHash), []byte(newHash)) == 1
-}
-
-// HashPassword hashes a password using the specified algorithm.
-// Supported algorithms: "sha256", "bcrypt".
-// For bcrypt, salt is optional as bcrypt generates its own internally.
-func hashPassword(algorithm, password, salt string) (string, error) {
-	switch algorithm {
-	case "sha256":
-		if salt == "" {
-			return "", fmt.Errorf("salt is required for sha256")
-		}
-		hash := pbkdf2.Key([]byte(password), []byte(salt), 10000, 32, sha256.New)
-		return base64.RawURLEncoding.EncodeToString(hash), nil
-	case "bcrypt":
-		hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-		return string(hash), err
-	default:
-		return "", fmt.Errorf("unsupported hashing algorithm: %s", algorithm)
-	}
-}
-
-// hashPasswordLegacySHA256 reproduces pre-vNext sha256 password hashing for compatibility.
-func hashPasswordLegacySHA256(password, salt string) (string, error) {
-	if salt == "" {
-		return "", fmt.Errorf("salt is required for sha256")
-	}
-	data := []byte(password + salt)
-	hash := make([]byte, 32)
-	copy(hash, data)
-	for range 10000 {
-		h := sha256.Sum256(hash)
-		copy(hash, h[:])
-	}
-	return base64.RawURLEncoding.EncodeToString(hash), nil
-}
-
-// DefaultUserMapper maps JWT claims to User struct.
-// Supports standard claims: "sub" for ID, "username" for Username, "roles" or "authorities" or "scope" for Roles.
-func DefaultUserMapper(claims jwt.MapClaims) User {
-	user := User{
-		Claims: claims,
-	}
-
-	if sub, ok := claims["sub"].(string); ok {
-		user.ID = sub
-	}
-
-	if username, ok := claims["username"].(string); ok {
-		user.Username = username
-	} else if name, ok := claims["name"].(string); ok {
-		user.Username = name
-	}
-
-	if roles, ok := claims["roles"].([]any); ok {
-		user.Roles = make([]string, len(roles))
-		for i, r := range roles {
-			if s, ok := r.(string); ok {
-				user.Roles[i] = s
-			}
-		}
-	} else if roles, ok := claims["authorities"].([]any); ok {
-		user.Roles = make([]string, len(roles))
-		for i, r := range roles {
-			if s, ok := r.(string); ok {
-				user.Roles[i] = s
-			}
-		}
-	} else if scope, ok := claims["scope"].(string); ok && scope != "" {
-		user.Roles = strings.Split(scope, " ")
-	}
-
-	return user
-}
-
-// WithAuth wraps an http.Handler to require authentication before serving.
-// Returns 401 if authentication fails. For use with WebSocket upgrades.
-func WithAuth(handler http.Handler, auth Authenticator) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if _, err := auth.Authenticate(r); err != nil {
-			http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
-			return
-		}
-		handler.ServeHTTP(w, r)
-	})
-}
-
-// WithAuthFunc wraps an http.HandlerFunc to require authentication before serving.
-// The authenticated User is passed to the handler. For use with WebSocket upgrades.
-func WithAuthFunc(handler func(w http.ResponseWriter, r *http.Request, user User), auth Authenticator) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		user, err := auth.Authenticate(r)
-		if err != nil {
-			http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
-			return
-		}
-		handler(w, r, user)
-	})
 }
