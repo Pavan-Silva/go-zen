@@ -6,7 +6,6 @@ import (
 )
 
 // QueryParam returns the first value of a query parameter from the request URL.
-// Query parameters are lazily parsed and cached on first access for performance.
 // Returns an empty string if the parameter is not present.
 //
 // Example:
@@ -18,16 +17,11 @@ import (
 // Multiple values (e.g., "?item=1&item=2") return only the first value.
 // Use c.Request.URL.Query() directly for access to all values.
 func (c *Context) QueryParam(key string) string {
-	if c.queryCache == nil {
-		m := make(map[string]string)
-		for k, vals := range c.Request.URL.Query() {
-			if len(vals) > 0 {
-				m[k] = vals[0]
-			}
-		}
-		c.queryCache = m
+	vals := c.Request.URL.Query()[key]
+	if len(vals) > 0 {
+		return vals[0]
 	}
-	return c.queryCache[key]
+	return ""
 }
 
 // Param returns the URL path parameter for the given key using Go 1.22+
