@@ -233,7 +233,7 @@ func TestSkipMethodsAndPaths(t *testing.T) {
 }
 
 func TestValidatePassword_Bcrypt(t *testing.T) {
-	hashed, err := HashPassword("bcrypt", "secret123", "")
+	hashed, err := HashPassword("secret123")
 	if err != nil {
 		t.Fatalf("HashPassword error: %v", err)
 	}
@@ -246,24 +246,8 @@ func TestValidatePassword_Bcrypt(t *testing.T) {
 	}
 }
 
-func TestValidatePassword_SHA256(t *testing.T) {
-	salt := "mysalt"
-	hashed, err := HashPassword("sha256", "secret123", salt)
-	if err != nil {
-		t.Fatalf("HashPassword error: %v", err)
-	}
-
-	storedHash := "sha256$" + salt + "$" + hashed
-	if !ValidatePassword(storedHash, "secret123") {
-		t.Fatalf("should validate correct password; hash: %s", storedHash)
-	}
-	if ValidatePassword(storedHash, "wrong") {
-		t.Fatal("should not validate wrong password")
-	}
-}
-
 func TestValidatePassword_BcryptDirect(t *testing.T) {
-	hashed, err := HashPassword("bcrypt", "password", "")
+	hashed, err := HashPassword("password")
 	if err != nil {
 		t.Fatalf("HashPassword error: %v", err)
 	}
@@ -284,20 +268,6 @@ func TestValidatePassword_Empty(t *testing.T) {
 func TestValidatePassword_InvalidFormat(t *testing.T) {
 	if ValidatePassword("nodelimiter", "secret") {
 		t.Fatal("hash without delimiter should not validate")
-	}
-}
-
-func TestHashPassword_Unsupported(t *testing.T) {
-	_, err := HashPassword("md5", "secret", "salt")
-	if err == nil {
-		t.Fatal("should error for unsupported algorithm")
-	}
-}
-
-func TestHashPassword_SHA256_NoSalt(t *testing.T) {
-	_, err := HashPassword("sha256", "secret", "")
-	if err == nil {
-		t.Fatal("should error when salt is missing for sha256")
 	}
 }
 
