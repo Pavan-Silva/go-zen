@@ -435,7 +435,15 @@ All can be used with HTTP and SSE routes.
 ### Basic Auth
 
 ```go
-basicAuth := &auth.BasicAuth{ValidatePassword: auth.ValidatePassword}
+basicAuth := &auth.BasicAuth{
+    Validate: func(username, password string) (auth.User, error) {
+        // Validate credentials against your database
+        if username == "admin" && auth.ValidatePassword(storedHash, password) {
+            return auth.User{ID: "1", Username: username}, nil
+        }
+        return auth.User{}, fmt.Errorf("invalid credentials")
+    },
+}
 app.Use(auth.RequireAuth(basicAuth))
 ```
 
