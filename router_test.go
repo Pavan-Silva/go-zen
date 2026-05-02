@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestRouter_New(t *testing.T) {
@@ -342,5 +343,80 @@ func BenchmarkRouter_PathParams(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		r.ServeHTTP(w, req)
+	}
+}
+
+// Test per-route middleware
+func TestRouter_HandleWith_PerRouteMiddleware(t *testing.T) {
+	r := New(":0")
+	var middlewareCalled bool
+
+	r.HandleWith("GET /protected", func(c *Context) {
+		c.String(200, "protected")
+	}, func(c *Context, next http.Handler) {
+		middlewareCalled = true
+		next.ServeHTTP(c.Response, c.Request)
+	})
+
+	req := httptest.NewRequest("GET", "/protected", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if !middlewareCalled {
+		t.Fatal("per-route middleware not called")
+	}
+	if w.Code != 200 {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+}
+
+func TestRouter_HandleWith_MiddlewareOrder(t *testing.T) {
+	r := New(":0")
+	var order []string
+
+	r.Use(func(c *Context, next http.Handler) {
+		order = append(order, "global")
+		next.ServeHTTP(c.Response, c.Request)
+	})
+
+	r.HandleWith("GET /test", func(c *Context) {
+		order = append(order, "handler")
+		c.String(200, "ok")
+	}, func(c *Context, next http.Handler) {
+		order = append(order, "per-route")
+		next.ServeHTTP(c.Response, c.Request)
+	})
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	want := []string{"global", "per-route", "handler"}
+	if len(order) != len(want) {
+		t.Fatalf("order = %v, want %v", order, want)
+	}
+	for i := range want {
+		if order[i] != want[i] {
+			t.Errorf("order[%d] = %q, want %q", i, order[i], want[i])
+		}
+	}
+}
+
+// Test RequestTimeout config
+func TestRouter_RequestTimeout(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.RequestTimeout = 50 * time.Millisecond
+	r := New(":0", cfg)
+
+	if r.requestTimeout != 50*time.Millisecond {
+		t.Fatalf("requestTimeout = %v, want %v", r.requestTimeout, 50*time.Millisecond)
+	}
+}
+
+func TestRouter_RequestTimeout_Default(t *testing.T) {
+	r := New(":0")
+
+	if r.requestTimeout != 0 {
+		t.Fatalf("requestTimeout = %v, want 0", r.requestTimeout)
 	}
 }
