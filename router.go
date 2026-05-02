@@ -23,7 +23,7 @@ import (
 
 // Config holds configuration for the Router and underlying HTTP server.
 type Config struct {
-	// ReadTimeout is the maximum duration before timing out reads from the client connection.
+	// ReadTimeout is the maximum duration before timing out reads from the client.
 	// Default: 5 seconds (prevent slow-read attacks).
 	ReadTimeout time.Duration
 	// WriteTimeout is the maximum duration before timing out writes to the client.
@@ -41,6 +41,10 @@ type Config struct {
 	// ShutdownTimeout is the maximum duration for graceful shutdown.
 	// Default: 5 seconds.
 	ShutdownTimeout time.Duration
+	// RequestTimeout is the default per-request timeout applied to all routes.
+	// When set, the request context is cancelled after this duration.
+	// Default: 0 (no timeout).
+	RequestTimeout time.Duration
 	// Server allows replacing the http.Server entirely.
 	// If nil, one will be created with the other Config values.
 	Server *http.Server
@@ -56,6 +60,7 @@ func DefaultConfig() Config {
 		ReadHeaderTimeout: 2 * time.Second,
 		MaxHeaderBytes:    1 << 20, // 1 MB
 		ShutdownTimeout:   5 * time.Second,
+		RequestTimeout:    0, // No default timeout
 	}
 }
 
@@ -72,6 +77,8 @@ type Router struct {
 	hasMiddleware bool
 	// shutdownTimeout is the maximum duration for graceful shutdown.
 	shutdownTimeout time.Duration
+	// requestTimeout is the default per-request timeout.
+	requestTimeout time.Duration
 }
 
 // New creates a new Router with the given address and optional configuration.
@@ -100,6 +107,7 @@ func New(addr string, config ...Config) *Router {
 		chain:           mux,
 		hasMiddleware:   false,
 		shutdownTimeout: 5 * time.Second,
+		requestTimeout:  0,
 	}
 
 	// Use default config if not provided
@@ -129,6 +137,7 @@ func New(addr string, config ...Config) *Router {
 		}
 	}
 
+	r.requestTimeout = cfg.RequestTimeout
 	return r
 }
 
@@ -136,9 +145,17 @@ func New(addr string, config ...Config) *Router {
 // It creates a zen Context once per request so zen handlers and middleware always
 // receive a non-nil Context. The request is then passed through the middleware
 // chain (if configured) or directly to the mux.
+// If RequestTimeout is configured, the request context is wrapped with a timeout.
 func (s *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	c, r := newContext(w, r)
 	defer releaseContext(c)
+
+	// Apply default request timeout if configured
+	if s.requestTimeout > 0 {
+		ctx, cancel := context.WithTimeout(r.Context(), s.requestTimeout)
+		defer cancel()
+		r = r.WithContext(ctx)
+	}
 
 	if s.hasMiddleware {
 		s.chain.ServeHTTP(w, r)
@@ -183,6 +200,18 @@ func (s *Router) Use(m ...MiddlewareFunc) {
 //	s.Handle("DELETE /users/{id}", deleteUser)
 func (s *Router) Handle(pattern string, handler func(*Context)) {
 	s.mux.Handle(pattern, &zenHandler{fn: handler})
+}
+
+// HandleWith registers a zen-style handler with per-route middleware.
+// The middleware only applies to this specific route, not globally.
+// Middleware executes after global middleware but before the handler.
+//
+// Example:
+//
+//	s.HandleWith("GET /admin", adminHandler, authMiddleware, auditLog)
+//	s.HandleWith("POST /users", createUser, rateLimitMiddleware)
+func (s *Router) HandleWith(pattern string, handler func(*Context), middleware ...MiddlewareFunc) {
+	s.handleWithMiddleware(pattern, handler, middleware)
 }
 
 // HandleRaw registers a standard http.Handler directly, bypassing zen Context wrapping.

@@ -79,6 +79,27 @@ func (g *Group) Handle(pattern string, handler func(*Context)) {
 	g.router.handleWithMiddleware(fullPattern, handler, g.middleware)
 }
 
+// HandleWith registers a handler with additional per-route middleware within the group.
+// The per-route middleware executes after group middleware but before the handler.
+//
+// Example:
+//
+//	users := r.Group("/api/users", authMiddleware)
+//	users.HandleWith("DELETE /{id}", deleteUser, auditLog)
+//	// Middleware order: authMiddleware -> auditLog -> deleteUser
+func (g *Group) HandleWith(pattern string, handler func(*Context), middleware ...MiddlewareFunc) {
+	method, path := splitMethodPath(pattern)
+	fullPath := g.prefix + path
+	fullPattern := method + " " + cleanPath(fullPath)
+
+	// Combine group middleware with per-route middleware
+	combined := make([]MiddlewareFunc, 0, len(g.middleware)+len(middleware))
+	combined = append(combined, g.middleware...)
+	combined = append(combined, middleware...)
+
+	g.router.handleWithMiddleware(fullPattern, handler, combined)
+}
+
 // HandleRaw registers a standard http.Handler for the given pattern within the group.
 func (g *Group) HandleRaw(pattern string, handler http.Handler) {
 	method, path := splitMethodPath(pattern)
