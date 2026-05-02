@@ -3,6 +3,7 @@ package zen
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"mime/multipart"
 	"net/http/httptest"
 	"os"
@@ -15,7 +16,7 @@ func TestFormFile_SingleFile(t *testing.T) {
 	var capturedHeader *multipart.FileHeader
 	var capturedContent []byte
 	r.Handle("POST /upload", func(c *Context) {
-		h, content, err := c.FormFile("file")
+		h, content, err := c.ReadFile("file")
 		if err != nil {
 			c.Error(400, err.Error())
 			return
@@ -74,14 +75,23 @@ func TestFormFile_MissingField(t *testing.T) {
 
 func TestFormFiles_MultipleFiles(t *testing.T) {
 	r := New(":0")
-	var captured []UploadedFile
+	var capturedContent [][]byte
 	r.Handle("POST /uploads", func(c *Context) {
-		files, err := c.FormFiles("files")
+		headers, err := c.FormFiles("files")
 		if err != nil {
 			c.Error(400, err.Error())
 			return
 		}
-		captured = files
+		for _, h := range headers {
+			file, err := h.Open()
+			if err != nil {
+				c.Error(500, err.Error())
+				return
+			}
+			content, _ := io.ReadAll(file)
+			file.Close()
+			capturedContent = append(capturedContent, content)
+		}
 		c.String(200, "ok")
 	})
 
@@ -101,11 +111,11 @@ func TestFormFiles_MultipleFiles(t *testing.T) {
 	if w.Code != 200 {
 		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
 	}
-	if len(captured) != 3 {
-		t.Fatalf("files = %d, want 3", len(captured))
+	if len(capturedContent) != 3 {
+		t.Fatalf("files = %d, want 3", len(capturedContent))
 	}
-	if string(captured[0].Content) != "content1" {
-		t.Fatalf("content = %q", captured[0].Content)
+	if string(capturedContent[0]) != "content1" {
+		t.Fatalf("content = %q", string(capturedContent[0]))
 	}
 }
 

@@ -59,7 +59,6 @@ func Middleware(auth Authenticator, _ func(*zen.Context)) func(*zen.Context, htt
 }
 
 // MiddlewareWithSkipper creates HTTP middleware that authenticates requests and can skip selected routes.
-// If skip returns true, authentication is bypassed and the request proceeds.
 func MiddlewareWithSkipper(auth Authenticator, onError func(*zen.Context), skip zen.SkipFunc) func(*zen.Context, http.Handler) {
 	if onError == nil {
 		onError = func(c *zen.Context) {
@@ -119,4 +118,29 @@ func GetUser(c *zen.Context) *User {
 		}
 	}
 	return nil
+}
+
+// WithAuth wraps an http.Handler to require authentication before serving.
+// Returns 401 if authentication fails. For use with WebSocket upgrades.
+func WithAuth(handler http.Handler, auth Authenticator) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, err := auth.Authenticate(r); err != nil {
+			http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+			return
+		}
+		handler.ServeHTTP(w, r)
+	})
+}
+
+// WithAuthFunc wraps an http.HandlerFunc to require authentication before serving.
+// The authenticated User is passed to the handler. For use with WebSocket upgrades.
+func WithAuthFunc(handler func(w http.ResponseWriter, r *http.Request, user User), auth Authenticator) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		user, err := auth.Authenticate(r)
+		if err != nil {
+			http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+			return
+		}
+		handler(w, r, user)
+	})
 }

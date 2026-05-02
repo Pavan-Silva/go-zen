@@ -12,23 +12,66 @@ import (
 
 var gzipWriterPool = sync.Pool{
 	New: func() any {
-		w, _ := gzip.NewWriterLevel(io.Discard, gzip.DefaultCompression)
+		w, err := gzip.NewWriterLevel(io.Discard, gzip.DefaultCompression)
+		if err != nil {
+			panic("gzip.NewWriterLevel: " + err.Error())
+		}
 		return w
 	},
 }
 
-// CompressConfig holds configuration for compression middleware.
-type CompressConfig struct {
-	// Level is the gzip compression level (gzip.DefaultCompression, gzip.BestSpeed, etc.)
-	Level int
-	// Skipper defines a function to skip compression for certain requests.
-	Skipper zen.SkipFunc
+// Compress returns gzip compression middleware using default compression.
+// It compresses responses for clients that accept gzip encoding.
+//
+// Example:
+//
+//	r.Use(middleware.Compress())
+func Compress() zen.MiddlewareFunc {
+	return compressWithLevel(gzip.DefaultCompression, nil)
 }
 
-// DefaultCompressConfig returns a CompressConfig with sensible defaults.
-func DefaultCompressConfig() CompressConfig {
-	return CompressConfig{
-		Level: gzip.DefaultCompression,
+// CompressWithLevel returns compression middleware with a specific gzip level.
+//
+// Example:
+//
+//	r.Use(middleware.CompressWithLevel(gzip.BestSpeed))
+func CompressWithLevel(level int) zen.MiddlewareFunc {
+	return compressWithLevel(level, nil)
+}
+
+// CompressWithSkipper returns compression middleware with a skipper function.
+func CompressWithSkipper(skipper zen.SkipFunc) zen.MiddlewareFunc {
+	return compressWithLevel(gzip.DefaultCompression, skipper)
+}
+
+func compressWithLevel(level int, skipper zen.SkipFunc) zen.MiddlewareFunc {
+	return func(c *zen.Context, next http.Handler) {
+		if skipper != nil && skipper(c.Request) {
+			next.ServeHTTP(c.Response, c.Request)
+			return
+		}
+
+		// Check if client accepts gzip
+		if !strings.Contains(c.Request.Header.Get("Accept-Encoding"), "gzip") {
+			next.ServeHTTP(c.Response, c.Request)
+			return
+		}
+
+		// Skip if response already has Content-Encoding set
+		if c.Response.Header().Get("Content-Encoding") != "" {
+			next.ServeHTTP(c.Response, c.Request)
+			return
+		}
+
+		gz := gzipWriterPool.Get().(*gzip.Writer)
+		gz.Reset(c.Response)
+		defer func() {
+			gz.Close()
+			gzipWriterPool.Put(gz)
+		}()
+
+		cw := &compressResponseWriter{ResponseWriter: c.Response, gz: gz}
+		next.ServeHTTP(cw, c.Request)
 	}
 }
 
@@ -57,68 +100,5 @@ func (w *compressResponseWriter) Flush() {
 	w.gz.Flush()
 	if f, ok := w.ResponseWriter.(http.Flusher); ok {
 		f.Flush()
-	}
-}
-
-// Compress returns gzip compression middleware.
-// It compresses responses for clients that accept gzip encoding.
-// Uses a sync.Pool for gzip.Writers to minimize allocations.
-//
-// Example:
-//
-//	r.Use(middleware.Compress())
-//
-// Example with custom level:
-//
-//	r.Use(middleware.CompressWithLevel(gzip.BestSpeed))
-func Compress() zen.MiddlewareFunc {
-	return CompressWithConfig(DefaultCompressConfig())
-}
-
-// CompressWithLevel returns compression middleware with a specific gzip level.
-func CompressWithLevel(level int) zen.MiddlewareFunc {
-	return CompressWithConfig(CompressConfig{Level: level})
-}
-
-// CompressWithConfig returns compression middleware with the given configuration.
-//
-// Example:
-//
-//	config := middleware.DefaultCompressConfig()
-//	config.Level = gzip.BestSpeed
-//	r.Use(middleware.CompressWithConfig(config))
-func CompressWithConfig(config CompressConfig) zen.MiddlewareFunc {
-	if config.Level == 0 {
-		config.Level = gzip.DefaultCompression
-	}
-	return func(c *zen.Context, next http.Handler) {
-		if config.Skipper != nil && config.Skipper(c.Request) {
-			next.ServeHTTP(c.Response, c.Request)
-			return
-		}
-
-		// Check if client accepts gzip
-		accept := c.Request.Header.Get("Accept-Encoding")
-		if !strings.Contains(accept, "gzip") {
-			next.ServeHTTP(c.Response, c.Request)
-			return
-		}
-
-		// Skip if response already has Content-Encoding set
-		if c.Response.Header().Get("Content-Encoding") != "" {
-			next.ServeHTTP(c.Response, c.Request)
-			return
-		}
-
-		// Get gzip writer from pool
-		gz := gzipWriterPool.Get().(*gzip.Writer)
-		gz.Reset(c.Response)
-		defer func() {
-			gz.Close()
-			gzipWriterPool.Put(gz)
-		}()
-
-		cw := &compressResponseWriter{ResponseWriter: c.Response, gz: gz}
-		next.ServeHTTP(cw, c.Request)
 	}
 }

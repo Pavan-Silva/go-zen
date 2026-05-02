@@ -110,13 +110,15 @@ func New(addr string, config ...Config) *Router {
 		requestTimeout:  0,
 	}
 
-	// Use default config if not provided
-	cfg := DefaultConfig()
+	// Use provided config or default
+	var cfg Config
 	if len(config) > 0 {
 		cfg = config[0]
-		if cfg.ShutdownTimeout > 0 {
-			r.shutdownTimeout = cfg.ShutdownTimeout
-		}
+	} else {
+		cfg = DefaultConfig()
+	}
+	if cfg.ShutdownTimeout > 0 {
+		r.shutdownTimeout = cfg.ShutdownTimeout
 	}
 
 	// Use provided server or create new one

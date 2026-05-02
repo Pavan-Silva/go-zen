@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"fmt"
 	"net/http"
 	"sync"
 	"time"
@@ -31,12 +32,12 @@ func DefaultRateLimiterConfig() RateLimiterConfig {
 
 // visitor tracks request count and reset time for a single client.
 type visitor struct {
-	count    int
-	resetAt  time.Time
+	count   int
+	resetAt time.Time
 }
 
 // RateLimiter returns middleware that limits the number of requests per client.
-// Uses an in-memory map with periodic cleanup to bound memory usage.
+// Uses an in-memory map with lazy cleanup on each request.
 //
 // Example:
 //
@@ -62,7 +63,6 @@ func RateLimiterWithConfig(config RateLimiterConfig) zen.MiddlewareFunc {
 	}
 	if config.KeyFunc == nil {
 		config.KeyFunc = func(r *http.Request) string {
-			// Use X-Forwarded-For, X-Real-IP, then RemoteAddr
 			if ip := r.Header.Get("X-Forwarded-For"); ip != "" {
 				return ip
 			}
@@ -78,20 +78,6 @@ func RateLimiterWithConfig(config RateLimiterConfig) zen.MiddlewareFunc {
 		visitors = make(map[string]*visitor)
 	)
 
-	// Periodic cleanup of expired entries
-	go func() {
-		for {
-			time.Sleep(config.Duration)
-			mu.Lock()
-			for key, v := range visitors {
-				if time.Now().After(v.resetAt) {
-					delete(visitors, key)
-				}
-			}
-			mu.Unlock()
-		}
-	}()
-
 	return func(c *zen.Context, next http.Handler) {
 		if config.Skipper != nil && config.Skipper(c.Request) {
 			next.ServeHTTP(c.Response, c.Request)
@@ -99,35 +85,46 @@ func RateLimiterWithConfig(config RateLimiterConfig) zen.MiddlewareFunc {
 		}
 
 		key := config.KeyFunc(c.Request)
-
-		mu.Lock()
-		v, exists := visitors[key]
 		now := time.Now()
 
+		mu.Lock()
+
+		// Lazy cleanup of expired entries
+		for k, v := range visitors {
+			if now.After(v.resetAt) {
+				delete(visitors, k)
+			}
+		}
+
+		v, exists := visitors[key]
+
 		if !exists || now.After(v.resetAt) {
-			// New visitor or window expired
 			visitors[key] = &visitor{
 				count:   1,
 				resetAt: now.Add(config.Duration),
 			}
+			limit := config.Limit
+			remaining := limit - 1
 			mu.Unlock()
-			c.Response.Header().Set("X-RateLimit-Limit", "100")
-			c.Response.Header().Set("X-RateLimit-Remaining", "99")
+
+			c.Response.Header().Set("X-RateLimit-Limit", fmt.Sprintf("%d", limit))
+			c.Response.Header().Set("X-RateLimit-Remaining", fmt.Sprintf("%d", remaining))
 			next.ServeHTTP(c.Response, c.Request)
 			return
 		}
 
-		// Increment count
 		v.count++
-		remaining := config.Limit - v.count
+		limit := config.Limit
+		remaining := limit - v.count
 		if remaining < 0 {
 			remaining = 0
 		}
-		c.Response.Header().Set("X-RateLimit-Limit", "100")
-		c.Response.Header().Set("X-RateLimit-Remaining", "99")
 		mu.Unlock()
 
-		if v.count > config.Limit {
+		c.Response.Header().Set("X-RateLimit-Limit", fmt.Sprintf("%d", limit))
+		c.Response.Header().Set("X-RateLimit-Remaining", fmt.Sprintf("%d", remaining))
+
+		if v.count > limit {
 			http.Error(c.Response, "Rate limit exceeded", http.StatusTooManyRequests)
 			return
 		}

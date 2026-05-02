@@ -1,7 +1,6 @@
 package zen
 
 import (
-	"bytes"
 	"encoding/xml"
 	"fmt"
 	"io"
@@ -32,28 +31,19 @@ import (
 //	}
 func (c *Context) BindXML(dest any) error {
 	dec := xml.NewDecoder(c.Request.Body)
-	var err error
-	if err = dec.Decode(dest); err != nil {
-		closeErr := c.Request.Body.Close()
-		if closeErr != nil {
-			return fmt.Errorf("%w; body close error: %v", err, closeErr)
-		}
-		return err
+
+	if err := dec.Decode(dest); err != nil {
+		c.Request.Body.Close()
+		return fmt.Errorf("XML decode: %w", err)
 	}
 
 	// Ensure there is no trailing data after a single XML element.
-	if _, err = dec.Token(); err != io.EOF {
-		closeErr := c.Request.Body.Close()
-		if closeErr != nil {
-			return fmt.Errorf("request body must contain only one XML element; body close error: %v", closeErr)
-		}
-		if err == nil {
-			return fmt.Errorf("request body must contain only one XML element")
-		}
+	if _, err := dec.Token(); err != io.EOF {
+		c.Request.Body.Close()
 		return fmt.Errorf("request body must contain only one XML element: %w", err)
 	}
 
-	if err = c.Request.Body.Close(); err != nil {
+	if err := c.Request.Body.Close(); err != nil {
 		return err
 	}
 
@@ -62,7 +52,6 @@ func (c *Context) BindXML(dest any) error {
 
 // XML encodes data as XML and writes it to the response with the given HTTP status.
 // The response Content-Type header is automatically set to "application/xml".
-// Uses a buffer pool to minimize allocations for each response.
 //
 // If encoding fails, logs the error and sends a 500 error response instead.
 // Write errors are logged but not returned (they indicate connection issues).
@@ -79,11 +68,8 @@ func (c *Context) BindXML(dest any) error {
 //
 //	c.XML(http.StatusCreated, user)
 func (c *Context) XML(status int, data any) {
-	buf := responseBufPool.Get().(*bytes.Buffer)
-	buf.Reset()
-
-	if err := xml.NewEncoder(buf).Encode(data); err != nil {
-		responseBufPool.Put(buf)
+	b, err := xml.Marshal(data)
+	if err != nil {
 		logger.Error("HTTP: XML encode error: %v", err)
 		http.Error(c.Response, `<error>internal server error</error>`, http.StatusInternalServerError)
 		return
@@ -91,9 +77,7 @@ func (c *Context) XML(status int, data any) {
 
 	c.Response.Header().Set("Content-Type", "application/xml")
 	c.Response.WriteHeader(status)
-	if _, err := c.Response.Write(buf.Bytes()); err != nil {
+	if _, err := c.Response.Write(b); err != nil {
 		logger.Error("HTTP: response write error: %v", err)
 	}
-
-	responseBufPool.Put(buf)
 }

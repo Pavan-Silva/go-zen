@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/Pavan-Silva/go-zen"
@@ -62,20 +63,18 @@ func (rw *responseWriter) Write(b []byte) (int, error) {
 
 // clientIP extracts the client IP address for logging.
 // Checks X-Forwarded-For (for reverse proxies), X-Real-IP, then RemoteAddr.
-// For X-Forwarded-For with multiple IPs, returns the first (original client).
+// For X-Forwarded-For with multiple IPs, returns the first (original client) after trimming whitespace.
 func clientIP(r *http.Request) string {
 	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
 		// X-Forwarded-For format: "client, proxy1, proxy2"
-		// Take the first IP (original client)
-		for i := 0; i < len(forwarded); i++ {
-			if forwarded[i] == ',' {
-				return forwarded[:i]
-			}
+		// Take the first IP (original client), trimming whitespace.
+		if before, _, ok := strings.Cut(forwarded, ","); ok {
+			return strings.TrimSpace(before)
 		}
-		return forwarded
+		return strings.TrimSpace(forwarded)
 	}
 	if realIP := r.Header.Get("X-Real-IP"); realIP != "" {
-		return realIP
+		return strings.TrimSpace(realIP)
 	}
 	return r.RemoteAddr
 }

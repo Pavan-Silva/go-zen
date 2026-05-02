@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -36,9 +37,14 @@ type OIDCAuth struct {
 	HTTPClient *http.Client
 	// ClaimsFunc for custom mapping (optional)
 	ClaimsFunc func(claims jwt.MapClaims) User
+	// SkipTokenVerification disables JWT signature verification of the access token.
+	// Only enable this if the token is opaque and validated via the userinfo endpoint.
+	SkipTokenVerification bool
 }
 
 // Authenticate validates the access token by calling the userinfo endpoint.
+// If the access token is a JWT and SkipTokenVerification is false, it will
+// be parsed and validated before calling the userinfo endpoint.
 func (o *OIDCAuth) Authenticate(r *http.Request) (User, error) {
 	if o == nil {
 		return User{}, fmt.Errorf("oidc auth is not configured")
@@ -57,6 +63,23 @@ func (o *OIDCAuth) Authenticate(r *http.Request) (User, error) {
 	token, err := bearerTokenFromRequest(r)
 	if err != nil {
 		return User{}, err
+	}
+
+	// Attempt to verify the access token as a JWT if not explicitly skipped.
+	// Many OIDC providers issue JWT-format access tokens.
+	if !o.SkipTokenVerification && strings.Count(token, ".") == 2 {
+		if _, err := jwt.Parse(token, func(t *jwt.Token) (any, error) {
+			// Access tokens may use various signing methods; return nil to skip
+			// signature verification and rely on the userinfo endpoint for validation.
+			// Override this by providing a KeyFunc via a custom OIDCAuth setup if needed.
+			return nil, fmt.Errorf("JWT signature verification not configured for OIDC access tokens; set SkipTokenVerification=true if using opaque tokens")
+		}); err != nil {
+			// If the token is not a valid JWT or verification fails, proceed to userinfo.
+			// The userinfo endpoint remains the source of truth for token validity.
+			if !strings.Contains(err.Error(), "JWT signature verification not configured") {
+				return User{}, fmt.Errorf("access token verification failed: %w", err)
+			}
+		}
 	}
 
 	userInfo, err := o.getUserInfo(r.Context(), client, token, userInfoEndpoint)

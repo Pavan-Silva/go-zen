@@ -22,38 +22,24 @@ func SkipPaths(paths ...string) zen.SkipFunc {
 // SkipPrefixes returns a SkipFunc that bypasses authentication for matching path prefixes.
 func SkipPrefixes(prefixes ...string) zen.SkipFunc {
 	normalized := make([]string, 0, len(prefixes))
-	for _, prefix := range prefixes {
-		if prefix == "" {
-			continue
+	for _, p := range prefixes {
+		if p != "" && p != "/" {
+			p = strings.TrimSuffix(p, "/")
 		}
-		if prefix != "/" {
-			prefix = strings.TrimSuffix(prefix, "/")
-			if prefix == "" {
-				prefix = "/"
-			}
+		if p != "" {
+			normalized = append(normalized, p)
 		}
-		normalized = append(normalized, prefix)
 	}
 
 	return func(r *http.Request) bool {
 		path := r.URL.Path
 		for _, prefix := range normalized {
-			if hasPathPrefix(path, prefix) {
+			if prefix == "/" || path == prefix || strings.HasPrefix(path, prefix+"/") {
 				return true
 			}
 		}
 		return false
 	}
-}
-
-func hasPathPrefix(path, prefix string) bool {
-	if prefix == "/" {
-		return true
-	}
-	if path == prefix {
-		return true
-	}
-	return strings.HasPrefix(path, prefix+"/")
 }
 
 // SkipMethodsAndPaths returns a SkipFunc that bypasses authentication for specific method/path pairs.

@@ -16,6 +16,8 @@ import (
 type CORSConfig struct {
 	// AllowedOrigins list of allowed origins. "*" allows any origin (insecure for private APIs).
 	AllowedOrigins []string
+	// allowedOriginsMap provides O(1) lookup for origin checking.
+	allowedOriginsMap map[string]bool
 	// AllowedMethods HTTP methods clients can use in CORS requests. Default: GET, POST, PUT, DELETE, PATCH, OPTIONS.
 	AllowedMethods []string
 	// AllowedHeaders request headers clients are allowed to send. Default: Content-Type, Authorization.
@@ -46,13 +48,24 @@ type CORSConfig struct {
 //	config.AllowCredentials = true  // Allow cookies in cross-origin requests
 //	r.Use(middleware.CORS(config))
 func DefaultCORSConfig() CORSConfig {
-	return CORSConfig{
+	config := CORSConfig{
 		AllowedOrigins: []string{},
 		AllowedMethods: []string{"GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"},
 		AllowedHeaders: []string{"Content-Type", "Authorization"},
 		ExposeHeaders:  []string{"Content-Length", "Date"},
 		MaxAge:         3600,
 	}
+	config.allowedOriginsMap = buildOriginsMap(config.AllowedOrigins)
+	return config
+}
+
+// buildOriginsMap creates a map for O(1) origin lookup.
+func buildOriginsMap(origins []string) map[string]bool {
+	m := make(map[string]bool, len(origins))
+	for _, origin := range origins {
+		m[origin] = true
+	}
+	return m
 }
 
 // CORS returns a middleware that handles CORS (Cross-Origin Resource Sharing) requests.
@@ -79,12 +92,24 @@ func DefaultCORSConfig() CORSConfig {
 //	config.AllowCredentials = true
 //	r.Use(middleware.CORS(config))
 func CORS(config CORSConfig) zen.MiddlewareFunc {
+	// Always build the origins map from current AllowedOrigins
+	// This handles cases where AllowedOrigins is modified after config creation
+	config.allowedOriginsMap = buildOriginsMap(config.AllowedOrigins)
+	allowAll := len(config.AllowedOrigins) == 1 && config.AllowedOrigins[0] == "*"
+
 	return func(c *zen.Context, next http.Handler) {
 		origin := c.Request.Header.Get("Origin")
 
-		// Check if origin is allowed
-		if !isOriginAllowed(origin, config.AllowedOrigins) {
-			// Origin not allowed; proceed without CORS headers
+		// Check if origin is allowed (O(1) lookup using config's map)
+		if origin != "" {
+			allowed := allowAll || config.allowedOriginsMap[origin]
+			if !allowed {
+				// Origin not allowed; proceed without CORS headers
+				next.ServeHTTP(c.Response, c.Request)
+				return
+			}
+		} else if !allowAll && len(config.allowedOriginsMap) > 0 {
+			// No origin header and we have specific origins configured
 			next.ServeHTTP(c.Response, c.Request)
 			return
 		}
@@ -116,18 +141,4 @@ func CORS(config CORSConfig) zen.MiddlewareFunc {
 		// Continue to next handler for actual request
 		next.ServeHTTP(c.Response, c.Request)
 	}
-}
-
-// isOriginAllowed checks if origin is in the allowed list.
-// Special case: "*" in allowedOrigins allows all origins.
-func isOriginAllowed(origin string, allowedOrigins []string) bool {
-	if len(allowedOrigins) == 0 {
-		return false
-	}
-	for _, allowed := range allowedOrigins {
-		if allowed == "*" || allowed == origin {
-			return true
-		}
-	}
-	return false
 }
