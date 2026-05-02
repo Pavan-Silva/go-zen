@@ -9,8 +9,8 @@ Zen gives you modern request routing, binding, middleware, and reusable helpers 
 - Pattern-based routing via `http.ServeMux` and Go's route syntax
 - Fast request lifecycle with pooled contexts and zero-allocation middleware chaining
 - Secure defaults for timeouts, header limits, and graceful shutdown
-- Built-in request binding for JSON, forms, multipart files, and raw bodies
-- Optional helper packages for auth, Env, and SSE
+- Built-in request binding for JSON, XML, forms, multipart files, ProtoBuf, and headers
+- Optional helper packages for auth, env, SSE, and observability
 
 ## Installation
 
@@ -20,7 +20,7 @@ go get github.com/Pavan-Silva/go-zen
 
 ## Quick Start
 
-````go
+```go
 package main
 
 import (
@@ -32,6 +32,14 @@ import (
 )
 
 func main() {
+    app := zen.New(":8080")
+    app.Use(middleware.Logger, middleware.Recover)
+    app.Handle("GET /", func(c *zen.Context) {
+        c.String(http.StatusOK, "Hello World")
+    })
+    app.Run()
+}
+```
 
 ## Configuration
 
@@ -42,9 +50,10 @@ config := zen.DefaultConfig()
 config.ReadTimeout = 10 * time.Second
 config.WriteTimeout = 15 * time.Second
 config.IdleTimeout = 90 * time.Second
+config.RequestTimeout = 30 * time.Second // Per-request timeout
 
 app := zen.New(":8080", config)
-````
+```
 
 Or create a config from scratch:
 
@@ -55,6 +64,7 @@ config := zen.Config{
     IdleTimeout:       90 * time.Second,
     ReadHeaderTimeout: 2 * time.Second,
     MaxHeaderBytes:    2 << 20,
+    RequestTimeout:    30 * time.Second,
 }
 
 app := zen.New(":8080", config)
@@ -89,7 +99,41 @@ app.Handle("POST /users", func(c *zen.Context) {
 })
 ```
 
-You can also return XML responses:
+### ProtoBuf Binding
+
+```go
+import "google.golang.org/protobuf/proto"
+
+app.Handle("POST /proto", func(c *zen.Context) {
+    var msg MyProtoMessage
+    if err := c.BindProtoBuf(&msg); err != nil {
+        c.Error(http.StatusBadRequest, err.Error())
+        return
+    }
+    c.ProtoBuf(http.StatusOK, &msg)
+})
+```
+
+### Header Binding
+
+```go
+type Headers struct {
+    UserID string `header:"X-User-Id"`
+    APIKey string `header:"X-Api-Key"`
+    Rate   int    `header:"X-Rate-Limit"`
+}
+
+app.Handle("GET /api", func(c *zen.Context) {
+    var h Headers
+    if err := c.BindHeader(&h); err != nil {
+        c.Error(http.StatusBadRequest, err.Error())
+        return
+    }
+    c.JSON(http.StatusOK, h)
+})
+```
+
+### XML Responses
 
 ```go
 import "encoding/xml"
@@ -108,7 +152,7 @@ app.Handle("GET /users/{id}/xml", func(c *zen.Context) {
 })
 ```
 
-HTML responses:
+### HTML Responses
 
 ```go
 app.Handle("GET /page", func(c *zen.Context) {
@@ -123,7 +167,7 @@ app.Handle("GET /page", func(c *zen.Context) {
 })
 ```
 
-Plain text responses:
+### Plain Text Responses
 
 ```go
 app.Handle("GET /health", func(c *zen.Context) {
@@ -135,7 +179,7 @@ app.Handle("GET /token", func(c *zen.Context) {
 })
 ```
 
-No-content responses:
+### No-Content Responses
 
 ```go
 app.Handle("DELETE /items/{id}", func(c *zen.Context) {
@@ -143,7 +187,7 @@ app.Handle("DELETE /items/{id}", func(c *zen.Context) {
 })
 ```
 
-Redirects:
+### Redirects
 
 ```go
 app.Handle("GET /old-path", func(c *zen.Context) {
@@ -151,7 +195,7 @@ app.Handle("GET /old-path", func(c *zen.Context) {
 })
 ```
 
-Serve files:
+### Serve Files
 
 ```go
 app.Handle("GET /download/report", func(c *zen.Context) {
@@ -167,7 +211,7 @@ app.Handle("GET /image", func(c *zen.Context) {
 })
 ```
 
-Blob responses:
+### Blob Responses
 
 ```go
 app.Handle("GET /csv", func(c *zen.Context) {
@@ -177,7 +221,7 @@ app.Handle("GET /csv", func(c *zen.Context) {
 })
 ```
 
-Or Stream responses:
+### Stream Responses
 
 ```go
 app.Handle("GET /image-stream", func(c *zen.Context) {
@@ -191,7 +235,7 @@ app.Handle("GET /image-stream", func(c *zen.Context) {
 })
 ```
 
-You can also read query and path parameters:
+### Query and Path Parameters
 
 ```go
 app.Handle("GET /users/{id}", func(c *zen.Context) {
@@ -201,18 +245,22 @@ app.Handle("GET /users/{id}", func(c *zen.Context) {
 })
 ```
 
-### Context helpers
+### Context Helpers
 
 - `c.Request`, `c.Response`
 - `c.QueryParam(key)`
 - `c.Param(name)`
 - `c.BindJSON(dest)`
+- `c.BindXML(dest)`
+- `c.BindProtoBuf(dest)`
 - `c.BindForm(dest)`
+- `c.BindHeader(dest)`
 - `c.FormFile(field)`
 - `c.FormFiles(field)`
 - `c.Body()`
 - `c.JSON(status, data)`
 - `c.XML(status, data)`
+- `c.ProtoBuf(status, data)`
 - `c.HTML(status, html)`
 - `c.String(status, text)`
 - `c.NoContent(status)`
@@ -245,22 +293,88 @@ config.Skipper = func(r *http.Request) bool {
 app.Use(middleware.BodyLimitWithConfig(config))
 ```
 
-You can also apply a per-handler body limit manually:
+### Per-Route Middleware
+
+Apply middleware to specific routes:
 
 ```go
-app.Handle("POST /upload", func(c *zen.Context) {
-    const maxUploadSize = int64(10 << 20) // 10MB
-    c.Request.Body = http.MaxBytesReader(c.Response, c.Request.Body, maxUploadSize)
-    // proceed with BindJSON / Body / FormFile...
-})
+app.HandleWith("GET /admin", func(c *zen.Context) {
+    c.String(http.StatusOK, "admin")
+}, authMiddleware, auditLog)
 ```
 
-### Built-in middleware
+Or in groups:
+
+```go
+admin := app.Group("/admin", authMiddleware)
+admin.HandleWith("GET /dashboard", func(c *zen.Context) {
+    c.String(http.StatusOK, "dashboard")
+}, auditLog)
+```
+
+### Built-in Middleware
 
 - `middleware.Logger` — request logging with method, path, status, latency, client IP, and response size
 - `middleware.Recover` — recovers from panics and returns a 500 response
 - `middleware.CORS` — flexible CORS support for origins, methods, headers, and credentials
 - `middleware.BodyLimit` — limits request body size with support for skippers
+- `middleware.Compress()` — gzip compression for clients that accept it
+- `middleware.RequestID()` — injects unique request ID via `X-Request-ID` header
+- `middleware.RateLimiter()` — in-memory rate limiting with configurable window
+- `middleware.Prometheus()` — Prometheus metrics (request count, latency, response size)
+- `middleware.OpenTelemetry()` — distributed tracing via OpenTelemetry
+
+### Compression Middleware
+
+```go
+app.Use(middleware.Compress())
+// Or with custom level
+app.Use(middleware.CompressWithLevel(gzip.BestSpeed))
+```
+
+### Request ID Middleware
+
+```go
+app.Use(middleware.RequestID())
+// Custom header
+config := middleware.DefaultRequestIDConfig()
+config.Header = "X-Trace-ID"
+app.Use(middleware.RequestIDWithConfig(config))
+```
+
+### Rate Limiter Middleware
+
+```go
+app.Use(middleware.RateLimiter())
+// Custom config
+config := middleware.DefaultRateLimiterConfig()
+config.Limit = 100
+config.Duration = time.Minute
+app.Use(middleware.RateLimiterWithConfig(config))
+```
+
+### Prometheus Metrics
+
+```go
+app.Use(middleware.Prometheus())
+app.HandleRaw("GET /metrics", middleware.PrometheusHandler())
+```
+
+### OpenTelemetry Tracing
+
+```go
+app.Use(middleware.OpenTelemetry())
+// Custom config
+config := middleware.DefaultOTelConfig()
+config.ServiceName = "my-api"
+app.Use(middleware.OpenTelemetryWithConfig(config))
+```
+
+### Pprof Debug Endpoint
+
+```go
+app.HandleRaw("GET /debug/pprof/*", middleware.PprofHandler())
+```
 
 ## Static Files
 
@@ -268,15 +382,11 @@ Zen provides built-in support for serving static files and directories.
 
 ### Single File
 
-Serve a single file for a specific route:
-
 ```go
 app.File("GET /", "public/index.html")
 ```
 
 ### Directory Serving
-
-Serve files from a local directory:
 
 ```go
 app.Static("/images", "assets/images")
@@ -284,8 +394,6 @@ app.Static("/css", "public/css")
 ```
 
 ### Embedded Files
-
-Serve files from an embedded filesystem:
 
 ```go
 import (
@@ -324,7 +432,7 @@ Group middleware is inherited by subgroup routes.
 
 ## Request Binding and Validation
 
-Zen supports request binding for JSON, form data, multipart uploads, and raw request bodies.
+Zen supports request binding for JSON, XML, form data, multipart uploads, ProtoBuf, headers, and raw request bodies.
 
 ```go
 app.Handle("POST /submit", func(c *zen.Context) {
@@ -484,7 +592,7 @@ sessionAuth := &auth.SessionAuth{CookieName: "session_id", Store: sessionStore}
 app.Use(auth.RequireAuth(sessionAuth))
 ```
 
-### Using authenticated users
+### Using Authenticated Users
 
 Access the authenticated user in any handler:
 
@@ -504,7 +612,7 @@ app.Handle("GET /admin/users", func(c *zen.Context) {
 })
 ```
 
-### SSE authentication
+### SSE Authentication
 
 ```go
 myAuthenticator := &auth.JWTAuth{Secret: []byte("your-secret-key")}
