@@ -508,7 +508,7 @@ func TestAPIKeyAuth_Nil(t *testing.T) {
 }
 
 func TestSessionAuth(t *testing.T) {
-	store := NewInMemorySessionStore()
+	store := NewInMemorySessionStore(0) // no expiration
 	store.Set("session123", User{ID: "1", Username: "john"})
 
 	auth := &SessionAuth{
@@ -529,7 +529,7 @@ func TestSessionAuth(t *testing.T) {
 }
 
 func TestSessionAuth_MissingCookie(t *testing.T) {
-	store := NewInMemorySessionStore()
+	store := NewInMemorySessionStore(0)
 	auth := &SessionAuth{
 		CookieName: "session_id",
 		Store:      store,
@@ -543,7 +543,7 @@ func TestSessionAuth_MissingCookie(t *testing.T) {
 }
 
 func TestSessionAuth_InvalidSession(t *testing.T) {
-	store := NewInMemorySessionStore()
+	store := NewInMemorySessionStore(0)
 	auth := &SessionAuth{
 		CookieName: "session_id",
 		Store:      store,
@@ -559,7 +559,7 @@ func TestSessionAuth_InvalidSession(t *testing.T) {
 }
 
 func TestInMemorySessionStore(t *testing.T) {
-	store := NewInMemorySessionStore()
+	store := NewInMemorySessionStore(0) // no expiration
 	user := User{ID: "1", Username: "john"}
 
 	store.Set("sess1", user)
@@ -575,6 +575,48 @@ func TestInMemorySessionStore(t *testing.T) {
 	_, err = store.Get("nonexistent")
 	if err == nil {
 		t.Fatal("should error for nonexistent session")
+	}
+}
+
+func TestInMemorySessionStore_Expiration(t *testing.T) {
+	store := NewInMemorySessionStore(50 * time.Millisecond)
+	user := User{ID: "1", Username: "john"}
+
+	store.Set("sess1", user)
+
+	// Should work immediately
+	_, err := store.Get("sess1")
+	if err != nil {
+		t.Fatalf("Get should succeed before expiration: %v", err)
+	}
+
+	// Wait for expiration
+	time.Sleep(100 * time.Millisecond)
+
+	// Should fail after expiration
+	_, err = store.Get("sess1")
+	if err == nil {
+		t.Fatal("should error for expired session")
+	}
+}
+
+func TestInMemorySessionStore_CleanupExpired(t *testing.T) {
+	store := NewInMemorySessionStore(50 * time.Millisecond)
+
+	store.Set("sess1", User{ID: "1"})
+	store.Set("sess2", User{ID: "2"})
+
+	// Wait for expiration
+	time.Sleep(100 * time.Millisecond)
+
+	store.CleanupExpired()
+
+	// Both should be cleaned up
+	_, err1 := store.Get("sess1")
+	_, err2 := store.Get("sess2")
+
+	if err1 == nil || err2 == nil {
+		t.Fatal("expired sessions should be cleaned up")
 	}
 }
 

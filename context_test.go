@@ -1,15 +1,12 @@
 package zen
 
 import (
-	"fmt"
 	"net/http/httptest"
 	"testing"
 )
 
-func TestContext_Set_Get_InlineSlots(t *testing.T) {
-	c := &Context{
-		overflow: make(map[string]any, 4),
-	}
+func TestContext_Set_Get(t *testing.T) {
+	c := &Context{}
 
 	c.Set("user_id", 42)
 	c.Set("request_id", "abc-123")
@@ -29,27 +26,8 @@ func TestContext_Set_Get_InlineSlots(t *testing.T) {
 	}
 }
 
-func TestContext_Set_Get_Overflow(t *testing.T) {
-	c := &Context{
-		overflow: make(map[string]any, 4),
-	}
-
-	for i := 0; i < 12; i++ {
-		c.Set(fmt.Sprintf("k%d", i), i)
-	}
-
-	for i := 0; i < 12; i++ {
-		got := c.Get(fmt.Sprintf("k%d", i))
-		if got != i {
-			t.Fatalf("k%d = %v, want %d", i, got, i)
-		}
-	}
-}
-
 func TestContext_Set_UpdatesExisting(t *testing.T) {
-	c := &Context{
-		overflow: make(map[string]any, 4),
-	}
+	c := &Context{}
 
 	c.Set("foo", "bar")
 	c.Set("foo", "baz")
@@ -59,36 +37,19 @@ func TestContext_Set_UpdatesExisting(t *testing.T) {
 	}
 }
 
-func TestContext_Set_OverflowUpdatesExisting(t *testing.T) {
-	c := &Context{
-		overflow: make(map[string]any, 4),
-	}
-
-	for i := 0; i < 10; i++ {
-		c.Set(fmt.Sprintf("k%d", i), i)
-	}
-	c.Set("k5", 999)
-
-	if got := c.Get("k5"); got != 999 {
-		t.Fatalf("k5 = %v, want 999", got)
-	}
-}
-
 func TestContext_Reset(t *testing.T) {
-	c := &Context{
-		overflow: make(map[string]any, 4),
-	}
+	c := &Context{}
 
 	c.Set("a", 1)
 	c.Set("b", 2)
 
 	c.reset(nil, nil)
 
-	if c.storeLen != 0 {
-		t.Fatalf("storeLen = %d, want 0", c.storeLen)
+	if c.Get("a") != nil {
+		t.Fatal("a should be nil after reset")
 	}
-	if len(c.overflow) != 0 {
-		t.Fatalf("overflow len = %d, want 0", len(c.overflow))
+	if c.Get("b") != nil {
+		t.Fatal("b should be nil after reset")
 	}
 }
 
@@ -105,12 +66,6 @@ func TestContext_FromRequest(t *testing.T) {
 	got := FromRequest(r)
 	if got != c {
 		t.Fatal("FromRequest should return the attached context")
-	}
-}
-
-func TestContext_InlineSlotsCapacity(t *testing.T) {
-	if inlineSlots != 8 {
-		t.Fatalf("inlineSlots = %d, want 8", inlineSlots)
 	}
 }
 
@@ -144,3 +99,5 @@ func TestContext_RequestResponseSet(t *testing.T) {
 		t.Fatal("Request not set correctly")
 	}
 }
+
+

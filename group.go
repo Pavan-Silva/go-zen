@@ -5,6 +5,23 @@ import (
 	"strings"
 )
 
+// ensureLeadingSlash ensures the prefix starts with a slash.
+func ensureLeadingSlash(prefix string) string {
+	if prefix != "" && !strings.HasPrefix(prefix, "/") {
+		return "/" + prefix
+	}
+	return prefix
+}
+
+// combineMiddleware combines two middleware slices into a new slice.
+// Used to merge group middleware with per-route or subgroup middleware.
+func combineMiddleware(mw1, mw2 []MiddlewareFunc) []MiddlewareFunc {
+	combined := make([]MiddlewareFunc, 0, len(mw1)+len(mw2))
+	combined = append(combined, mw1...)
+	combined = append(combined, mw2...)
+	return combined
+}
+
 // Group represents a collection of routes with a common prefix and optional middleware.
 // Route groups are the primary way to organize routes and apply middleware to subsets
 // of your API.
@@ -46,14 +63,19 @@ type Group struct {
 //
 //	users := r.Group("/api/users", authMiddleware)
 //	users.Handle("GET /{id}", getUser)
-//	// Registers: GET /api/users/{id}
+//	users.Handle("PUT /{id}", updateUser)
+//
+//	// Nested groups
+//	admin := r.Group("/admin", adminMiddleware)
+//	admin.Handle("GET /dashboard", dashboard)
+//
+//	// Sub-groups inherit parent middleware
+//	adminUsers := admin.Group("/users")
+//	adminUsers.Handle("GET /{id}", adminGetUser)
 func (r *Router) Group(prefix string, middleware ...MiddlewareFunc) *Group {
-	if prefix != "" && !strings.HasPrefix(prefix, "/") {
-		prefix = "/" + prefix
-	}
 	return &Group{
 		router:     r,
-		prefix:     prefix,
+		prefix:     ensureLeadingSlash(prefix),
 		middleware: middleware,
 	}
 }
@@ -93,9 +115,7 @@ func (g *Group) HandleWith(pattern string, handler func(*Context), middleware ..
 	fullPattern := method + " " + cleanPath(fullPath)
 
 	// Combine group middleware with per-route middleware
-	combined := make([]MiddlewareFunc, 0, len(g.middleware)+len(middleware))
-	combined = append(combined, g.middleware...)
-	combined = append(combined, middleware...)
+	combined := combineMiddleware(g.middleware, middleware)
 
 	g.router.handleWithMiddleware(fullPattern, handler, combined)
 }
@@ -110,6 +130,7 @@ func (g *Group) HandleRaw(pattern string, handler http.Handler) {
 
 // cleanPath removes duplicate slashes from combined path strings.
 // This is needed when concatenating group prefix + route path.
+// Handles multiple consecutive slashes (e.g., "///" → "//").
 // Examples: "/api" + "/users" → "/api/users", "/" + "/users" → "/users"
 //
 // The cleanPath function is called at route registration time (setup), not per-request.
@@ -117,6 +138,20 @@ func cleanPath(path string) string {
 	if path == "/" {
 		return "/"
 	}
+	// Fast path: check if there are any consecutive slashes
+	hasDoubleSlash := false
+	for i := 1; i < len(path); i++ {
+		if path[i] == '/' && path[i-1] == '/' {
+			hasDoubleSlash = true
+			break
+		}
+	}
+
+	if !hasDoubleSlash {
+		return path
+	}
+
+	// Slow path: replace "//" with "/" once (handles exactly one level of duplication)
 	return strings.ReplaceAll(path, "//", "/")
 }
 
@@ -157,15 +192,10 @@ func (g *Group) Use(m ...MiddlewareFunc) {
 //	// Registers: GET /api/users/posts/{id}
 //	// Middleware: authMiddleware (inherited from parent)
 func (g *Group) SubGroup(prefix string, middleware ...MiddlewareFunc) *Group {
-	if prefix != "" && !strings.HasPrefix(prefix, "/") {
-		prefix = "/" + prefix
-	}
-	fullPrefix := g.prefix + prefix
+	fullPrefix := g.prefix + ensureLeadingSlash(prefix)
 
 	// Combine parent middleware with new middleware
-	combined := make([]MiddlewareFunc, 0, len(g.middleware)+len(middleware))
-	combined = append(combined, g.middleware...)
-	combined = append(combined, middleware...)
+	combined := combineMiddleware(g.middleware, middleware)
 
 	return &Group{
 		router:     g.router,

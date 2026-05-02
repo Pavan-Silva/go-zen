@@ -9,6 +9,16 @@ import (
 	"github.com/Pavan-Silva/go-zen/logger"
 )
 
+// writeResponse sets content type, status, writes body, and logs errors.
+// Consolidates the repeated response writing pattern across methods.
+func writeResponse(c *Context, status int, contentType string, body []byte) {
+	c.Response.Header().Set("Content-Type", contentType)
+	c.Response.WriteHeader(status)
+	if _, err := c.Response.Write(body); err != nil {
+		logger.Error("HTTP: response write error: %v", err)
+	}
+}
+
 // HTML writes an HTML string directly to the response with the given HTTP status.
 // The response Content-Type header is automatically set to "text/html; charset=utf-8".
 // This method does not perform any encoding or escaping - the HTML should be properly
@@ -28,11 +38,7 @@ import (
 //	    </html>
 //	`)
 func (c *Context) HTML(status int, html string) {
-	c.Response.Header().Set("Content-Type", "text/html; charset=utf-8")
-	c.Response.WriteHeader(status)
-	if _, err := c.Response.Write([]byte(html)); err != nil {
-		logger.Error("HTTP: response write error: %v", err)
-	}
+	writeResponse(c, status, "text/html; charset=utf-8", []byte(html))
 }
 
 // String writes a plain text string directly to the response with the given HTTP status.
@@ -49,11 +55,7 @@ func (c *Context) HTML(status int, html string) {
 //
 //	c.String(http.StatusUnauthorized, "Invalid credentials")
 func (c *Context) String(status int, text string) {
-	c.Response.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	c.Response.WriteHeader(status)
-	if _, err := c.Response.Write([]byte(text)); err != nil {
-		logger.Error("HTTP: response write error: %v", err)
-	}
+	writeResponse(c, status, "text/plain; charset=utf-8", []byte(text))
 }
 
 // NoContent writes a response with no body and the given HTTP status.
@@ -120,12 +122,7 @@ func (c *Context) Inline(filePath string) {
 //	data := []byte("id,name\n1,John Doe")
 //	c.Blob(http.StatusOK, "text/csv", data)
 func (c *Context) Blob(status int, contentType string, data []byte) error {
-	c.Response.Header().Set("Content-Type", contentType)
-	c.Response.WriteHeader(status)
-	if _, err := c.Response.Write(data); err != nil {
-		logger.Error("HTTP: response write error: %v", err)
-		return err
-	}
+	writeResponse(c, status, contentType, data)
 	return nil
 }
 

@@ -10,24 +10,20 @@ import (
 // Default is 32 MiB.
 const defaultMultipartMemory int64 = 32 << 20
 
-// UploadedFile represents a file uploaded in a multipart request.
-type UploadedFile struct {
-	Header  *multipart.FileHeader
-	Content []byte
-}
-
-// FormFile retrieves a single file from a multipart form upload by field name.
-// It returns the file header and the file content as []byte.
+// FormFile retrieves a single file from a multipart form upload.
+// Returns the file header and a file handle for streaming.
+// The caller is responsible for closing the file.
 //
 // Example:
 //
-//	file, content, err := c.FormFile("avatar")
+//	header, file, err := c.FormFile("avatar")
 //	if err != nil {
-//	    c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+//	    c.Error(http.StatusBadRequest, err.Error())
 //	    return
 //	}
-//	// file.Filename, file.Size, file.Header (e.g., Content-Type available)
-func (c *Context) FormFile(fieldName string) (*multipart.FileHeader, []byte, error) {
+//	defer file.Close()
+//	// Stream or read file as needed...
+func (c *Context) FormFile(fieldName string) (*multipart.FileHeader, multipart.File, error) {
 	if err := c.Request.ParseMultipartForm(defaultMultipartMemory); err != nil {
 		return nil, nil, fmt.Errorf("http: ParseMultipartForm error: %w", err)
 	}
@@ -36,34 +32,26 @@ func (c *Context) FormFile(fieldName string) (*multipart.FileHeader, []byte, err
 	if err != nil {
 		return nil, nil, fmt.Errorf("http: FormFile error: %w", err)
 	}
-	defer func() {
-		if cerr := file.Close(); cerr != nil && err == nil {
-			err = fmt.Errorf("http: file close error: %w", cerr)
-		}
-	}()
 
-	content, err := io.ReadAll(file)
-	if err != nil {
-		return nil, nil, fmt.Errorf("http: file read error: %w", err)
-	}
-
-	return header, content, nil
+	return header, file, nil
 }
 
-// FormFiles retrieves all files from a multipart form upload by field name.
-// It returns a slice of file headers paired with their content.
+// FormFiles retrieves all file headers for a multipart form field.
+// The caller opens each file individually for streaming access.
 //
 // Example:
 //
-//	files, err := c.FormFiles("attachments")
+//	headers, err := c.FormFiles("attachments")
 //	if err != nil {
-//	    c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+//	    c.Error(http.StatusBadRequest, err.Error())
 //	    return
 //	}
-//	for _, file := range files {
-//	    fmt.Println(file.Header.Filename, len(file.Content))
+//	for _, h := range headers {
+//	    file, _ := h.Open()
+//	    defer file.Close()
+//	    // process file...
 //	}
-func (c *Context) FormFiles(fieldName string) ([]UploadedFile, error) {
+func (c *Context) FormFiles(fieldName string) ([]*multipart.FileHeader, error) {
 	if err := c.Request.ParseMultipartForm(defaultMultipartMemory); err != nil {
 		return nil, fmt.Errorf("http: ParseMultipartForm error: %w", err)
 	}
@@ -73,27 +61,22 @@ func (c *Context) FormFiles(fieldName string) ([]UploadedFile, error) {
 		return nil, fmt.Errorf("http: no files found for field %q", fieldName)
 	}
 
-	var result []UploadedFile
-	for _, header := range formFiles {
-		file, err := header.Open()
-		if err != nil {
-			return nil, fmt.Errorf("http: open file error: %w", err)
-		}
+	return formFiles, nil
+}
 
-		content, err := io.ReadAll(file)
-		closeErr := file.Close()
-		if err != nil {
-			return nil, fmt.Errorf("http: file read error: %w", err)
-		}
-		if closeErr != nil {
-			return nil, fmt.Errorf("http: file close error: %w", closeErr)
-		}
+// ReadFile is a convenience method that reads a single uploaded file into memory.
+// For large files, use FormFile() and stream the content instead.
+func (c *Context) ReadFile(fieldName string) (*multipart.FileHeader, []byte, error) {
+	header, file, err := c.FormFile(fieldName)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer file.Close()
 
-		result = append(result, UploadedFile{
-			Header:  header,
-			Content: content,
-		})
+	content, err := io.ReadAll(file)
+	if err != nil {
+		return nil, nil, fmt.Errorf("http: file read error: %w", err)
 	}
 
-	return result, nil
+	return header, content, nil
 }

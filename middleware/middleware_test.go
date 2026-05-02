@@ -357,13 +357,10 @@ func TestCompress_NoGzip_Skip(t *testing.T) {
 }
 
 func TestCompress_Skipper(t *testing.T) {
-	cfg := DefaultCompressConfig()
-	cfg.Skipper = func(r *http.Request) bool {
-		return r.URL.Path == "/no-compress"
-	}
-
 	r := zen.New(":0")
-	r.Use(CompressWithConfig(cfg))
+	r.Use(CompressWithSkipper(func(r *http.Request) bool {
+		return r.URL.Path == "/no-compress"
+	}))
 	r.Handle("GET /no-compress", func(c *zen.Context) {
 		c.String(200, "hello")
 	})

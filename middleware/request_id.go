@@ -3,6 +3,7 @@ package middleware
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"net/http"
 
 	"github.com/Pavan-Silva/go-zen"
@@ -76,8 +77,12 @@ func RequestIDWithConfig(config RequestIDConfig) zen.MiddlewareFunc {
 }
 
 // generateRequestID creates a random 16-byte hex string (32 chars).
+// It panics if the random number generator fails, as this indicates a serious
+// system-level issue that should fail fast.
 func generateRequestID() string {
 	b := make([]byte, 16)
-	rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		panic(fmt.Sprintf("failed to generate request ID: crypto/rand.Read failed: %v", err))
+	}
 	return hex.EncodeToString(b)
 }
