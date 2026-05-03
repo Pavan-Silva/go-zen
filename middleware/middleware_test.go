@@ -380,8 +380,9 @@ func TestRequestID_Default(t *testing.T) {
 	r := zen.New(":0")
 	r.Use(RequestID())
 	r.Handle("GET /api", func(c *zen.Context) {
-		id := c.Get("request_id")
-		c.String(200, id.(string))
+		if val, ok := c.Get("request_id"); ok {
+			c.String(200, val.(string))
+		}
 	})
 
 	req := httptest.NewRequest("GET", "/api", nil)
@@ -403,7 +404,9 @@ func TestRequestID_ReuseExisting(t *testing.T) {
 	r := zen.New(":0")
 	r.Use(RequestID())
 	r.Handle("GET /api", func(c *zen.Context) {
-		c.String(200, c.Get("request_id").(string))
+		if val, ok := c.Get("request_id"); ok {
+			c.String(200, val.(string))
+		}
 	})
 
 	req := httptest.NewRequest("GET", "/api", nil)

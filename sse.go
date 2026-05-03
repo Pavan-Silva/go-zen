@@ -3,7 +3,6 @@ package zen
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"strings"
 )
@@ -40,16 +39,17 @@ func (c *Context) SSEvent(event string, data any) error {
 		return err
 	}
 
+	w := c.Response
 	if event != "" {
 		// Event names are a single line in SSE.
 		event = strings.ReplaceAll(event, "\r", "")
 		event = strings.ReplaceAll(event, "\n", "")
-		if _, err := fmt.Fprintf(c.Response, "event: %s\n", event); err != nil {
+		if _, err := w.Write([]byte("event: " + event + "\n")); err != nil {
 			return err
 		}
 	}
 
-	if _, err := fmt.Fprintf(c.Response, "data: %s\n\n", payload); err != nil {
+	if _, err := w.Write([]byte("data: " + payload + "\n\n")); err != nil {
 		return err
 	}
 
@@ -72,7 +72,7 @@ func encodeSSEData(data any) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		return strings.ReplaceAll(string(b), "\n", "\ndata: "), nil
+		return string(b), nil
 	}
 }
 

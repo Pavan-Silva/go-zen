@@ -147,10 +147,3 @@ func (c *Context) BindHeader(dest any) error {
 
 	return validateStruct(dest)
 }
-
-// MustBindHeader binds headers and panics on error.
-func (c *Context) MustBindHeader(dest any) {
-	if err := c.BindHeader(dest); err != nil {
-		panic(err)
-	}
-}

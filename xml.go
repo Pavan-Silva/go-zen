@@ -53,6 +53,12 @@ func (c *Context) BindXML(dest any) error {
 // XML encodes data as XML and writes it to the response with the given HTTP status.
 // The response Content-Type header is automatically set to "application/xml".
 //
+// Uses xml.Encoder which streams directly to the response writer instead of
+// marshaling to memory first, improving performance for large payloads.
+//
+// The status code is not sent until the first write, so if encoding fails,
+// the status can still be changed to 500.
+//
 // If encoding fails, logs the error and sends a 500 error response instead.
 // Write errors are logged but not returned (they indicate connection issues).
 //
@@ -68,16 +74,18 @@ func (c *Context) BindXML(dest any) error {
 //
 //	c.XML(http.StatusCreated, user)
 func (c *Context) XML(status int, data any) {
-	b, err := xml.Marshal(data)
-	if err != nil {
-		logger.Error("HTTP: XML encode error: %v", err)
-		http.Error(c.Response, `<error>internal server error</error>`, http.StatusInternalServerError)
-		return
-	}
-
 	c.Response.Header().Set("Content-Type", "application/xml")
-	c.Response.WriteHeader(status)
-	if _, err := c.Response.Write(b); err != nil {
-		logger.Error("HTTP: response write error: %v", err)
+
+	// Use delayedStatusWriter so we can change status to 500 if encode fails.
+	resp := c.Response
+	c.SetResponse(&delayedStatusWriter{ResponseWriter: resp, status: status})
+	defer c.SetResponse(resp)
+
+	enc := xml.NewEncoder(c.Response)
+	if err := enc.Encode(data); err != nil {
+		logger.Error("HTTP: XML encode error: %v", err)
+		c.SetResponse(resp) // restore original so we can write error
+		resp.WriteHeader(http.StatusInternalServerError)
+		_, _ = resp.Write([]byte(`<error>internal server error</error>`))
 	}
 }

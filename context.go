@@ -10,12 +10,16 @@ import (
 // It's an unexported type to ensure no collisions with other packages.
 type zenCtxKey struct{}
 
+// contextPool caches allocated Context instances for reuse.
+// This reduces GC pressure and improves performance under high load.
+var contextPool = sync.Pool{
+	New: func() any {
+		return &Context{}
+	},
+}
+
 // Context is the request context for zen handlers. It provides a simple
 // key-value store using a map, matching Gin and Echo's approach.
-//
-// A RWMutex protects the store for thread safety, similar to Echo.
-// While each request typically has its own Context, the pool pattern means
-// the same context could theoretically be accessed concurrently.
 type Context struct {
 	// Response is the http.ResponseWriter for this request.
 	Response http.ResponseWriter
@@ -23,16 +27,13 @@ type Context struct {
 	Request *http.Request
 	// store holds key-value pairs for the request context.
 	store map[string]any
-	mu    sync.RWMutex
 }
 
 // reset clears the Context for reuse.
 func (c *Context) reset(w http.ResponseWriter, r *http.Request) {
 	c.Response = w
 	c.Request = r
-	c.mu.Lock()
 	c.store = nil
-	c.mu.Unlock()
 }
 
 // Set stores a value in the context with the given key.
@@ -42,41 +43,49 @@ func (c *Context) reset(w http.ResponseWriter, r *http.Request) {
 //	c.Set("user_id", 42)
 //	c.Set("request_id", uuid.New().String())
 func (c *Context) Set(key string, val any) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
 	if c.store == nil {
 		c.store = make(map[string]any)
 	}
 	c.store[key] = val
 }
 
-// Get retrieves a value from the context by key, returning nil if not found.
+// Get retrieves a value from the context by key, returning the value and a boolean
+// indicating whether the key exists. This distinguishes between a key that was
+// explicitly set to nil and a key that was never set.
 //
 // Example:
 //
-//	userID := c.Get("user_id")
-//	if userID == nil {
+//	userID, ok := c.Get("user_id")
+//	if !ok {
 //	    c.Error(http.StatusUnauthorized, "unauthorized")
 //	    return
 //	}
-func (c *Context) Get(key string) any {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.store[key]
+func (c *Context) Get(key string) (any, bool) {
+	if c.store == nil {
+		return nil, false
+	}
+	val, ok := c.store[key]
+	return val, ok
 }
 
-// newContext creates a fresh Context, initializes it, and stores
+// SetResponse sets the http.ResponseWriter for this context.
+func (c *Context) SetResponse(w http.ResponseWriter) {
+	c.Response = w
+}
+
+// newContext retrieves a Context from the pool, initializes it, and stores
 // it in the request context for retrieval by middleware and handlers.
 func newContext(w http.ResponseWriter, r *http.Request) (*Context, *http.Request) {
-	c := &Context{}
+	c := contextPool.Get().(*Context)
 	r = r.WithContext(context.WithValue(r.Context(), zenCtxKey{}, c))
 	c.reset(w, r)
 	return c, r
 }
 
-// releaseContext is a no-op since we don't pool contexts.
+// releaseContext returns the Context to the pool after resetting it.
 func releaseContext(c *Context) {
 	c.reset(nil, nil)
+	contextPool.Put(c)
 }
 
 // FromRequest retrieves the Context from an *http.Request if it exists.
