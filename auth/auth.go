@@ -93,8 +93,8 @@ func RequireRole(role string, onError func(*zen.Context)) func(*zen.Context, htt
 	}
 
 	return func(c *zen.Context, next http.Handler) {
-		userVal := c.Get("user")
-		if userVal == nil {
+		userVal, ok := c.Get("user")
+		if !ok || userVal == nil {
 			onError(c)
 			return
 		}
@@ -112,7 +112,7 @@ func RequireRole(role string, onError func(*zen.Context)) func(*zen.Context, htt
 // GetUser retrieves the authenticated user from the zen.Context.
 // Returns nil if not authenticated.
 func GetUser(c *zen.Context) *User {
-	if userVal := c.Get("user"); userVal != nil {
+	if userVal, ok := c.Get("user"); ok && userVal != nil {
 		if user, ok := userVal.(*User); ok {
 			return user
 		}

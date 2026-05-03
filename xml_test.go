@@ -141,6 +141,7 @@ func TestXML_EncodeError(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
+	// With delayedStatusWriter, the status can be changed to 500 on encode error.
 	if w.Code != 500 {
 		t.Fatalf("status = %d, want 500", w.Code)
 	}

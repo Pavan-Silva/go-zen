@@ -32,13 +32,6 @@ func (c *Context) BindProtoBuf(dest proto.Message) error {
 	return nil
 }
 
-// MustBindProtoBuf binds ProtoBuf and panics on error.
-func (c *Context) MustBindProtoBuf(dest proto.Message) {
-	if err := c.BindProtoBuf(dest); err != nil {
-		panic(err)
-	}
-}
-
 // ProtoBuf sends a Protocol Buffer response with the given status code.
 //
 // Example:

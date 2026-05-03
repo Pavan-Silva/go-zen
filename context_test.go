@@ -12,17 +12,17 @@ func TestContext_Set_Get(t *testing.T) {
 	c.Set("request_id", "abc-123")
 	c.Set("flag", true)
 
-	if got := c.Get("user_id"); got != 42 {
+	if got, ok := c.Get("user_id"); !ok || got != 42 {
 		t.Fatalf("user_id = %v, want 42", got)
 	}
-	if got := c.Get("request_id"); got != "abc-123" {
+	if got, ok := c.Get("request_id"); !ok || got != "abc-123" {
 		t.Fatalf("request_id = %v, want abc-123", got)
 	}
-	if got := c.Get("flag"); got != true {
+	if got, ok := c.Get("flag"); !ok || got != true {
 		t.Fatalf("flag = %v, want true", got)
 	}
-	if got := c.Get("missing"); got != nil {
-		t.Fatalf("missing = %v, want nil", got)
+	if _, ok := c.Get("missing"); ok {
+		t.Fatal("missing should not exist")
 	}
 }
 
@@ -32,7 +32,7 @@ func TestContext_Set_UpdatesExisting(t *testing.T) {
 	c.Set("foo", "bar")
 	c.Set("foo", "baz")
 
-	if got := c.Get("foo"); got != "baz" {
+	if got, ok := c.Get("foo"); !ok || got != "baz" {
 		t.Fatalf("foo = %v, want baz", got)
 	}
 }
@@ -45,11 +45,11 @@ func TestContext_Reset(t *testing.T) {
 
 	c.reset(nil, nil)
 
-	if c.Get("a") != nil {
-		t.Fatal("a should be nil after reset")
+	if _, ok := c.Get("a"); ok {
+		t.Fatal("a should not exist after reset")
 	}
-	if c.Get("b") != nil {
-		t.Fatal("b should be nil after reset")
+	if _, ok := c.Get("b"); ok {
+		t.Fatal("b should not exist after reset")
 	}
 }
 
@@ -80,7 +80,7 @@ func TestContextPool_Reuse(t *testing.T) {
 	c2, _ := newContext(w, r1)
 	defer releaseContext(c2)
 
-	if c2.Get("temp") != nil {
+	if _, ok := c2.Get("temp"); ok {
 		t.Fatal("pooled context should not leak data from previous request")
 	}
 }

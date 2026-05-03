@@ -123,7 +123,9 @@ func TestGroup_Use(t *testing.T) {
 
 	var token string
 	api.Handle("GET /test", func(c *Context) {
-		token = c.Get("auth").(string)
+		if val, ok := c.Get("auth"); ok {
+			token = val.(string)
+		}
 		c.String(200, "ok")
 	})
 
