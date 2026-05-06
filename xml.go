@@ -3,8 +3,6 @@ package zen
 import (
 	"encoding/xml"
 	"fmt"
-	"io"
-	"net/http"
 
 	"github.com/Pavan-Silva/go-zen/logger"
 )
@@ -40,11 +38,6 @@ func (c *Context) BindXML(dest any) error {
 		return fmt.Errorf("XML decode: %w", err)
 	}
 
-	// Ensure there is no trailing data after a single XML element.
-	if _, err := dec.Token(); err != io.EOF {
-		return fmt.Errorf("request body must contain only one XML element: %w", err)
-	}
-
 	return nil
 }
 
@@ -73,17 +66,9 @@ func (c *Context) BindXML(dest any) error {
 //	c.XML(http.StatusCreated, user)
 func (c *Context) XML(status int, data any) {
 	c.Response.Header().Set("Content-Type", "application/xml")
+	c.Response.WriteHeader(status)
 
-	// Use delayedStatusWriter so we can change status to 500 if encode fails.
-	resp := c.Response
-	c.SetResponse(&delayedStatusWriter{ResponseWriter: resp, status: status})
-	defer c.SetResponse(resp)
-
-	enc := xml.NewEncoder(c.Response)
-	if err := enc.Encode(data); err != nil {
+	if err := xml.NewEncoder(c.Response).Encode(data); err != nil {
 		logger.Error("HTTP: XML encode error: %v", err)
-		c.SetResponse(resp) // restore original so we can write error
-		resp.WriteHeader(http.StatusInternalServerError)
-		_, _ = resp.Write([]byte(`<error>internal server error</error>`))
 	}
 }
