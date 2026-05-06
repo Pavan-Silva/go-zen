@@ -73,6 +73,26 @@ func validatorInstance() *validator.Validate {
 	return validateInst
 }
 
+// Validate runs struct validation on dest using the registered validator.
+// Returns nil if validation passes or no validator is registered.
+//
+// This is a package-level function (matching Echo's e.Validate() pattern).
+//
+// Example:
+//
+//	var req SignupRequest
+//	if err := c.BindJSON(&req); err != nil {
+//	    c.Error(http.StatusBadRequest, err.Error())
+//	    return
+//	}
+//	if err := zen.Validate(&req); err != nil {
+//	    c.Error(http.StatusBadRequest, err.Error())
+//	    return
+//	}
+func Validate(dest any) error {
+	return validateStruct(dest)
+}
+
 // validateStruct runs struct validation on dest if it is (or points to) a struct.
 // This shared helper avoids duplicating reflection logic across BindJSON, BindXML, and BindForm.
 func validateStruct(dest any) error {

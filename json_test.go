@@ -90,7 +90,7 @@ func TestBindJSON_Validation(t *testing.T) {
 			c.Error(400, err.Error())
 			return
 		}
-		if err := c.Validate(&captured); err != nil {
+		if err := Validate(&captured); err != nil {
 			c.Error(400, err.Error())
 			return
 		}
