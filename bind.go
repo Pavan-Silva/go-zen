@@ -31,18 +31,10 @@ func (c *Context) BindBody(dest any) error {
 		return c.BindJSON(dest)
 	case "application/xml", "text/xml":
 		return c.BindXML(dest)
-	case "application/x-www-form-urlencoded":
-		if err := c.Request.ParseForm(); err != nil {
-			return fmt.Errorf("form parse: %w", err)
-		}
-		return c.BindForm(dest)
-	case "multipart/form-data":
-		if err := c.Request.ParseMultipartForm(32 << 20); err != nil {
-			return fmt.Errorf("multipart parse: %w", err)
-		}
+	case "application/x-www-form-urlencoded", "multipart/form-data":
 		return c.BindForm(dest)
 	default:
-		if strings.Contains(ct, "json") {
+		if strings.HasSuffix(ct, "+json") || strings.HasSuffix(ct, "/json") {
 			return c.BindJSON(dest)
 		}
 		return fmt.Errorf("BindBody: unsupported content type %q", ct)
@@ -116,16 +108,7 @@ func (c *Context) BindPathParams(dest any) error {
 			continue
 		}
 
-		tag := field.Tag.Get("param")
-		if tag == "" || tag == "-" {
-			tag = field.Tag.Get("json")
-		}
-		if tag == "" || tag == "-" {
-			tag = field.Name
-		}
-		if idx := strings.IndexByte(tag, ','); idx != -1 {
-			tag = tag[:idx]
-		}
+		tag := parseStructTag(field, "param")
 
 		val := c.Param(tag)
 		if val == "" {
@@ -172,16 +155,7 @@ func (c *Context) BindQueryParams(dest any) error {
 			continue
 		}
 
-		tag := field.Tag.Get("query")
-		if tag == "" || tag == "-" {
-			tag = field.Tag.Get("json")
-		}
-		if tag == "" || tag == "-" {
-			tag = field.Name
-		}
-		if idx := strings.IndexByte(tag, ','); idx != -1 {
-			tag = tag[:idx]
-		}
+		tag := parseStructTag(field, "query")
 
 		vals, ok := query[tag]
 		if !ok || len(vals) == 0 {
@@ -194,6 +168,23 @@ func (c *Context) BindQueryParams(dest any) error {
 		}
 	}
 	return nil
+}
+
+// parseStructTag extracts the field name from struct tag.
+// It uses tagName first, falls back to "json", then the field name.
+// Options after comma (e.g., ",omitempty") are stripped.
+func parseStructTag(field reflect.StructField, tagName string) string {
+	tag := field.Tag.Get(tagName)
+	if tag == "" || tag == "-" {
+		tag = field.Tag.Get("json")
+	}
+	if tag == "" || tag == "-" {
+		tag = field.Name
+	}
+	if idx := strings.IndexByte(tag, ','); idx != -1 {
+		tag = tag[:idx]
+	}
+	return tag
 }
 
 // setFieldValue converts string values to the target field type.

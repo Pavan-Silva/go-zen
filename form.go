@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
-	"strings"
 )
 
 // ErrInvalidBindTarget is returned by BindForm when dest is not a pointer to a struct.
@@ -58,16 +57,7 @@ func (c *Context) BindForm(dest any) error {
 			continue
 		}
 
-		tag := field.Tag.Get("form")
-		if tag == "" || tag == "-" {
-			tag = field.Tag.Get("json")
-		}
-		if tag == "" || tag == "-" {
-			tag = field.Name
-		}
-		if idx := strings.IndexByte(tag, ','); idx != -1 {
-			tag = tag[:idx]
-		}
+		tag := parseStructTag(field, "form")
 
 		vals, ok := c.Request.Form[tag]
 		if !ok || len(vals) == 0 {
