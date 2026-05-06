@@ -13,10 +13,17 @@ import (
 //
 // Returns an error if the content type is unsupported or binding fails.
 //
+// NOTE: Unlike Gin/Echo, this does NOT auto-validate. Call c.Validate(dest)
+// separately if you want struct validation.
+//
 // Example:
 //
 //	var req SignupRequest
 //	if err := c.Bind(&req); err != nil {
+//	    c.Error(http.StatusBadRequest, err.Error())
+//	    return
+//	}
+//	if err := c.Validate(&req); err != nil {
 //	    c.Error(http.StatusBadRequest, err.Error())
 //	    return
 //	}

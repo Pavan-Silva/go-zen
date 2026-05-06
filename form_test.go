@@ -116,6 +116,10 @@ func TestBindForm_Validation(t *testing.T) {
 			c.Error(400, err.Error())
 			return
 		}
+		if err := c.Validate(&captured); err != nil {
+			c.Error(400, err.Error())
+			return
+		}
 		c.String(200, "ok")
 	})
 

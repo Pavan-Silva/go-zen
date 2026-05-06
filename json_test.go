@@ -90,6 +90,10 @@ func TestBindJSON_Validation(t *testing.T) {
 			c.Error(400, err.Error())
 			return
 		}
+		if err := c.Validate(&captured); err != nil {
+			c.Error(400, err.Error())
+			return
+		}
 		c.String(200, "ok")
 	})
 
@@ -163,12 +167,10 @@ func TestJSON_EncodeError(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	// With delayedStatusWriter, the status can be changed to 500 on encode error.
-	if w.Code != 500 {
-		t.Fatalf("status = %d, want 500", w.Code)
-	}
-	if !strings.Contains(w.Body.String(), "error") {
-		t.Fatalf("response should contain error message; got: %s", w.Body.String())
+	// Without delayedStatusWriter, the status (200) is already sent before
+	// the encode error occurs. The error is logged but status can't be changed.
+	if w.Code != 200 {
+		t.Fatalf("status = %d, want 200 (status already sent before encode error)", w.Code)
 	}
 }
 
