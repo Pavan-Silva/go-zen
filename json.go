@@ -3,7 +3,6 @@ package zen
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 
 	"github.com/Pavan-Silva/go-zen/logger"
 )
@@ -15,6 +14,7 @@ import (
 //
 // Returns an error if:
 // - The JSON is malformed
+// - The JSON contains unknown fields (when DisallowUnknownFields is called)
 //
 // Example:
 //
@@ -36,11 +36,6 @@ func (c *Context) BindJSON(dest any) error {
 
 	if err := dec.Decode(dest); err != nil {
 		return fmt.Errorf("JSON decode: %w", err)
-	}
-
-	// Ensure there is no trailing data after a single JSON value.
-	if _, err := dec.Token(); err != io.EOF {
-		return fmt.Errorf("request body must contain only one JSON object: %w", err)
 	}
 
 	return nil
@@ -71,8 +66,7 @@ func (c *Context) JSON(status int, data any) {
 	c.Response.Header().Set("Content-Type", "application/json")
 	c.Response.WriteHeader(status)
 
-	enc := json.NewEncoder(c.Response)
-	if err := enc.Encode(data); err != nil {
+	if err := json.NewEncoder(c.Response).Encode(data); err != nil {
 		logger.Error("HTTP: JSON encode error: %v", err)
 	}
 }
