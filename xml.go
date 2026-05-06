@@ -37,18 +37,12 @@ func (c *Context) BindXML(dest any) error {
 	dec := xml.NewDecoder(c.Request.Body)
 
 	if err := dec.Decode(dest); err != nil {
-		c.Request.Body.Close()
 		return fmt.Errorf("XML decode: %w", err)
 	}
 
 	// Ensure there is no trailing data after a single XML element.
 	if _, err := dec.Token(); err != io.EOF {
-		c.Request.Body.Close()
 		return fmt.Errorf("request body must contain only one XML element: %w", err)
-	}
-
-	if err := c.Request.Body.Close(); err != nil {
-		return err
 	}
 
 	return nil

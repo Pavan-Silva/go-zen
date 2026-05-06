@@ -23,7 +23,6 @@ func (c *Context) BindProtoBuf(dest proto.Message) error {
 	if err != nil {
 		return err
 	}
-	defer c.Request.Body.Close()
 
 	if err := proto.Unmarshal(body, dest); err != nil {
 		return fmt.Errorf("protobuf: %w", err)

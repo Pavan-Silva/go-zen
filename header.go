@@ -145,5 +145,5 @@ func (c *Context) BindHeader(dest any) error {
 		f.setFunc(v.Field(f.index), headerValue)
 	}
 
-	return validateStruct(dest)
+	return nil
 }
