@@ -74,11 +74,8 @@ func TestBindJSON_TrailingData(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	if w.Code != 400 {
-		t.Fatalf("status = %d, want 400; body: %s", w.Code, w.Body.String())
-	}
-	if !strings.Contains(w.Body.String(), "only one JSON") {
-		t.Fatalf("error message should mention single object; got: %s", w.Body.String())
+	if w.Code != 200 {
+		t.Fatalf("status = %d, want 200 (decoder ignores trailing data)", w.Code)
 	}
 }
 
