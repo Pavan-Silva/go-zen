@@ -18,7 +18,11 @@ type FormError struct {
 	Err   error
 }
 
-// BindForm parses URL-encoded or multipart form data into a struct, then validates it.
+// BindForm parses URL-encoded or multipart form data into a struct.
+//
+// NOTE: This does NOT auto-validate (matching Gin/Echo behavior).
+// Call c.Validate(dest) separately if you want struct validation.
+//
 // It uses "form" struct tags first, falling back to "json" tags.
 //
 // Supported field types: string, bool, all int/uint variants, float32, float64, []string.
@@ -32,6 +36,9 @@ type FormError struct {
 //	var form LoginForm
 //	if err := c.BindForm(&form); err != nil {
 //	    // handle error
+//	}
+//	if err := c.Validate(&form); err != nil {
+//	    // handle validation error
 //	}
 func (c *Context) BindForm(dest any) error {
 	if err := c.Request.ParseForm(); err != nil {
@@ -74,7 +81,7 @@ func (c *Context) BindForm(dest any) error {
 		}
 	}
 
-	return validateStruct(dest)
+	return nil
 }
 
 // setFieldValue converts string values to the target field type.

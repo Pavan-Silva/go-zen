@@ -73,6 +73,24 @@ func (c *Context) SetResponse(w http.ResponseWriter) {
 	c.Response = w
 }
 
+// Validate runs struct validation on dest using the registered validator.
+// Returns nil if validation passes or no validator is registered.
+//
+// Example:
+//
+//	var req SignupRequest
+//	if err := c.BindJSON(&req); err != nil {
+//	    c.Error(http.StatusBadRequest, err.Error())
+//	    return
+//	}
+//	if err := c.Validate(&req); err != nil {
+//	    c.Error(http.StatusBadRequest, err.Error())
+//	    return
+//	}
+func (c *Context) Validate(dest any) error {
+	return validateStruct(dest)
+}
+
 // newContext retrieves a Context from the pool, initializes it, and stores
 // it in the request context for retrieval by middleware and handlers.
 func newContext(w http.ResponseWriter, r *http.Request) (*Context, *http.Request) {

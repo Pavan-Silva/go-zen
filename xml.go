@@ -10,13 +10,13 @@ import (
 )
 
 // BindXML parses the request body as XML and decodes it into dest.
-// If dest is a struct, it also runs struct validation using the registered validator.
-// The request body is closed after reading (errors are logged but not returned).
+//
+// NOTE: This does NOT auto-validate (matching Gin/Echo behavior).
+// Call c.Validate(dest) separately if you want struct validation.
 //
 // Returns an error if:
 // - The XML is malformed
 // - dest is not a pointer to a struct for validation
-// - Validation fails (if enabled)
 //
 // Example:
 //
@@ -26,6 +26,10 @@ import (
 //	}
 //	var req SignupRequest
 //	if err := c.BindXML(&req); err != nil {
+//	    c.Error(http.StatusBadRequest, err.Error())
+//	    return
+//	}
+//	if err := c.Validate(&req); err != nil {
 //	    c.Error(http.StatusBadRequest, err.Error())
 //	    return
 //	}
@@ -47,7 +51,7 @@ func (c *Context) BindXML(dest any) error {
 		return err
 	}
 
-	return validateStruct(dest)
+	return nil
 }
 
 // XML encodes data as XML and writes it to the response with the given HTTP status.
