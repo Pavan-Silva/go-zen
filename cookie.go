@@ -5,16 +5,8 @@ import (
 )
 
 // SetCookie sets a cookie in the HTTP response.
-func (c *Context) SetCookie(name, value string, maxAge int, path, domain string, secure, httpOnly bool) {
-	http.SetCookie(c.Response, &http.Cookie{
-		Name:     name,
-		Value:    value,
-		MaxAge:   maxAge,
-		Path:     path,
-		Domain:   domain,
-		Secure:   secure,
-		HttpOnly: httpOnly,
-	})
+func (c *Context) SetCookie(cookie *http.Cookie) {
+	http.SetCookie(c.Response, cookie)
 }
 
 // Cookie retrieves a cookie value from the HTTP request.
