@@ -8,7 +8,17 @@ import (
 )
 
 // BindXML parses the request body as XML and decodes it into dest.
-// Uses xml.Decoder which streams directly from the request body.
+// Uses xml.NewDecoder which streams directly from the request body.
+//
+// Returns an error if the body is not valid XML or cannot be decoded into dest.
+//
+// Example:
+//
+//	var req CreateUserRequest
+//	if err := c.BindXML(&req); err != nil {
+//	    c.Error(http.StatusBadRequest, err.Error())
+//	    return
+//	}
 func (c *Context) BindXML(dest any) error {
 	dec := xml.NewDecoder(c.Request.Body)
 	if err := dec.Decode(dest); err != nil {
@@ -17,8 +27,19 @@ func (c *Context) BindXML(dest any) error {
 	return nil
 }
 
-// XML encodes data as XML and writes it to the response with the given HTTP status.
-// Uses xml.Encoder which streams directly to the response writer.
+// XML encodes data as XML and writes it to the response with the given HTTP status code.
+// Uses xml.NewEncoder which streams directly to the response writer.
+//
+// The response Content-Type header is automatically set to "application/xml".
+// Write errors are logged but not returned (they indicate connection issues).
+//
+// Example:
+//
+//	type Response struct {
+//	    XMLName xml.Name `xml:"response"`
+//	    Message string   `xml:"message"`
+//	}
+//	c.XML(http.StatusOK, Response{Message: "hello"})
 func (c *Context) XML(status int, data any) {
 	c.Response.Header().Set("Content-Type", "application/xml")
 	c.Response.WriteHeader(status)

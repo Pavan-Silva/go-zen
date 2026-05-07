@@ -6,113 +6,14 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
-	"sync"
 )
 
-// headerCache caches struct field information for header binding.
-var headerCache sync.Map
-
-// headerFieldInfo holds metadata for a struct field when binding from headers.
-type headerFieldInfo struct {
-	index   int
-	key     string
-	setFunc func(reflect.Value, string) error
-}
-
-// getHeaderFields extracts header field mappings from a struct type.
-func getHeaderFields(t reflect.Type) []headerFieldInfo {
-	if cached, ok := headerCache.Load(t); ok {
-		return cached.([]headerFieldInfo)
-	}
-
-	var fields []headerFieldInfo
-	for i := 0; i < t.NumField(); i++ {
-		f := t.Field(i)
-		if f.PkgPath != "" && !f.Anonymous {
-			continue
-		}
-
-		key := f.Tag.Get("header")
-		if key == "" {
-			key = f.Tag.Get("json")
-		}
-		if key == "" {
-			key = http.CanonicalHeaderKey(f.Name)
-		}
-		if key == "-" {
-			continue
-		}
-
-		// Remove options like ",omitempty"
-		if idx := strings.Index(key, ","); idx != -1 {
-			key = key[:idx]
-		}
-
-		info := headerFieldInfo{
-			index:   i,
-			key:     key,
-			setFunc: makeHeaderSetter(f.Type.Kind()),
-		}
-		fields = append(fields, info)
-	}
-
-	headerCache.Store(t, fields)
-	return fields
-}
-
-// makeHeaderSetter creates a function to set a reflect.Value from a header string.
-func makeHeaderSetter(k reflect.Kind) func(reflect.Value, string) error {
-	switch k {
-	case reflect.String:
-		return func(v reflect.Value, s string) error {
-			v.SetString(s)
-			return nil
-		}
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return func(v reflect.Value, s string) error {
-			n, err := strconv.ParseInt(s, 10, 64)
-			if err != nil {
-				return err
-			}
-			v.SetInt(n)
-			return nil
-		}
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		return func(v reflect.Value, s string) error {
-			n, err := strconv.ParseUint(s, 10, 64)
-			if err != nil {
-				return err
-			}
-			v.SetUint(n)
-			return nil
-		}
-	case reflect.Float32, reflect.Float64:
-		return func(v reflect.Value, s string) error {
-			n, err := strconv.ParseFloat(s, 64)
-			if err != nil {
-				return err
-			}
-			v.SetFloat(n)
-			return nil
-		}
-	case reflect.Bool:
-		return func(v reflect.Value, s string) error {
-			b, err := strconv.ParseBool(s)
-			if err != nil {
-				return err
-			}
-			v.SetBool(b)
-			return nil
-		}
-	default:
-		return func(v reflect.Value, s string) error {
-			return nil
-		}
-	}
-}
-
 // BindHeader binds HTTP request headers to a struct using `header` or `json` tags.
-// Header names are canonicalized (e.g., "user-id" becomes "User-Id").
+// Header names are canonicalized via http.CanonicalHeaderKey.
+//
+// Supported field types: string, bool, all int/uint variants, float32, float64.
+// Struct tags follow the same pattern as BindForm and BindQueryParams:
+// the "header" tag is checked first, then "json", then the field name.
 //
 // Example:
 //
@@ -135,15 +36,71 @@ func (c *Context) BindHeader(dest any) error {
 
 	v = v.Elem()
 	t := v.Type()
-	fields := getHeaderFields(t)
 
-	for _, f := range fields {
-		headerValue := c.Request.Header.Get(f.key)
+	for i := 0; i < t.NumField(); i++ {
+		f := t.Field(i)
+		if f.PkgPath != "" && !f.Anonymous {
+			continue
+		}
+
+		key := f.Tag.Get("header")
+		if key == "" {
+			key = f.Tag.Get("json")
+		}
+		if key == "" {
+			key = http.CanonicalHeaderKey(f.Name)
+		}
+		if key == "-" {
+			continue
+		}
+
+		if idx := strings.IndexByte(key, ','); idx != -1 {
+			key = key[:idx]
+		}
+
+		headerValue := c.Request.Header.Get(key)
 		if headerValue == "" {
 			continue
 		}
-		f.setFunc(v.Field(f.index), headerValue)
+
+		fv := v.Field(i)
+		if err := setHeaderField(fv, f.Type.Kind(), headerValue); err != nil {
+			return fmt.Errorf("header %q: %w", key, err)
+		}
 	}
 
+	return nil
+}
+
+// setHeaderField converts a header string value to the target field type.
+func setHeaderField(fv reflect.Value, kind reflect.Kind, s string) error {
+	switch kind {
+	case reflect.String:
+		fv.SetString(s)
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		n, err := strconv.ParseInt(s, 10, 64)
+		if err != nil {
+			return err
+		}
+		fv.SetInt(n)
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		n, err := strconv.ParseUint(s, 10, 64)
+		if err != nil {
+			return err
+		}
+		fv.SetUint(n)
+	case reflect.Float32, reflect.Float64:
+		n, err := strconv.ParseFloat(s, 64)
+		if err != nil {
+			return err
+		}
+		fv.SetFloat(n)
+	case reflect.Bool:
+		b, err := strconv.ParseBool(s)
+		if err != nil {
+			return err
+		}
+		fv.SetBool(b)
+	}
 	return nil
 }
