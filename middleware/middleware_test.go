@@ -786,7 +786,8 @@ func TestCSRF_FormToken(t *testing.T) {
 		}
 	}
 
-	req2 := httptest.NewRequest("POST", "/api", strings.NewReader("_csrf="+token))
+	body := "_csrf=" + token
+	req2 := httptest.NewRequest("POST", "/api", strings.NewReader(body))
 	req2.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	for _, c := range cookies {
 		req2.AddCookie(c)
@@ -795,7 +796,7 @@ func TestCSRF_FormToken(t *testing.T) {
 	r.ServeHTTP(w2, req2)
 
 	if w2.Code != 200 {
-		t.Fatalf("status = %d, want 200", w2.Code)
+		t.Fatalf("status = %d, want 200 (token=%q)", w2.Code, token)
 	}
 }
 

@@ -116,6 +116,7 @@ func (c *Context) Inline(filePath string) {
 
 // Blob writes a byte slice as the response body with the given content type.
 // The response Content-Type is set to the provided MIME type.
+// Write errors are logged but not returned (they indicate connection issues).
 //
 // Example:
 //

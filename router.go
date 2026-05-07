@@ -318,7 +318,11 @@ func (s *Router) RunTLS(certFile, keyFile string) {
 
 // runServer starts the server and handles graceful shutdown.
 func (s *Router) runServer(listen func() error) {
-	fmt.Print(system.Banner(s.Addr))
+	addr := s.Addr
+	if addr == "" && s.Server != nil {
+		addr = s.Server.Addr
+	}
+	fmt.Print(system.Banner(addr))
 
 	go func() {
 		if err := listen(); err != nil && !errors.Is(err, http.ErrServerClosed) {

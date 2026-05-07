@@ -45,21 +45,25 @@ func toSlogLevel(l Level) slog.Level {
 
 // Logger provides structured logging with slog backend.
 type Logger struct {
-	logger *slog.Logger
-	level  Level
-	out    io.Writer
+	logger  *slog.Logger
+	level   Level
+	out     io.Writer
+	leveler slog.LevelVar
 }
 
 // New creates a new logger with the specified level and output writer.
+// The level can be changed dynamically via SetLevel.
 func New(level Level, out io.Writer) *Logger {
-	handler := slog.NewTextHandler(out, &slog.HandlerOptions{
-		Level: toSlogLevel(level),
-	})
-	return &Logger{
-		logger: slog.New(handler),
-		level:  level,
-		out:    out,
+	l := &Logger{
+		level: level,
+		out:   out,
 	}
+	l.leveler.Set(toSlogLevel(level))
+	handler := slog.NewTextHandler(out, &slog.HandlerOptions{
+		Level: &l.leveler,
+	})
+	l.logger = slog.New(handler)
+	return l
 }
 
 // Default creates a logger with INFO level and stderr output.
@@ -67,11 +71,10 @@ func Default() *Logger {
 	return New(INFO, os.Stderr)
 }
 
-// SetLevel changes the minimum log level.
-// Note: slog doesn't support dynamic level changes, so this is a no-op.
-// Set the level at creation time via New().
+// SetLevel changes the minimum log level dynamically.
 func (l *Logger) SetLevel(level Level) {
 	l.level = level
+	l.leveler.Set(toSlogLevel(level))
 }
 
 // enabled checks if the level is enabled.

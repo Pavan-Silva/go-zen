@@ -159,6 +159,9 @@ func CSRFWithConfig(config CSRFConfig) zen.MiddlewareFunc {
 
 			c.Set(config.ContextKey, token)
 			setCSRFCookie(c, config, token)
+			// Protect clients from caching CSRF-protected responses
+			c.Response.Header().Add("Vary", "Cookie")
+
 			next.ServeHTTP(c.Response, c.Request)
 			return
 		}
@@ -212,5 +215,5 @@ func generateToken(length int) (string, error) {
 	if _, err := rand.Read(b); err != nil {
 		return "", fmt.Errorf("csrf: failed to generate token: %w", err)
 	}
-	return base64.RawStdEncoding.EncodeToString(b), nil
+	return base64.RawURLEncoding.EncodeToString(b), nil
 }

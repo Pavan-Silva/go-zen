@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/Pavan-Silva/go-zen/logger"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -46,5 +47,7 @@ func (c *Context) ProtoBuf(status int, msg proto.Message) {
 
 	c.Response.Header().Set("Content-Type", "application/x-protobuf")
 	c.Response.WriteHeader(status)
-	c.Response.Write(data)
+	if _, err := c.Response.Write(data); err != nil {
+		logger.Error("HTTP: protobuf write error: %v", err)
+	}
 }
