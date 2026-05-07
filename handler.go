@@ -11,24 +11,6 @@ import (
 //
 // Middleware is zero-allocation by design: no closures are created per request,
 // and the Context is guaranteed to be non-nil due to the Router's ServeHTTP logic.
-//
-// Example:
-//
-//	func Logger(c *zen.Context, next http.Handler) {
-//	    start := time.Now()
-//	    log.Printf("%s %s", c.Request.Method, c.Request.URL.Path)
-//	    next.ServeHTTP(c.Response, c.Request)
-//	    log.Printf("took %v", time.Since(start))
-//	}
-//
-//	func RequireAuth(c *zen.Context, next http.Handler) {
-//	    token := c.Request.Header.Get("Authorization")
-//	    if token == "" {
-//	        c.Error(http.StatusUnauthorized, "unauthorized")
-//	        return  // short-circuit: don't call next
-//	    }
-//	    next.ServeHTTP(c.Response, c.Request)
-//	}
 type MiddlewareFunc func(*Context, http.Handler)
 
 // middlewareHandler is a chain node in the middleware stack.
@@ -42,8 +24,8 @@ type middlewareHandler struct {
 // ServeHTTP implements http.Handler by calling the middleware function.
 // The Context is guaranteed to exist because Router.ServeHTTP creates it first.
 func (mh *middlewareHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	c := FromRequest(r)
-	if c == nil {
+	c, ok := FromRequest(r)
+	if !ok {
 		return
 	}
 	c.Response = w
@@ -58,7 +40,10 @@ type zenHandler struct {
 
 // ServeHTTP implements http.Handler by extracting the Context and calling the handler.
 func (zh *zenHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	c := r.Context().Value(zenCtxKey{}).(*Context)
+	c, ok := FromRequest(r)
+	if !ok {
+		return
+	}
 	c.Response = w
 	zh.fn(c)
 }
@@ -74,7 +59,7 @@ type contextAwareHandler struct {
 // ServeHTTP implements http.Handler by creating a Context, running the chain, and releasing.
 func (h *contextAwareHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Reuse existing Context when one is already attached (e.g. global middleware path).
-	if c, _ := r.Context().Value(zenCtxKey{}).(*Context); c != nil {
+	if c, ok := FromRequest(r); ok {
 		c.Response = w
 		h.chain.ServeHTTP(w, r)
 		return

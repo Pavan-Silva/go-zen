@@ -55,15 +55,19 @@ func TestContext_Reset(t *testing.T) {
 
 func TestContext_FromRequest(t *testing.T) {
 	r := httptest.NewRequest("GET", "/", nil)
-	if c := FromRequest(r); c != nil {
-		t.Fatal("FromRequest should return nil for raw request")
+	if c, ok := FromRequest(r); ok {
+		t.Fatal("FromRequest should return (nil, false) for raw request")
+		_ = c
 	}
 
 	w := httptest.NewRecorder()
 	c, r := newContext(w, r)
 	defer releaseContext(c)
 
-	got := FromRequest(r)
+	got, ok := FromRequest(r)
+	if !ok {
+		t.Fatal("FromRequest should return (context, true) when attached")
+	}
 	if got != c {
 		t.Fatal("FromRequest should return the attached context")
 	}

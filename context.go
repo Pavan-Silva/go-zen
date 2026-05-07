@@ -41,11 +41,6 @@ func (c *Context) reset(w http.ResponseWriter, r *http.Request) {
 }
 
 // Set stores a value in the context with the given key.
-//
-// Example:
-//
-//	c.Set("user_id", 42)
-//	c.Set("request_id", uuid.New().String())
 func (c *Context) Set(key string, val any) {
 	if c.mu == nil {
 		c.mu = &sync.RWMutex{}
@@ -61,14 +56,6 @@ func (c *Context) Set(key string, val any) {
 // Get retrieves a value from the context by key, returning the value and a boolean
 // indicating whether the key exists. This distinguishes between a key that was
 // explicitly set to nil and a key that was never set.
-//
-// Example:
-//
-//	userID, ok := c.Get("user_id")
-//	if !ok {
-//	    c.Error(http.StatusUnauthorized, "unauthorized")
-//	    return
-//	}
 func (c *Context) Get(key string) (any, bool) {
 	if c.mu == nil {
 		return nil, false
@@ -102,10 +89,15 @@ func releaseContext(c *Context) {
 	contextPool.Put(c)
 }
 
-// FromRequest retrieves the Context from an *http.Request if it exists.
-func FromRequest(r *http.Request) *Context {
-	if c := r.Context().Value(zenCtxKey{}); c != nil {
-		return c.(*Context)
-	}
-	return nil
+// FromContext retrieves the zen Context from a context.Context.
+// Returns (nil, false) if no zen Context is present.
+func FromContext(ctx context.Context) (*Context, bool) {
+	c, ok := ctx.Value(zenCtxKey{}).(*Context)
+	return c, ok
+}
+
+// FromRequest retrieves the zen Context from an *http.Request.
+// Returns (nil, false) if no zen Context is present.
+func FromRequest(r *http.Request) (*Context, bool) {
+	return FromContext(r.Context())
 }
