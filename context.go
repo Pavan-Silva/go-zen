@@ -26,7 +26,11 @@ type Context struct {
 	// Request is the *http.Request for this request.
 	Request *http.Request
 	// store holds key-value pairs for the request context.
+	// Lazily initialized on first Set() call.
 	store map[string]any
+	// mu protects store from concurrent access.
+	// Lazily initialized on first Set() call to reduce Context size.
+	mu *sync.RWMutex
 }
 
 // reset clears the Context for reuse.
@@ -43,6 +47,11 @@ func (c *Context) reset(w http.ResponseWriter, r *http.Request) {
 //	c.Set("user_id", 42)
 //	c.Set("request_id", uuid.New().String())
 func (c *Context) Set(key string, val any) {
+	if c.mu == nil {
+		c.mu = &sync.RWMutex{}
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	if c.store == nil {
 		c.store = make(map[string]any)
 	}
@@ -61,6 +70,11 @@ func (c *Context) Set(key string, val any) {
 //	    return
 //	}
 func (c *Context) Get(key string) (any, bool) {
+	if c.mu == nil {
+		return nil, false
+	}
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	if c.store == nil {
 		return nil, false
 	}
