@@ -517,6 +517,327 @@ func TestPrometheus_MetricsEndpoint(t *testing.T) {
 }
 
 // Test Pprof handler
+func TestCSRF_SafeMethodSetsCookie(t *testing.T) {
+	r := zen.New(":0")
+	r.Use(CSRF())
+	r.Handle("GET /api", func(c *zen.Context) {
+		if tok, ok := c.Get("csrf_token"); !ok || tok == "" {
+			t.Fatal("csrf_token should be set in context")
+		}
+		c.String(200, "ok")
+	})
+
+	req := httptest.NewRequest("GET", "/api", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 200 {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	cookies := w.Result().Cookies()
+	var csrfCookie *http.Cookie
+	for _, c := range cookies {
+		if c.Name == "_csrf" {
+			csrfCookie = c
+			break
+		}
+	}
+	if csrfCookie == nil {
+		t.Fatal("csrf cookie not set")
+	}
+	if csrfCookie.Value == "" {
+		t.Fatal("csrf cookie value is empty")
+	}
+}
+
+func TestCSRF_ReusesExistingCookie(t *testing.T) {
+	r := zen.New(":0")
+	r.Use(CSRF())
+	callCount := 0
+	r.Handle("GET /api", func(c *zen.Context) {
+		callCount++
+		c.String(200, "ok")
+	})
+
+	// First request - sets cookie
+	req1 := httptest.NewRequest("GET", "/api", nil)
+	w1 := httptest.NewRecorder()
+	r.ServeHTTP(w1, req1)
+
+	cookies := w1.Result().Cookies()
+	var csrfCookie *http.Cookie
+	for _, c := range cookies {
+		if c.Name == "_csrf" {
+			csrfCookie = c
+			break
+		}
+	}
+	if csrfCookie == nil {
+		t.Fatal("csrf cookie not set on first request")
+	}
+
+	// Second request with existing cookie - should reuse token
+	req2 := httptest.NewRequest("GET", "/api", nil)
+	req2.AddCookie(csrfCookie)
+	w2 := httptest.NewRecorder()
+	r.ServeHTTP(w2, req2)
+
+	cookies2 := w2.Result().Cookies()
+	var csrfCookie2 *http.Cookie
+	for _, c := range cookies2 {
+		if c.Name == "_csrf" {
+			csrfCookie2 = c
+			break
+		}
+	}
+	if csrfCookie2 == nil {
+		t.Fatal("csrf cookie not set on second request")
+	}
+	if csrfCookie2.Value != csrfCookie.Value {
+		t.Fatalf("csrf token changed: old=%q, new=%q", csrfCookie.Value, csrfCookie2.Value)
+	}
+}
+
+func TestCSRF_ValidTokenOnPost(t *testing.T) {
+	r := zen.New(":0")
+	r.Use(CSRFWithConfig(DefaultCSRFConfig()))
+	r.Handle("POST /api", func(c *zen.Context) {
+		c.String(200, "ok")
+	})
+
+	// First GET to set cookie
+	req := httptest.NewRequest("GET", "/api", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	cookies := w.Result().Cookies()
+
+	// POST with valid token
+	req2 := httptest.NewRequest("POST", "/api", nil)
+	for _, c := range cookies {
+		req2.AddCookie(c)
+	}
+	// Read token from Set-Cookie
+	var token string
+	for _, c := range cookies {
+		if c.Name == "_csrf" {
+			token = c.Value
+			break
+		}
+	}
+	req2.Header.Set("X-CSRF-Token", token)
+	w2 := httptest.NewRecorder()
+	r.ServeHTTP(w2, req2)
+
+	if w2.Code != 200 {
+		t.Fatalf("status = %d, want 200", w2.Code)
+	}
+}
+
+func TestCSRF_InvalidTokenOnPost(t *testing.T) {
+	r := zen.New(":0")
+	r.Use(CSRF())
+	r.Handle("POST /api", func(c *zen.Context) {
+		c.String(200, "ok")
+	})
+
+	// First GET to set cookie
+	req := httptest.NewRequest("GET", "/api", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	cookies := w.Result().Cookies()
+
+	// POST with wrong token
+	req2 := httptest.NewRequest("POST", "/api", nil)
+	for _, c := range cookies {
+		req2.AddCookie(c)
+	}
+	req2.Header.Set("X-CSRF-Token", "wrong-token")
+	w2 := httptest.NewRecorder()
+	r.ServeHTTP(w2, req2)
+
+	if w2.Code != 403 {
+		t.Fatalf("status = %d, want 403", w2.Code)
+	}
+}
+
+func TestCSRF_MissingTokenOnPost(t *testing.T) {
+	r := zen.New(":0")
+	r.Use(CSRF())
+	r.Handle("POST /api", func(c *zen.Context) {
+		c.String(200, "ok")
+	})
+
+	// First GET to set cookie
+	req := httptest.NewRequest("GET", "/api", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	cookies := w.Result().Cookies()
+
+	// POST without token header
+	req2 := httptest.NewRequest("POST", "/api", nil)
+	for _, c := range cookies {
+		req2.AddCookie(c)
+	}
+	w2 := httptest.NewRecorder()
+	r.ServeHTTP(w2, req2)
+
+	if w2.Code != 403 {
+		t.Fatalf("status = %d, want 403", w2.Code)
+	}
+}
+
+func TestCSRF_MissingCookieOnPost(t *testing.T) {
+	r := zen.New(":0")
+	r.Use(CSRF())
+	r.Handle("POST /api", func(c *zen.Context) {
+		c.String(200, "ok")
+	})
+
+	req := httptest.NewRequest("POST", "/api", nil)
+	req.Header.Set("X-CSRF-Token", "some-token")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 403 {
+		t.Fatalf("status = %d, want 403", w.Code)
+	}
+}
+
+func TestCSRF_SafeMethods(t *testing.T) {
+	r := zen.New(":0")
+	r.Use(CSRF())
+	r.Handle("GET /api", func(c *zen.Context) { c.String(200, "get") })
+	r.Handle("HEAD /api", func(c *zen.Context) { c.String(200, "head") })
+	r.Handle("OPTIONS /api", func(c *zen.Context) { c.String(200, "options") })
+	r.Handle("TRACE /api", func(c *zen.Context) { c.String(200, "trace") })
+
+	methods := []string{"GET", "HEAD", "OPTIONS", "TRACE"}
+	for _, method := range methods {
+		req := httptest.NewRequest(method, "/api", nil)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		if w.Code != 200 {
+			t.Fatalf("method %s: status = %d, want 200", method, w.Code)
+		}
+		cookies := w.Result().Cookies()
+		var found bool
+		for _, c := range cookies {
+			if c.Name == "_csrf" {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("method %s: csrf cookie not set", method)
+		}
+	}
+}
+
+func TestCSRF_CustomHeader(t *testing.T) {
+	cfg := DefaultCSRFConfig()
+	cfg.TokenLookup = "header:X-Custom-CSRF"
+	r := zen.New(":0")
+	r.Use(CSRFWithConfig(cfg))
+	r.Handle("POST /api", func(c *zen.Context) { c.String(200, "ok") })
+
+	req := httptest.NewRequest("GET", "/api", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	cookies := w.Result().Cookies()
+
+	var token string
+	for _, c := range cookies {
+		if c.Name == "_csrf" {
+			token = c.Value
+			break
+		}
+	}
+
+	req2 := httptest.NewRequest("POST", "/api", nil)
+	for _, c := range cookies {
+		req2.AddCookie(c)
+	}
+	req2.Header.Set("X-Custom-CSRF", token)
+	w2 := httptest.NewRecorder()
+	r.ServeHTTP(w2, req2)
+
+	if w2.Code != 200 {
+		t.Fatalf("status = %d, want 200", w2.Code)
+	}
+}
+
+func TestCSRF_FormToken(t *testing.T) {
+	cfg := DefaultCSRFConfig()
+	cfg.TokenLookup = "form:_csrf"
+	r := zen.New(":0")
+	r.Use(CSRFWithConfig(cfg))
+	r.Handle("POST /api", func(c *zen.Context) { c.String(200, "ok") })
+
+	req := httptest.NewRequest("GET", "/api", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	cookies := w.Result().Cookies()
+
+	var token string
+	for _, c := range cookies {
+		if c.Name == "_csrf" {
+			token = c.Value
+			break
+		}
+	}
+
+	req2 := httptest.NewRequest("POST", "/api", strings.NewReader("_csrf="+token))
+	req2.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	for _, c := range cookies {
+		req2.AddCookie(c)
+	}
+	w2 := httptest.NewRecorder()
+	r.ServeHTTP(w2, req2)
+
+	if w2.Code != 200 {
+		t.Fatalf("status = %d, want 200", w2.Code)
+	}
+}
+
+func TestCSRF_CustomErrorHandler(t *testing.T) {
+	cfg := DefaultCSRFConfig()
+	cfg.ErrorHandler = func(c *zen.Context) {
+		c.String(400, "custom csrf error")
+	}
+	r := zen.New(":0")
+	r.Use(CSRFWithConfig(cfg))
+	r.Handle("POST /api", func(c *zen.Context) { c.String(200, "ok") })
+
+	req := httptest.NewRequest("POST", "/api", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 400 {
+		t.Fatalf("status = %d, want 400", w.Code)
+	}
+	if w.Body.String() != "custom csrf error" {
+		t.Fatalf("body = %q, want %q", w.Body.String(), "custom csrf error")
+	}
+}
+
+func TestCSRF_Skipper(t *testing.T) {
+	cfg := DefaultCSRFConfig()
+	cfg.Skipper = func(r *http.Request) bool {
+		return r.URL.Path == "/skip"
+	}
+	r := zen.New(":0")
+	r.Use(CSRFWithConfig(cfg))
+	r.Handle("POST /skip", func(c *zen.Context) { c.String(200, "ok") })
+
+	req := httptest.NewRequest("POST", "/skip", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 200 {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+}
+
 func TestPprof_Handler(t *testing.T) {
 	r := zen.New(":0")
 	r.HandleRaw("GET /debug/pprof/", PprofHandler())
