@@ -4,10 +4,9 @@ import (
 	"testing"
 )
 
-func TestValidatorInstance(t *testing.T) {
-	v := validatorInstance()
-	if v == nil {
-		t.Fatal("validatorInstance returned nil")
+func TestDefaultValidator(t *testing.T) {
+	if defaultValidator == nil {
+		t.Fatal("defaultValidator should not be nil")
 	}
 }
 
@@ -17,13 +16,13 @@ func TestValidation_Required(t *testing.T) {
 	}
 
 	s := S{Name: ""}
-	err := validatorInstance().Struct(s)
+	err := Validate(&s)
 	if err == nil {
 		t.Fatal("expected validation error for empty required field")
 	}
 
 	s.Name = "John"
-	err = validatorInstance().Struct(s)
+	err = Validate(&s)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -47,7 +46,7 @@ func TestValidation_Email(t *testing.T) {
 
 	for _, tt := range tests {
 		s := S{Email: tt.email}
-		err := validatorInstance().Struct(s)
+		err := Validate(&s)
 		if tt.valid && err != nil {
 			t.Errorf("email %q should be valid, got error: %v", tt.email, err)
 		}
@@ -63,7 +62,7 @@ func TestValidation_EmailStrict(t *testing.T) {
 	}
 
 	s := S{Email: "user@example.com"}
-	err := validatorInstance().Struct(s)
+	err := Validate(&s)
 	if err != nil {
 		t.Fatalf("valid email should pass strict validation: %v", err)
 	}
@@ -85,7 +84,7 @@ func TestValidation_GTE(t *testing.T) {
 
 	for _, tt := range tests {
 		s := S{Age: tt.age}
-		err := validatorInstance().Struct(s)
+		err := Validate(&s)
 		if tt.valid && err != nil {
 			t.Errorf("age %d should be valid, got error: %v", tt.age, err)
 		}
@@ -95,48 +94,82 @@ func TestValidation_GTE(t *testing.T) {
 	}
 }
 
-func TestValidateStruct_NonStruct(t *testing.T) {
+func TestValidate_NonStruct(t *testing.T) {
 	m := map[string]any{"key": "value"}
-	err := validateStruct(&m)
+	err := Validate(&m)
 	if err != nil {
 		t.Fatalf("non-struct should not error: %v", err)
 	}
 }
 
-func TestValidateStruct_PointerToStruct(t *testing.T) {
+func TestValidate_PointerToStruct(t *testing.T) {
 	type S struct {
 		Name string `validate:"required"`
 	}
 
-	err := validateStruct(&S{Name: "test"})
+	err := Validate(&S{Name: "test"})
 	if err != nil {
 		t.Fatalf("valid struct should pass: %v", err)
 	}
 
-	err = validateStruct(&S{Name: ""})
+	err = Validate(&S{Name: ""})
 	if err == nil {
 		t.Fatal("empty required field should fail")
 	}
 }
 
-func TestValidateStruct_DirectStruct(t *testing.T) {
+func TestValidate_DirectStruct(t *testing.T) {
 	type S struct {
 		Name string `validate:"required"`
 	}
 
-	err := validateStruct(S{Name: "test"})
+	err := Validate(S{Name: "test"})
 	if err != nil {
 		t.Fatalf("valid struct should pass: %v", err)
 	}
 }
 
-func TestEmailRegex(t *testing.T) {
-	if !emailRegex.MatchString("user@example.com") {
-		t.Fatal("emailRegex should match user@example.com")
+func TestSetValidator_Custom(t *testing.T) {
+	original := defaultValidator
+	t.Cleanup(func() { defaultValidator = original })
+
+	called := false
+	SetValidator(ValidatorFunc(func(i any) error {
+		called = true
+		return nil
+	}))
+
+	type S struct {
+		Name string
 	}
-	if emailRegex.MatchString("invalid") {
-		t.Fatal("emailRegex should not match invalid")
+	err := Validate(&S{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
+	if !called {
+		t.Fatal("custom validator was not called")
+	}
+}
+
+func TestSetValidator_Nil(t *testing.T) {
+	original := defaultValidator
+	t.Cleanup(func() { defaultValidator = original })
+
+	SetValidator(nil)
+
+	type S struct {
+		Name string `validate:"required"`
+	}
+	err := Validate(&S{Name: ""})
+	if err != nil {
+		t.Fatal("nil validator should not validate")
+	}
+}
+
+type ValidatorFunc func(i any) error
+
+func (f ValidatorFunc) Validate(i any) error {
+	return f(i)
 }
 
 func BenchmarkValidation(b *testing.B) {
@@ -150,7 +183,8 @@ func BenchmarkValidation(b *testing.B) {
 
 	b.ReportAllocs()
 	b.ResetTimer()
+	_ = defaultValidator
 	for i := 0; i < b.N; i++ {
-		validatorInstance().Struct(s)
+		Validate(&s)
 	}
 }
