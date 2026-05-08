@@ -322,6 +322,7 @@ func (s *Router) runServer(listen func() error) {
 	if addr == "" && s.Server != nil {
 		addr = s.Server.Addr
 	}
+
 	fmt.Print(system.Banner(addr))
 
 	go func() {

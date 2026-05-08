@@ -186,10 +186,10 @@ func TestContext_String(t *testing.T) {
 	}
 }
 
-func TestContext_NoContent(t *testing.T) {
+func TestContext_Status(t *testing.T) {
 	r := New(":0")
 	r.Handle("DELETE /item", func(c *Context) {
-		c.NoContent(204)
+		c.Status(204)
 	})
 
 	req := httptest.NewRequest("DELETE", "/item", nil)
