@@ -58,13 +58,13 @@ func (c *Context) String(status int, text string) {
 	writeResponse(c, status, "text/plain; charset=utf-8", []byte(text))
 }
 
-// NoContent writes a response with no body and the given HTTP status.
-// This is useful for responses like 204 No Content or 202 Accepted.
+// Status writes a response with no body and the given HTTP status.
+// This matches Gin's c.Status() behavior.
 //
 // Example:
 //
-//	c.NoContent(http.StatusNoContent)
-func (c *Context) NoContent(status int) {
+//	c.Status(http.StatusNoContent)
+func (c *Context) Status(status int) {
 	c.Response.WriteHeader(status)
 }
 

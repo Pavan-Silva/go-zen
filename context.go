@@ -69,11 +69,6 @@ func (c *Context) Get(key string) (any, bool) {
 	return val, ok
 }
 
-// SetResponse sets the http.ResponseWriter for this context.
-func (c *Context) SetResponse(w http.ResponseWriter) {
-	c.Response = w
-}
-
 // newContext retrieves a Context from the pool, initializes it, and stores
 // it in the request context for retrieval by middleware and handlers.
 func newContext(w http.ResponseWriter, r *http.Request) (*Context, *http.Request) {
