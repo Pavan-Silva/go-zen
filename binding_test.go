@@ -6,61 +6,6 @@ import (
 	"testing"
 )
 
-// Test ProtoBuf binding (simplified - requires proper proto message)
-// Commented out because it requires a proper proto.Message implementation
-/*
-type TestMessage struct {
-	Id   int32  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
-	Name string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-}
-
-func (m *TestMessage) Reset()         {}
-func (m *TestMessage) String() string { return proto.CompactTextString(m) }
-func (m *TestMessage) ProtoMessage()  {}
-
-func TestProtoBuf_Bind(t *testing.T) {
-	r := New(":0")
-	r.Handle("POST /proto", func(c *Context) {
-		var msg TestMessage
-		if err := c.BindProtoBuf(&msg); err != nil {
-			c.Error(http.StatusBadRequest, err.Error())
-			return
-		}
-		c.JSON(http.StatusOK, msg)
-	})
-
-	msg := &TestMessage{Id: 1, Name: "test"}
-	data, _ := proto.Marshal(msg)
-	req := httptest.NewRequest("POST", "/proto", nil)
-	req.Header.Set("Content-Type", "application/x-protobuf")
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != 200 {
-		t.Fatalf("status = %d, want 200", w.Code)
-	}
-}
-
-func TestProtoBufResponse(t *testing.T) {
-	r := New(":0")
-	r.Handle("GET /proto", func(c *Context) {
-		msg := &TestMessage{Id: 42, Name: "response"}
-		c.ProtoBuf(http.StatusOK, msg)
-	})
-
-	req := httptest.NewRequest("GET", "/proto", nil)
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != 200 {
-		t.Fatalf("status = %d, want 200", w.Code)
-	}
-	if w.Header().Get("Content-Type") != "application/x-protobuf" {
-		t.Fatalf("Content-Type = %q, want application/x-protobuf", w.Header().Get("Content-Type"))
-	}
-}
-*/
-
 // Test Header binding
 func TestBindHeader(t *testing.T) {
 	type Headers struct {

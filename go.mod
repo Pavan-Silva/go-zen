@@ -9,7 +9,6 @@ require (
 	go.opentelemetry.io/otel v1.35.0
 	go.opentelemetry.io/otel/trace v1.35.0
 	golang.org/x/crypto v0.49.0
-	google.golang.org/protobuf v1.36.5
 )
 
 require (
@@ -33,4 +32,5 @@ require (
 	github.com/prometheus/procfs v0.15.1 // indirect
 	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
 	go.opentelemetry.io/otel/metric v1.35.0 // indirect
+	google.golang.org/protobuf v1.36.1 // indirect
 )
