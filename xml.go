@@ -10,7 +10,10 @@ import (
 // BindXML parses the request body as XML and decodes it into dest.
 // Uses xml.NewDecoder which streams directly from the request body.
 //
-// Returns an error if the body is not valid XML or cannot be decoded into dest.
+// Automatically runs struct validation after decode if a Validator is configured.
+//
+// Returns an error if the body is not valid XML, cannot be decoded, or
+// struct validation fails.
 //
 // Example:
 //
@@ -24,7 +27,7 @@ func (c *Context) BindXML(dest any) error {
 	if err := dec.Decode(dest); err != nil {
 		return fmt.Errorf("XML decode: %w", err)
 	}
-	return nil
+	return Validate(dest)
 }
 
 // XML encodes data as XML and writes it to the response with the given HTTP status code.

@@ -11,7 +11,11 @@ import (
 // Uses json.NewDecoder which streams directly from the request body, avoiding
 // an intermediate byte slice allocation (unlike json.Unmarshal).
 //
-// Returns an error if the body is not valid JSON or cannot be decoded into dest.
+// Automatically runs struct validation after decode if a Validator is configured.
+// To skip validation, use SetValidator(nil).
+//
+// Returns an error if the body is not valid JSON, cannot be decoded, or
+// struct validation fails.
 //
 // Example:
 //
@@ -20,16 +24,12 @@ import (
 //	    c.Error(http.StatusBadRequest, err.Error())
 //	    return
 //	}
-//	if err := zen.Validate(&req); err != nil {
-//	    c.Error(http.StatusBadRequest, err.Error())
-//	    return
-//	}
 func (c *Context) BindJSON(dest any) error {
 	dec := json.NewDecoder(c.Request.Body)
 	if err := dec.Decode(dest); err != nil {
 		return fmt.Errorf("JSON decode: %w", err)
 	}
-	return nil
+	return Validate(dest)
 }
 
 // JSON encodes data as JSON and writes it to the response with the given HTTP status code.

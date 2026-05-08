@@ -69,7 +69,7 @@ func TestBindJSON_TrailingData(t *testing.T) {
 		c.String(200, "ok")
 	})
 
-	body := strings.NewReader(`{"name":"John"}{"name":"Jane"}`)
+	body := strings.NewReader(`{"name":"John","email":"john@example.com","age":30}{"name":"Jane"}`)
 	req := httptest.NewRequest("POST", "/user", body)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
