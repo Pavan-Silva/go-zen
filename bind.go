@@ -222,6 +222,7 @@ func setFieldValue(fv reflect.Value, kind reflect.Kind, vals []string) error {
 		if fv.Type().Elem().Kind() == reflect.String {
 			fv.Set(reflect.ValueOf(vals))
 		}
+	default:
 	}
 	return nil
 }

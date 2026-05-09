@@ -250,7 +250,7 @@ func BenchmarkBindForm(b *testing.B) {
 	r := New(":0")
 	var captured testFormUser
 	r.Handle("POST /form", func(c *Context) {
-		c.BindForm(&captured)
+		_ = c.BindForm(&captured)
 		c.String(200, "ok")
 	})
 

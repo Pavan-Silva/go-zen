@@ -9,7 +9,7 @@ import (
 	"github.com/Pavan-Silva/go-zen"
 )
 
-// BodyLimitConfig holds configuration for BodyLimit middleware.
+// BodyLimitMiddlewareConfig holds configuration for BodyLimit middleware.
 type BodyLimitMiddlewareConfig struct {
 	// Limit is the maximum allowed request body size.
 	// Can be a number (bytes) or with suffix: K, M, G (e.g., "2M", "1K").
@@ -18,7 +18,7 @@ type BodyLimitMiddlewareConfig struct {
 	Skipper zen.SkipFunc
 }
 
-// DefaultBodyLimitConfig returns a BodyLimitConfig with default values.
+// BodyLimitConfig returns a config with default values.
 func BodyLimitConfig() BodyLimitMiddlewareConfig {
 	return BodyLimitMiddlewareConfig{
 		Limit: "2M",

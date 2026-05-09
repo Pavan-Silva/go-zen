@@ -7,7 +7,7 @@ import (
 )
 
 func TestGetString(t *testing.T) {
-	os.Setenv("TEST_STRING", "hello")
+	_ = os.Setenv("TEST_STRING", "hello")
 	defer os.Unsetenv("TEST_STRING")
 
 	got := GetString("TEST_STRING", "default")
@@ -24,7 +24,7 @@ func TestGetString_Default(t *testing.T) {
 }
 
 func TestGetInt(t *testing.T) {
-	os.Setenv("TEST_INT", "42")
+	_ = os.Setenv("TEST_INT", "42")
 	defer os.Unsetenv("TEST_INT")
 
 	got := GetInt("TEST_INT", 0)
@@ -41,7 +41,7 @@ func TestGetInt_Default(t *testing.T) {
 }
 
 func TestGetInt_Invalid(t *testing.T) {
-	os.Setenv("TEST_INT_BAD", "not-a-number")
+	_ = os.Setenv("TEST_INT_BAD", "not-a-number")
 	defer os.Unsetenv("TEST_INT_BAD")
 
 	got := GetInt("TEST_INT_BAD", 42)
@@ -51,7 +51,7 @@ func TestGetInt_Invalid(t *testing.T) {
 }
 
 func TestGetBool(t *testing.T) {
-	os.Setenv("TEST_BOOL", "true")
+	_ = os.Setenv("TEST_BOOL", "true")
 	defer os.Unsetenv("TEST_BOOL")
 
 	got := GetBool("TEST_BOOL", false)
@@ -68,7 +68,7 @@ func TestGetBool_Default(t *testing.T) {
 }
 
 func TestGetDuration(t *testing.T) {
-	os.Setenv("TEST_DURATION", "5s")
+	_ = os.Setenv("TEST_DURATION", "5s")
 	defer os.Unsetenv("TEST_DURATION")
 
 	got := GetDuration("TEST_DURATION", 0)
@@ -85,7 +85,7 @@ func TestGetDuration_Default(t *testing.T) {
 }
 
 func TestMustGetString(t *testing.T) {
-	os.Setenv("TEST_MUST_STRING", "value")
+	_ = os.Setenv("TEST_MUST_STRING", "value")
 	defer os.Unsetenv("TEST_MUST_STRING")
 
 	got := MustGetString("TEST_MUST_STRING")
@@ -104,7 +104,7 @@ func TestMustGetString_Panic(t *testing.T) {
 }
 
 func TestMustGetInt(t *testing.T) {
-	os.Setenv("TEST_MUST_INT", "123")
+	_ = os.Setenv("TEST_MUST_INT", "123")
 	defer os.Unsetenv("TEST_MUST_INT")
 
 	got := MustGetInt("TEST_MUST_INT")
@@ -119,13 +119,13 @@ func TestMustGetInt_Panic(t *testing.T) {
 			t.Fatal("expected panic")
 		}
 	}()
-	os.Setenv("TEST_MUST_INT_BAD", "not-a-number")
+	_ = os.Setenv("TEST_MUST_INT_BAD", "not-a-number")
 	defer os.Unsetenv("TEST_MUST_INT_BAD")
 	MustGetInt("TEST_MUST_INT_BAD")
 }
 
 func TestMustGetBool(t *testing.T) {
-	os.Setenv("TEST_MUST_BOOL", "true")
+	_ = os.Setenv("TEST_MUST_BOOL", "true")
 	defer os.Unsetenv("TEST_MUST_BOOL")
 
 	got := MustGetBool("TEST_MUST_BOOL")
@@ -140,13 +140,13 @@ func TestMustGetBool_Panic(t *testing.T) {
 			t.Fatal("expected panic")
 		}
 	}()
-	os.Setenv("TEST_MUST_BOOL_BAD", "not-a-bool")
+	_ = os.Setenv("TEST_MUST_BOOL_BAD", "not-a-bool")
 	defer os.Unsetenv("TEST_MUST_BOOL_BAD")
 	MustGetBool("TEST_MUST_BOOL_BAD")
 }
 
 func TestMustGetDuration(t *testing.T) {
-	os.Setenv("TEST_MUST_DURATION", "1m")
+	_ = os.Setenv("TEST_MUST_DURATION", "1m")
 	defer os.Unsetenv("TEST_MUST_DURATION")
 
 	got := MustGetDuration("TEST_MUST_DURATION")
@@ -161,7 +161,7 @@ func TestMustGetDuration_Panic(t *testing.T) {
 			t.Fatal("expected panic")
 		}
 	}()
-	os.Setenv("TEST_MUST_DURATION_BAD", "not-a-duration")
+	_ = os.Setenv("TEST_MUST_DURATION_BAD", "not-a-duration")
 	defer os.Unsetenv("TEST_MUST_DURATION_BAD")
 	MustGetDuration("TEST_MUST_DURATION_BAD")
 }

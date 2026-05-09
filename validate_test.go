@@ -185,6 +185,6 @@ func BenchmarkValidation(b *testing.B) {
 	b.ResetTimer()
 	_ = defaultValidator
 	for i := 0; i < b.N; i++ {
-		Validate(&s)
+		_ = Validate(&s)
 	}
 }

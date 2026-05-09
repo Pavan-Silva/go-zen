@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/Pavan-Silva/go-zen"
+	"github.com/Pavan-Silva/go-zen/logger"
 )
 
 var gzipWriterPool = sync.Pool{
@@ -66,7 +67,9 @@ func compressWithLevel(level int, skipper zen.SkipFunc) zen.MiddlewareFunc {
 		gz := gzipWriterPool.Get().(*gzip.Writer)
 		gz.Reset(c.Response)
 		defer func() {
-			gz.Close()
+			if err := gz.Close(); err != nil {
+				logger.Warn("gzip: close failed: %v", err)
+			}
 			gzipWriterPool.Put(gz)
 		}()
 
@@ -97,7 +100,9 @@ func (w *compressResponseWriter) Write(b []byte) (int, error) {
 }
 
 func (w *compressResponseWriter) Flush() {
-	w.gz.Flush()
+	if err := w.gz.Flush(); err != nil {
+		logger.Warn("gzip: flush failed: %v", err)
+	}
 	if f, ok := w.ResponseWriter.(http.Flusher); ok {
 		f.Flush()
 	}

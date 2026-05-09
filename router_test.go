@@ -169,7 +169,7 @@ func TestRouter_HandleRaw(t *testing.T) {
 	r := New(":0")
 	r.HandleRaw("GET /raw", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(200)
-		w.Write([]byte("raw"))
+		_, _ = w.Write([]byte("raw"))
 	}))
 
 	req := httptest.NewRequest("GET", "/raw", nil)
@@ -187,7 +187,7 @@ func TestRouter_HandleRaw(t *testing.T) {
 func TestRouter_File(t *testing.T) {
 	tmp := t.TempDir()
 	path := filepath.Join(tmp, "test.txt")
-	os.WriteFile(path, []byte("file content"), 0644)
+	_ = os.WriteFile(path, []byte("file content"), 0644)
 
 	r := New(":0")
 	r.File("GET /file", path)
@@ -206,7 +206,7 @@ func TestRouter_File(t *testing.T) {
 
 func TestRouter_Static(t *testing.T) {
 	tmp := t.TempDir()
-	os.WriteFile(filepath.Join(tmp, "hello.txt"), []byte("hello"), 0644)
+	_ = os.WriteFile(filepath.Join(tmp, "hello.txt"), []byte("hello"), 0644)
 
 	r := New(":0")
 	r.Static("/static", tmp)

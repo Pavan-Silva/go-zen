@@ -149,7 +149,7 @@ func BenchmarkBindXML(b *testing.B) {
 	r := New(":0")
 	var captured testXMLUser
 	r.Handle("POST /user", func(c *Context) {
-		c.BindXML(&captured)
+		_ = c.BindXML(&captured)
 		c.String(200, "ok")
 	})
 

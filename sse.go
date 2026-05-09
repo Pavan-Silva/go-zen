@@ -11,7 +11,7 @@ const contentType = "text/event-stream; charset=utf-8"
 
 var ErrFlusherUnsupported = errors.New("sse: SSE requires http.Flusher")
 
-// Send writes a Server-Sent Event to the client.
+// SSEvent writes a Server-Sent Event to the client.
 // It sets required SSE headers and flushes the response.
 func (c *Context) SSEvent(event string, data any) error {
 	flusher, ok := c.Response.(http.Flusher)

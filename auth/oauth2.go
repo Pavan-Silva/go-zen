@@ -96,7 +96,7 @@ func (o *OAuth2Auth) Authenticate(r *http.Request) (User, error) {
 }
 
 // introspectToken calls the OAuth2 token introspection endpoint.
-func (o *OAuth2Auth) introspectToken(ctx context.Context, client *http.Client, token string) (*OAuth2TokenInfo, error) {
+func (o *OAuth2Auth) introspectToken(ctx context.Context, client *http.Client, token string) (info *OAuth2TokenInfo, err error) {
 	data := url.Values{}
 	data.Set("token", token)
 	data.Set("token_type_hint", "access_token")
@@ -109,7 +109,6 @@ func (o *OAuth2Auth) introspectToken(ctx context.Context, client *http.Client, t
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
 
-	// Basic auth for client credentials
 	if o.ClientID != "" && o.ClientSecret != "" {
 		req.SetBasicAuth(o.ClientID, o.ClientSecret)
 	}
@@ -118,7 +117,11 @@ func (o *OAuth2Auth) introspectToken(ctx context.Context, client *http.Client, t
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil && err == nil {
+			err = closeErr
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("introspection request failed with status %d", resp.StatusCode)

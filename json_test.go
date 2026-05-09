@@ -175,7 +175,7 @@ func BenchmarkBindJSON(b *testing.B) {
 	r := New(":0")
 	var captured testJSONUser
 	r.Handle("POST /user", func(c *Context) {
-		c.BindJSON(&captured)
+		_ = c.BindJSON(&captured)
 		c.String(200, "ok")
 	})
 

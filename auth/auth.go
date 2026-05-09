@@ -51,11 +51,10 @@ func RequireAuth(auth Authenticator, skip ...zen.SkipFunc) func(*zen.Context, ht
 	return MiddlewareWithSkipper(auth, nil, skipper)
 }
 
-// Middleware is a convenience alias that calls RequireAuth.
-// Deprecated: Use RequireAuth for new code.
-// This exists for backward compatibility.
-func Middleware(auth Authenticator, _ func(*zen.Context)) func(*zen.Context, http.Handler) {
-	return RequireAuth(auth)
+// Middleware creates HTTP middleware that authenticates requests using the provided Authenticator.
+// A custom error handler can be provided for unauthorized requests (nil sends 401).
+func Middleware(auth Authenticator, onError func(*zen.Context)) func(*zen.Context, http.Handler) {
+	return MiddlewareWithSkipper(auth, onError, nil)
 }
 
 // MiddlewareWithSkipper creates HTTP middleware that authenticates requests and can skip selected routes.

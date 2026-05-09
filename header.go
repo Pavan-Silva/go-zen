@@ -101,6 +101,7 @@ func setHeaderField(fv reflect.Value, kind reflect.Kind, s string) error {
 			return err
 		}
 		fv.SetBool(b)
+	default:
 	}
 	return nil
 }

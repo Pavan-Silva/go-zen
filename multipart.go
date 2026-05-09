@@ -66,14 +66,18 @@ func (c *Context) FormFiles(fieldName string) ([]*multipart.FileHeader, error) {
 
 // ReadFile is a convenience method that reads a single uploaded file into memory.
 // For large files, use FormFile() and stream the content instead.
-func (c *Context) ReadFile(fieldName string) (*multipart.FileHeader, []byte, error) {
+func (c *Context) ReadFile(fieldName string) (header *multipart.FileHeader, content []byte, err error) {
 	header, file, err := c.FormFile(fieldName)
 	if err != nil {
 		return nil, nil, err
 	}
-	defer file.Close()
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil && err == nil {
+			err = closeErr
+		}
+	}()
 
-	content, err := io.ReadAll(file)
+	content, err = io.ReadAll(file)
 	if err != nil {
 		return nil, nil, fmt.Errorf("http: file read error: %w", err)
 	}
