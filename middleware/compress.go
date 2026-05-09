@@ -46,21 +46,19 @@ func CompressWithSkipper(skipper zen.SkipFunc) zen.MiddlewareFunc {
 }
 
 func compressWithLevel(level int, skipper zen.SkipFunc) zen.MiddlewareFunc {
-	return func(c *zen.Context, next http.Handler) {
+	return func(c *zen.Context, next zen.NextFunc) {
 		if skipper != nil && skipper(c.Request) {
-			next.ServeHTTP(c.Response, c.Request)
+			next(c)
 			return
 		}
 
-		// Check if client accepts gzip
 		if !strings.Contains(c.Request.Header.Get("Accept-Encoding"), "gzip") {
-			next.ServeHTTP(c.Response, c.Request)
+			next(c)
 			return
 		}
 
-		// Skip if response already has Content-Encoding set
 		if c.Response.Header().Get("Content-Encoding") != "" {
-			next.ServeHTTP(c.Response, c.Request)
+			next(c)
 			return
 		}
 
@@ -68,13 +66,14 @@ func compressWithLevel(level int, skipper zen.SkipFunc) zen.MiddlewareFunc {
 		gz.Reset(c.Response)
 		defer func() {
 			if err := gz.Close(); err != nil {
-				logger.Warn("gzip: close failed: %v", err)
+				logger.Warn("gzip close failed: %v", err)
 			}
 			gzipWriterPool.Put(gz)
 		}()
 
 		cw := &compressResponseWriter{ResponseWriter: c.Response, gz: gz}
-		next.ServeHTTP(cw, c.Request)
+		c.Response = cw
+		next(c)
 	}
 }
 

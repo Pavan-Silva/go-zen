@@ -78,9 +78,9 @@ func RateLimiterWithConfig(config RateLimiterConfig) zen.MiddlewareFunc {
 		visitors = make(map[string]*visitor)
 	)
 
-	return func(c *zen.Context, next http.Handler) {
+	return func(c *zen.Context, next zen.NextFunc) {
 		if config.Skipper != nil && config.Skipper(c.Request) {
-			next.ServeHTTP(c.Response, c.Request)
+			next(c)
 			return
 		}
 
@@ -89,7 +89,6 @@ func RateLimiterWithConfig(config RateLimiterConfig) zen.MiddlewareFunc {
 
 		mu.Lock()
 
-		// Lazy cleanup of expired entries
 		for k, v := range visitors {
 			if now.After(v.resetAt) {
 				delete(visitors, k)
@@ -109,7 +108,7 @@ func RateLimiterWithConfig(config RateLimiterConfig) zen.MiddlewareFunc {
 
 			c.Response.Header().Set("X-RateLimit-Limit", fmt.Sprintf("%d", limit))
 			c.Response.Header().Set("X-RateLimit-Remaining", fmt.Sprintf("%d", remaining))
-			next.ServeHTTP(c.Response, c.Request)
+			next(c)
 			return
 		}
 
@@ -129,6 +128,6 @@ func RateLimiterWithConfig(config RateLimiterConfig) zen.MiddlewareFunc {
 			return
 		}
 
-		next.ServeHTTP(c.Response, c.Request)
+		next(c)
 	}
 }

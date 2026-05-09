@@ -71,8 +71,8 @@ type Router struct {
 	mux *http.ServeMux
 	// middleware holds all globally-registered middleware functions.
 	middleware []MiddlewareFunc
-	// chain is the pre-built middleware chain (rebuilt on each Use() call).
-	chain http.Handler
+	// chainNext is the pre-built middleware chain (NextFunc dispatch, no FromRequest).
+	chainNext NextFunc
 	// hasMiddleware tracks whether any middleware is registered (optimization for bypass).
 	hasMiddleware bool
 	// shutdownTimeout is the maximum duration for graceful shutdown.
@@ -104,7 +104,6 @@ func New(addr string, config ...Config) *Router {
 	mux := http.NewServeMux()
 	r := &Router{
 		mux:             mux,
-		chain:           mux,
 		hasMiddleware:   false,
 		shutdownTimeout: 5 * time.Second,
 		requestTimeout:  0,
@@ -152,7 +151,6 @@ func (s *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	c, r := newContext(w, r)
 	defer releaseContext(c)
 
-	// Apply default request timeout if configured
 	if s.requestTimeout > 0 {
 		ctx, cancel := context.WithTimeout(r.Context(), s.requestTimeout)
 		defer cancel()
@@ -160,7 +158,9 @@ func (s *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if s.hasMiddleware {
-		s.chain.ServeHTTP(w, r)
+		c.Response = w
+		c.Request = r
+		s.chainNext(c)
 	} else {
 		s.mux.ServeHTTP(w, r)
 	}
@@ -181,13 +181,33 @@ func (s *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 //	r.Use(middleware.AuthRequired)   // Can short-circuit before other handlers
 func (s *Router) Use(m ...MiddlewareFunc) {
 	s.middleware = append(s.middleware, m...)
-	// Pre-build the chain with middleware nodes (no closures, minimal allocations).
-	h := http.Handler(s.mux)
-	for i := len(s.middleware) - 1; i >= 0; i-- {
-		h = &middlewareHandler{m: s.middleware[i], next: h}
-	}
-	s.chain = h
+	s.chainNext = s.buildChain()
 	s.hasMiddleware = true
+}
+
+// buildChain creates the NextFunc chain from registered middleware.
+// The chain passes *Context directly — no FromRequest lookups, no per-request allocations.
+func (s *Router) buildChain() NextFunc {
+	if len(s.middleware) == 0 {
+		return nil
+	}
+	var tail NextFunc
+	tail = func(c *Context) {
+		handler, _ := s.mux.Handler(c.Request)
+		if zh, ok := handler.(*zenHandler); ok {
+			zh.fn(c)
+		} else {
+			handler.ServeHTTP(c.Response, c.Request)
+		}
+	}
+	for i := len(s.middleware) - 1; i >= 0; i-- {
+		mw := s.middleware[i]
+		prev := tail
+		tail = func(c *Context) {
+			mw(c, prev)
+		}
+	}
+	return tail
 }
 
 // Handle registers a zen-style handler for the given pattern.

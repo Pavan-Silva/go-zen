@@ -16,13 +16,11 @@ import (
 //
 //	r := zen.New(":8080")
 //	r.Use(middleware.Logger)
-func Logger(c *zen.Context, next http.Handler) {
+func Logger(c *zen.Context, next zen.NextFunc) {
 	start := time.Now()
-
-	// Capture the response writer to track status code and bytes written
 	rw := &responseWriter{ResponseWriter: c.Response}
-
-	next.ServeHTTP(rw, c.Request)
+	c.Response = rw
+	next(c)
 
 	duration := time.Since(start)
 	logger.Info(

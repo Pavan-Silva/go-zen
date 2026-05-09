@@ -4,7 +4,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"net/http"
 
 	"github.com/Pavan-Silva/go-zen"
 )
@@ -50,13 +49,12 @@ func RequestIDWithConfig(config RequestIDConfig) zen.MiddlewareFunc {
 	if config.Header == "" {
 		config.Header = "X-Request-ID"
 	}
-	return func(c *zen.Context, next http.Handler) {
+	return func(c *zen.Context, next zen.NextFunc) {
 		if config.Skipper != nil && config.Skipper(c.Request) {
-			next.ServeHTTP(c.Response, c.Request)
+			next(c)
 			return
 		}
 
-		// Reuse existing request ID if present
 		requestID := c.Request.Header.Get(config.Header)
 		if requestID == "" {
 			if config.Generator != nil {
@@ -66,13 +64,10 @@ func RequestIDWithConfig(config RequestIDConfig) zen.MiddlewareFunc {
 			}
 		}
 
-		// Store in context for downstream handlers
 		c.Set("request_id", requestID)
-
-		// Set response header
 		c.Response.Header().Set(config.Header, requestID)
 
-		next.ServeHTTP(c.Response, c.Request)
+		next(c)
 	}
 }
 

@@ -32,9 +32,9 @@ func CrossOriginProtectionWithConfig(config CrossOriginProtectionConfig) zen.Mid
 		cop.AddInsecureBypassPattern(pattern)
 	}
 
-	return func(c *zen.Context, next http.Handler) {
+	return func(c *zen.Context, next zen.NextFunc) {
 		if config.Skipper != nil && config.Skipper(c.Request) {
-			next.ServeHTTP(c.Response, c.Request)
+			next(c)
 			return
 		}
 		if err := cop.Check(c.Request); err != nil {
@@ -45,6 +45,6 @@ func CrossOriginProtectionWithConfig(config CrossOriginProtectionConfig) zen.Mid
 			http.Error(c.Response, http.StatusText(http.StatusForbidden), http.StatusForbidden)
 			return
 		}
-		next.ServeHTTP(c.Response, c.Request)
+		next(c)
 	}
 }

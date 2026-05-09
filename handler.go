@@ -4,41 +4,24 @@ import (
 	"net/http"
 )
 
+// NextFunc is the next handler in the middleware chain.
+// Call next(c) to pass control downstream; return without calling it to
+// short-circuit execution.
+type NextFunc func(*Context)
+
 // MiddlewareFunc is the zen-native middleware signature.
 // Middleware receives the zen Context and the next handler in the chain.
-// Call next.ServeHTTP() to pass control downstream; return without calling it to
-// short-circuit execution (useful for auth, logging, etc).
-//
-// Middleware is zero-allocation by design: no closures are created per request,
-// and the Context is guaranteed to be non-nil due to the Router's ServeHTTP logic.
-type MiddlewareFunc func(*Context, http.Handler)
-
-// middlewareHandler is a chain node in the middleware stack.
-// It holds a MiddlewareFunc and the next handler, written to avoid allocations.
-// Per-request work is minimal: extract Context from request and call the middleware.
-type middlewareHandler struct {
-	m    MiddlewareFunc
-	next http.Handler
-}
-
-// ServeHTTP implements http.Handler by calling the middleware function.
-// The Context is guaranteed to exist because Router.ServeHTTP creates it first.
-func (mh *middlewareHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	c, ok := FromRequest(r)
-	if !ok {
-		return
-	}
-	c.Response = w
-	mh.m(c, mh.next)
-}
+type MiddlewareFunc func(*Context, NextFunc)
 
 // zenHandler wraps a zen-style handler (func(*Context)).
-// It's registered on the mux to extract the Context from the request exactly once.
+// Registered on the mux for route matching; called directly via fn(c)
+// when dispatched through the middleware chain, or via ServeHTTP (with
+// FromRequest) when the mux routes to it directly (no middleware path).
 type zenHandler struct {
 	fn func(*Context)
 }
 
-// ServeHTTP implements http.Handler by extracting the Context and calling the handler.
+// ServeHTTP implements http.Handler for the no-middleware path.
 func (zh *zenHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	c, ok := FromRequest(r)
 	if !ok {
@@ -48,24 +31,22 @@ func (zh *zenHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	zh.fn(c)
 }
 
-// contextAwareHandler wraps a middleware chain with Context creation/release.
-// This handler is used when routes have group-level middleware attached.
-// It ensures the Context is created once and available to all middleware/handlers,
-// and is properly released back to the pool after the request.
+// contextAwareHandler wraps a NextFunc chain with Context creation/release.
+// Used by group and per-route middleware when the global chain hasn't already
+// created a Context.
 type contextAwareHandler struct {
-	chain http.Handler
+	final NextFunc
 }
 
 // ServeHTTP implements http.Handler by creating a Context, running the chain, and releasing.
 func (h *contextAwareHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// Reuse existing Context when one is already attached (e.g. global middleware path).
 	if c, ok := FromRequest(r); ok {
 		c.Response = w
-		h.chain.ServeHTTP(w, r)
+		h.final(c)
 		return
 	}
 
 	c, r := newContext(w, r)
 	defer releaseContext(c)
-	h.chain.ServeHTTP(w, r)
+	h.final(c)
 }
