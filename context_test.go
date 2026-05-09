@@ -56,8 +56,8 @@ func TestContext_Reset(t *testing.T) {
 func TestContext_FromRequest(t *testing.T) {
 	r := httptest.NewRequest("GET", "/", nil)
 	if c, ok := FromRequest(r); ok {
-		t.Fatal("FromRequest should return (nil, false) for raw request")
 		_ = c
+		t.Fatal("FromRequest should return (nil, false) for raw request")
 	}
 
 	w := httptest.NewRecorder()

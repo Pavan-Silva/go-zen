@@ -103,7 +103,7 @@ func (o *OIDCAuth) Authenticate(r *http.Request) (User, error) {
 }
 
 // getUserInfo calls the OIDC userinfo endpoint with the access token.
-func (o *OIDCAuth) getUserInfo(ctx context.Context, client *http.Client, token, endpoint string) (*OIDCUserInfo, error) {
+func (o *OIDCAuth) getUserInfo(ctx context.Context, client *http.Client, token, endpoint string) (info *OIDCUserInfo, err error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", endpoint, nil)
 	if err != nil {
 		return nil, err
@@ -116,7 +116,11 @@ func (o *OIDCAuth) getUserInfo(ctx context.Context, client *http.Client, token, 
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil && err == nil {
+			err = closeErr
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("userinfo request failed with status %d", resp.StatusCode)

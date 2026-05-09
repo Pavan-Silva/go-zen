@@ -29,8 +29,8 @@ func TestFormFile_SingleFile(t *testing.T) {
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
 	part, _ := writer.CreateFormFile("file", "test.txt")
-	part.Write([]byte("hello world"))
-	writer.Close()
+	_, _ = part.Write([]byte("hello world"))
+	_ = writer.Close()
 
 	req := httptest.NewRequest("POST", "/upload", body)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
@@ -61,7 +61,7 @@ func TestFormFile_MissingField(t *testing.T) {
 
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
-	writer.Close()
+	_ = writer.Close()
 
 	req := httptest.NewRequest("POST", "/upload", body)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
@@ -89,7 +89,7 @@ func TestFormFiles_MultipleFiles(t *testing.T) {
 				return
 			}
 			content, _ := io.ReadAll(file)
-			file.Close()
+			_ = file.Close()
 			capturedContent = append(capturedContent, content)
 		}
 		c.String(200, "ok")
@@ -99,9 +99,9 @@ func TestFormFiles_MultipleFiles(t *testing.T) {
 	writer := multipart.NewWriter(body)
 	for i := 1; i <= 3; i++ {
 		part, _ := writer.CreateFormFile("files", fmt.Sprintf("file%d.txt", i))
-		part.Write([]byte(fmt.Sprintf("content%d", i)))
+		_, _ = part.Write([]byte(fmt.Sprintf("content%d", i)))
 	}
-	writer.Close()
+	_ = writer.Close()
 
 	req := httptest.NewRequest("POST", "/uploads", body)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
@@ -132,7 +132,7 @@ func TestFormFiles_NoFiles(t *testing.T) {
 
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
-	writer.Close()
+	_ = writer.Close()
 
 	req := httptest.NewRequest("POST", "/uploads", body)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
@@ -225,7 +225,7 @@ func TestContext_Redirect(t *testing.T) {
 func TestContext_Blob(t *testing.T) {
 	r := New(":0")
 	r.Handle("GET /blob", func(c *Context) {
-		c.Blob(200, "text/csv", []byte("id,name\n1,John"))
+		_ = c.Blob(200, "text/csv", []byte("id,name\n1,John"))
 	})
 
 	req := httptest.NewRequest("GET", "/blob", nil)
@@ -247,7 +247,7 @@ func TestContext_Stream(t *testing.T) {
 	r := New(":0")
 	r.Handle("GET /stream", func(c *Context) {
 		reader := bytes.NewReader([]byte("streamed data"))
-		c.Stream(200, "text/plain", reader)
+		_ = c.Stream(200, "text/plain", reader)
 	})
 
 	req := httptest.NewRequest("GET", "/stream", nil)
@@ -286,7 +286,7 @@ func TestContext_Error(t *testing.T) {
 func TestContext_File(t *testing.T) {
 	tmp := t.TempDir()
 	path := filepath.Join(tmp, "test.txt")
-	os.WriteFile(path, []byte("file content"), 0644)
+	_ = os.WriteFile(path, []byte("file content"), 0644)
 
 	r := New(":0")
 	r.Handle("GET /file", func(c *Context) {
@@ -308,7 +308,7 @@ func TestContext_File(t *testing.T) {
 func TestContext_Attachment(t *testing.T) {
 	tmp := t.TempDir()
 	path := filepath.Join(tmp, "test.txt")
-	os.WriteFile(path, []byte("file content"), 0644)
+	_ = os.WriteFile(path, []byte("file content"), 0644)
 
 	r := New(":0")
 	r.Handle("GET /attach", func(c *Context) {
@@ -330,7 +330,7 @@ func TestContext_Attachment(t *testing.T) {
 func TestContext_Attachment_DefaultName(t *testing.T) {
 	tmp := t.TempDir()
 	path := filepath.Join(tmp, "original.txt")
-	os.WriteFile(path, []byte("file content"), 0644)
+	_ = os.WriteFile(path, []byte("file content"), 0644)
 
 	r := New(":0")
 	r.Handle("GET /attach", func(c *Context) {
@@ -352,7 +352,7 @@ func TestContext_Attachment_DefaultName(t *testing.T) {
 func TestContext_Inline(t *testing.T) {
 	tmp := t.TempDir()
 	path := filepath.Join(tmp, "image.png")
-	os.WriteFile(path, []byte("png data"), 0644)
+	_ = os.WriteFile(path, []byte("png data"), 0644)
 
 	r := New(":0")
 	r.Handle("GET /inline", func(c *Context) {

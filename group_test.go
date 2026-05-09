@@ -48,7 +48,7 @@ func TestGroup_HandleRaw(t *testing.T) {
 	r := New(":0")
 	api := r.Group("/api")
 	api.HandleRaw("GET /raw", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("raw"))
+		_, _ = w.Write([]byte("raw"))
 	}))
 
 	req := httptest.NewRequest("GET", "/api/raw", nil)
