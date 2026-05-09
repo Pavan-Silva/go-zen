@@ -2,6 +2,8 @@ module github.com/Pavan-Silva/go-zen
 
 go 1.25.0
 
+retract [v0.0.0, v1.1.0]
+
 require (
 	github.com/go-playground/validator/v10 v10.30.2
 	github.com/golang-jwt/jwt/v5 v5.3.1
