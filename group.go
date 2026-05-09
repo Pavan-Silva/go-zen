@@ -216,12 +216,18 @@ func (r *Router) handleWithMiddleware(pattern string, handler func(*Context), mi
 		return
 	}
 
-	// Build middleware chain from innermost to outermost
-	h := http.Handler(&zenHandler{fn: handler})
+	// Build NextFunc chain (innermost to outermost)
+	var tail NextFunc
+	tail = func(c *Context) {
+		handler(c)
+	}
 	for i := len(middleware) - 1; i >= 0; i-- {
-		h = &middlewareHandler{m: middleware[i], next: h}
+		mw := middleware[i]
+		prev := tail
+		tail = func(c *Context) {
+			mw(c, prev)
+		}
 	}
 
-	// Wrap with context creation and release
-	r.mux.Handle(pattern, &contextAwareHandler{chain: h})
+	r.mux.Handle(pattern, &contextAwareHandler{final: tail})
 }

@@ -64,9 +64,9 @@ func OpenTelemetryWithConfig(config OTelConfig) zen.MiddlewareFunc {
 		propagator = config.Propagator
 	}
 
-	return func(c *zen.Context, next http.Handler) {
+	return func(c *zen.Context, next zen.NextFunc) {
 		if config.Skipper != nil && config.Skipper(c.Request) {
-			next.ServeHTTP(c.Response, c.Request)
+			next(c)
 			return
 		}
 
@@ -83,16 +83,13 @@ func OpenTelemetryWithConfig(config OTelConfig) zen.MiddlewareFunc {
 		)
 		defer span.End()
 
-		// Wrap request with trace context
 		c.Request = c.Request.WithContext(ctx)
 
-		// Use a response writer wrapper to capture status code
 		rw := &otelResponseWriter{ResponseWriter: c.Response}
+		c.Response = rw
 		start := time.Now()
+		next(c)
 
-		next.ServeHTTP(rw, c.Request)
-
-		// Record response attributes
 		span.SetAttributes(
 			attribute.Int("http.status_code", rw.status),
 			attribute.Float64("http.duration_ms", time.Since(start).Seconds()*1000),

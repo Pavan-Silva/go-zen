@@ -43,7 +43,7 @@ func (u User) HasRole(role string) bool {
 //
 //	r.Use(auth.RequireAuth(jwtAuth))
 //	r.Use(auth.RequireAuth(jwtAuth, auth.SkipPaths("/health")))
-func RequireAuth(auth Authenticator, skip ...zen.SkipFunc) func(*zen.Context, http.Handler) {
+func RequireAuth(auth Authenticator, skip ...zen.SkipFunc) func(*zen.Context, zen.NextFunc) {
 	var skipper zen.SkipFunc
 	if len(skip) > 0 {
 		skipper = skip[0]
@@ -53,21 +53,21 @@ func RequireAuth(auth Authenticator, skip ...zen.SkipFunc) func(*zen.Context, ht
 
 // Middleware creates HTTP middleware that authenticates requests using the provided Authenticator.
 // A custom error handler can be provided for unauthorized requests (nil sends 401).
-func Middleware(auth Authenticator, onError func(*zen.Context)) func(*zen.Context, http.Handler) {
+func Middleware(auth Authenticator, onError func(*zen.Context)) func(*zen.Context, zen.NextFunc) {
 	return MiddlewareWithSkipper(auth, onError, nil)
 }
 
 // MiddlewareWithSkipper creates HTTP middleware that authenticates requests and can skip selected routes.
-func MiddlewareWithSkipper(auth Authenticator, onError func(*zen.Context), skip zen.SkipFunc) func(*zen.Context, http.Handler) {
+func MiddlewareWithSkipper(auth Authenticator, onError func(*zen.Context), skip zen.SkipFunc) func(*zen.Context, zen.NextFunc) {
 	if onError == nil {
 		onError = func(c *zen.Context) {
 			c.Error(http.StatusUnauthorized, http.StatusText(http.StatusUnauthorized))
 		}
 	}
 
-	return func(c *zen.Context, next http.Handler) {
+	return func(c *zen.Context, next zen.NextFunc) {
 		if skip != nil && skip(c.Request) {
-			next.ServeHTTP(c.Response, c.Request)
+			next(c)
 			return
 		}
 
@@ -78,20 +78,20 @@ func MiddlewareWithSkipper(auth Authenticator, onError func(*zen.Context), skip 
 		}
 
 		c.Set("user", &user)
-		next.ServeHTTP(c.Response, c.Request)
+		next(c)
 	}
 }
 
 // RequireRole creates middleware that requires a specific role.
 // It must be used after RequireAuth.
-func RequireRole(role string, onError func(*zen.Context)) func(*zen.Context, http.Handler) {
+func RequireRole(role string, onError func(*zen.Context)) func(*zen.Context, zen.NextFunc) {
 	if onError == nil {
 		onError = func(c *zen.Context) {
 			c.Error(http.StatusForbidden, http.StatusText(http.StatusForbidden))
 		}
 	}
 
-	return func(c *zen.Context, next http.Handler) {
+	return func(c *zen.Context, next zen.NextFunc) {
 		userVal, ok := c.Get("user")
 		if !ok || userVal == nil {
 			onError(c)
@@ -104,7 +104,7 @@ func RequireRole(role string, onError func(*zen.Context)) func(*zen.Context, htt
 			return
 		}
 
-		next.ServeHTTP(c.Response, c.Request)
+		next(c)
 	}
 }
 

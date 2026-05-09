@@ -97,31 +97,25 @@ func CORS(config CORSConfig) zen.MiddlewareFunc {
 	config.allowedOriginsMap = buildOriginsMap(config.AllowedOrigins)
 	allowAll := len(config.AllowedOrigins) == 1 && config.AllowedOrigins[0] == "*"
 
-	return func(c *zen.Context, next http.Handler) {
+	return func(c *zen.Context, next zen.NextFunc) {
 		origin := c.Request.Header.Get("Origin")
 
-		// Check if origin is allowed (O(1) lookup using config's map)
 		if origin != "" {
 			allowed := allowAll || config.allowedOriginsMap[origin]
 			if !allowed {
-				// Origin not allowed; proceed without CORS headers
-				next.ServeHTTP(c.Response, c.Request)
+				next(c)
 				return
 			}
 		} else if !allowAll && len(config.allowedOriginsMap) > 0 {
-			// No origin header and we have specific origins configured
-			next.ServeHTTP(c.Response, c.Request)
+			next(c)
 			return
 		}
 
-		// CORS spec: Access-Control-Allow-Credentials: true is incompatible
-		// with Access-Control-Allow-Origin: *. Validate this combination.
 		allowOrigin := origin
 		if !config.AllowCredentials {
 			allowOrigin = "*"
 		}
 
-		// Set CORS headers for allowed origins
 		c.Response.Header().Set("Access-Control-Allow-Origin", allowOrigin)
 		c.Response.Header().Set("Access-Control-Allow-Methods", strings.Join(config.AllowedMethods, ", "))
 		c.Response.Header().Set("Access-Control-Allow-Headers", strings.Join(config.AllowedHeaders, ", "))
@@ -132,13 +126,11 @@ func CORS(config CORSConfig) zen.MiddlewareFunc {
 			c.Response.Header().Set("Access-Control-Allow-Credentials", "true")
 		}
 
-		// Handle CORS preflight (OPTIONS) requests
 		if c.Request.Method == http.MethodOptions {
 			c.Response.WriteHeader(http.StatusNoContent)
 			return
 		}
 
-		// Continue to next handler for actual request
-		next.ServeHTTP(c.Response, c.Request)
+		next(c)
 	}
 }

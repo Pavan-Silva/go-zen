@@ -66,9 +66,9 @@ func TestGroup_HandleRaw(t *testing.T) {
 func TestGroup_Middleware(t *testing.T) {
 	r := New(":0")
 	var mwCalled bool
-	api := r.Group("/api", func(c *Context, next http.Handler) {
+	api := r.Group("/api", func(c *Context, next NextFunc) {
 		mwCalled = true
-		next.ServeHTTP(c.Response, c.Request)
+		next(c)
 	})
 
 	var handlerCalled bool
@@ -91,7 +91,7 @@ func TestGroup_Middleware(t *testing.T) {
 
 func TestGroup_Middleware_ShortCircuit(t *testing.T) {
 	r := New(":0")
-	api := r.Group("/api", func(c *Context, next http.Handler) {
+	api := r.Group("/api", func(c *Context, next NextFunc) {
 		c.Error(403, "forbidden")
 	})
 
@@ -116,9 +116,9 @@ func TestGroup_Middleware_ShortCircuit(t *testing.T) {
 func TestGroup_Use(t *testing.T) {
 	r := New(":0")
 	api := r.Group("/api")
-	api.Use(func(c *Context, next http.Handler) {
+	api.Use(func(c *Context, next NextFunc) {
 		c.Set("auth", "token")
-		next.ServeHTTP(c.Response, c.Request)
+		next(c)
 	})
 
 	var token string
@@ -168,13 +168,13 @@ func TestSubGroup(t *testing.T) {
 func TestSubGroup_MiddlewareInheritance(t *testing.T) {
 	r := New(":0")
 	var order []string
-	api := r.Group("/api", func(c *Context, next http.Handler) {
+	api := r.Group("/api", func(c *Context, next NextFunc) {
 		order = append(order, "api-mw")
-		next.ServeHTTP(c.Response, c.Request)
+		next(c)
 	})
-	users := api.SubGroup("/users", func(c *Context, next http.Handler) {
+	users := api.SubGroup("/users", func(c *Context, next NextFunc) {
 		order = append(order, "users-mw")
-		next.ServeHTTP(c.Response, c.Request)
+		next(c)
 	})
 
 	users.Handle("GET /list", func(c *Context) {

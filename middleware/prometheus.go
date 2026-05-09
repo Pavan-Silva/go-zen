@@ -52,11 +52,11 @@ var (
 //
 //	r.Use(middleware.Prometheus())
 func Prometheus() zen.MiddlewareFunc {
-	return func(c *zen.Context, next http.Handler) {
+	return func(c *zen.Context, next zen.NextFunc) {
 		start := time.Now()
 		rw := &promResponseWriter{ResponseWriter: c.Response}
-
-		next.ServeHTTP(rw, c.Request)
+		c.Response = rw
+		next(c)
 
 		duration := time.Since(start).Seconds()
 		status := strconv.Itoa(rw.status)

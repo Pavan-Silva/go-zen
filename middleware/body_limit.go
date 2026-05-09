@@ -80,24 +80,20 @@ func BodyLimitWithConfig(config BodyLimitMiddlewareConfig) zen.MiddlewareFunc {
 		panic(fmt.Sprintf("invalid body limit: %v", err))
 	}
 
-	return func(c *zen.Context, next http.Handler) {
+	return func(c *zen.Context, next zen.NextFunc) {
 		if config.Skipper != nil && config.Skipper(c.Request) {
-			next.ServeHTTP(c.Response, c.Request)
+			next(c)
 			return
 		}
 
-		// If content length is known and already over limit, fail fast.
 		if c.Request.ContentLength > limit {
 			http.Error(c.Response, http.StatusText(http.StatusRequestEntityTooLarge), http.StatusRequestEntityTooLarge)
 			return
 		}
 
-		// Wrap the request body with MaxBytesReader
 		c.Request.Body = http.MaxBytesReader(c.Response, c.Request.Body, limit)
 
-		// Check if body is too large by trying to read beyond limit
-		// MaxBytesReader will return an error on the next read if limit exceeded
-		next.ServeHTTP(c.Response, c.Request)
+		next(c)
 	}
 }
 

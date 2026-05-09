@@ -18,7 +18,7 @@ import (
 //	r.Use(middleware.Recover)  // Must be first
 //	r.Use(middleware.Logger)
 //	// ... other middleware and handlers
-func Recover(c *zen.Context, next http.Handler) {
+func Recover(c *zen.Context, next zen.NextFunc) {
 	defer func() {
 		if err := recover(); err != nil {
 			logger.Error(
@@ -32,5 +32,5 @@ func Recover(c *zen.Context, next http.Handler) {
 			http.Error(c.Response, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		}
 	}()
-	next.ServeHTTP(c.Response, c.Request)
+	next(c)
 }

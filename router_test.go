@@ -88,9 +88,9 @@ func TestRouter_ServeHTTP_NoMiddleware(t *testing.T) {
 func TestRouter_ServeHTTP_WithMiddleware(t *testing.T) {
 	r := New(":0")
 	var mwCalled, handlerCalled bool
-	r.Use(func(c *Context, next http.Handler) {
+	r.Use(func(c *Context, next NextFunc) {
 		mwCalled = true
-		next.ServeHTTP(c.Response, c.Request)
+		next(c)
 	})
 	r.Handle("GET /test", func(c *Context) {
 		handlerCalled = true
@@ -112,7 +112,7 @@ func TestRouter_ServeHTTP_WithMiddleware(t *testing.T) {
 func TestRouter_Middleware_ShortCircuit(t *testing.T) {
 	r := New(":0")
 	var handlerCalled bool
-	r.Use(func(c *Context, next http.Handler) {
+	r.Use(func(c *Context, next NextFunc) {
 		c.Error(401, "unauthorized")
 	})
 	r.Handle("GET /test", func(c *Context) {
@@ -135,14 +135,14 @@ func TestRouter_Middleware_ShortCircuit(t *testing.T) {
 func TestRouter_Middleware_Order(t *testing.T) {
 	r := New(":0")
 	var order []string
-	r.Use(func(c *Context, next http.Handler) {
+	r.Use(func(c *Context, next NextFunc) {
 		order = append(order, "1-before")
-		next.ServeHTTP(c.Response, c.Request)
+		next(c)
 		order = append(order, "1-after")
 	})
-	r.Use(func(c *Context, next http.Handler) {
+	r.Use(func(c *Context, next NextFunc) {
 		order = append(order, "2-before")
-		next.ServeHTTP(c.Response, c.Request)
+		next(c)
 		order = append(order, "2-after")
 	})
 	r.Handle("GET /test", func(c *Context) {
@@ -312,8 +312,8 @@ func BenchmarkRouter_ServeHTTP(b *testing.B) {
 
 func BenchmarkRouter_ServeHTTP_WithMiddleware(b *testing.B) {
 	r := New(":0")
-	r.Use(func(c *Context, next http.Handler) {
-		next.ServeHTTP(c.Response, c.Request)
+	r.Use(func(c *Context, next NextFunc) {
+		next(c)
 	})
 	r.Handle("GET /bench", func(c *Context) {
 		c.String(200, "ok")
@@ -353,9 +353,9 @@ func TestRouter_HandleWith_PerRouteMiddleware(t *testing.T) {
 
 	r.HandleWith("GET /protected", func(c *Context) {
 		c.String(200, "protected")
-	}, func(c *Context, next http.Handler) {
+	}, func(c *Context, next NextFunc) {
 		middlewareCalled = true
-		next.ServeHTTP(c.Response, c.Request)
+		next(c)
 	})
 
 	req := httptest.NewRequest("GET", "/protected", nil)
@@ -374,17 +374,17 @@ func TestRouter_HandleWith_MiddlewareOrder(t *testing.T) {
 	r := New(":0")
 	var order []string
 
-	r.Use(func(c *Context, next http.Handler) {
+	r.Use(func(c *Context, next NextFunc) {
 		order = append(order, "global")
-		next.ServeHTTP(c.Response, c.Request)
+		next(c)
 	})
 
 	r.HandleWith("GET /test", func(c *Context) {
 		order = append(order, "handler")
 		c.String(200, "ok")
-	}, func(c *Context, next http.Handler) {
+	}, func(c *Context, next NextFunc) {
 		order = append(order, "per-route")
-		next.ServeHTTP(c.Response, c.Request)
+		next(c)
 	})
 
 	req := httptest.NewRequest("GET", "/test", nil)

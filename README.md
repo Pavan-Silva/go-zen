@@ -278,6 +278,27 @@ app.Handle("GET /users/{id}", func(c *zen.Context) {
 Global middleware is registered with `r.Use(...)`.
 Middleware executes in registration order and is pre-chained at startup.
 
+The zen-native middleware signature is:
+
+```go
+func(c *zen.Context, next zen.NextFunc)
+```
+
+`NextFunc` is simply `func(*zen.Context)`. Call `next(c)` to pass control downstream. Return without calling it to short-circuit the chain.
+
+```go
+// Example: custom auth middleware
+app.Use(func(c *zen.Context, next zen.NextFunc) {
+    if c.Request.Header.Get("Authorization") == "" {
+        c.Error(http.StatusUnauthorized, "missing token")
+        return // short-circuit — next is NOT called
+    }
+    next(c) // pass to the next handler
+})
+```
+
+Built-in middleware is used directly:
+
 ```go
 app.Use(middleware.Recover, middleware.Logger, middleware.CORS(corsConfig))
 
