@@ -485,6 +485,116 @@ func TestRateLimiter_Exceed(t *testing.T) {
 	}
 }
 
+func TestRateLimiter_CustomKeyFunc(t *testing.T) {
+	cfg := DefaultRateLimiterConfig()
+	cfg.Limit = 1
+	cfg.Duration = time.Hour
+	cfg.KeyFunc = func(r *http.Request) string {
+		return r.Header.Get("X-API-Key")
+	}
+
+	r := zen.New(":0")
+	r.Use(RateLimiterWithConfig(cfg))
+	r.Handle("GET /api", func(c *zen.Context) {
+		c.String(200, "ok")
+	})
+
+	req := httptest.NewRequest("GET", "/api", nil)
+	req.Header.Set("X-API-Key", "key-1")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != 200 {
+		t.Fatalf("first request: status = %d, want 200", w.Code)
+	}
+
+	// Different key should be allowed
+	req2 := httptest.NewRequest("GET", "/api", nil)
+	req2.Header.Set("X-API-Key", "key-2")
+	w2 := httptest.NewRecorder()
+	r.ServeHTTP(w2, req2)
+	if w2.Code != 200 {
+		t.Fatalf("second request (different key): status = %d, want 200", w2.Code)
+	}
+
+	// Same key as first should be blocked
+	req3 := httptest.NewRequest("GET", "/api", nil)
+	req3.Header.Set("X-API-Key", "key-1")
+	w3 := httptest.NewRecorder()
+	r.ServeHTTP(w3, req3)
+	if w3.Code != 429 {
+		t.Fatalf("third request (same key): status = %d, want 429", w3.Code)
+	}
+}
+
+func TestRateLimiter_Skipper(t *testing.T) {
+	cfg := DefaultRateLimiterConfig()
+	cfg.Limit = 1
+	cfg.Duration = time.Hour
+	cfg.Skipper = func(r *http.Request) bool {
+		return r.URL.Path == "/public"
+	}
+
+	r := zen.New(":0")
+	r.Use(RateLimiterWithConfig(cfg))
+	var callCount int
+	r.Handle("GET /public", func(c *zen.Context) {
+		callCount++
+		c.String(200, "ok")
+	})
+	r.Handle("GET /private", func(c *zen.Context) {
+		callCount++
+		c.String(200, "ok")
+	})
+
+	// Skipped route: unlimited
+	for i := 0; i < 5; i++ {
+		req := httptest.NewRequest("GET", "/public", nil)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		if w.Code != 200 {
+			t.Fatalf("request %d to /public: status = %d, want 200", i, w.Code)
+		}
+	}
+
+	// Non-skipped route: limited
+	req := httptest.NewRequest("GET", "/private", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != 200 {
+		t.Fatalf("first request to /private: status = %d, want 200", w.Code)
+	}
+
+	req2 := httptest.NewRequest("GET", "/private", nil)
+	w2 := httptest.NewRecorder()
+	r.ServeHTTP(w2, req2)
+	if w2.Code != 429 {
+		t.Fatalf("second request to /private: status = %d, want 429", w2.Code)
+	}
+}
+
+func TestRateLimiter_Headers(t *testing.T) {
+	cfg := DefaultRateLimiterConfig()
+	cfg.Limit = 5
+	cfg.Duration = time.Hour
+
+	r := zen.New(":0")
+	r.Use(RateLimiterWithConfig(cfg))
+	r.Handle("GET /api", func(c *zen.Context) {
+		c.String(200, "ok")
+	})
+
+	req := httptest.NewRequest("GET", "/api", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 200 {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	if w.Header().Get("X-RateLimit-Limit") != "5" {
+		t.Fatalf("X-RateLimit-Limit = %q, want %q", w.Header().Get("X-RateLimit-Limit"), "5")
+	}
+}
+
 func TestPprof_Handler(t *testing.T) {
 	r := zen.New(":0")
 	r.HandleRaw("GET /debug/pprof/", PprofHandler())
