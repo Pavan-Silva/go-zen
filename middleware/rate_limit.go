@@ -1,17 +1,19 @@
 package middleware
 
 import (
-	"fmt"
+	"math"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
 	"github.com/Pavan-Silva/go-zen"
+	"golang.org/x/time/rate"
 )
 
 // RateLimiterConfig holds configuration for rate limiting middleware.
 type RateLimiterConfig struct {
-	// Limit is the maximum number of requests per duration.
+	// Limit is the maximum number of requests per duration (also the burst size).
 	Limit int
 	// Duration is the time window for the rate limit.
 	Duration time.Duration
@@ -30,14 +32,13 @@ func DefaultRateLimiterConfig() RateLimiterConfig {
 	}
 }
 
-// visitor tracks request count and reset time for a single client.
-type visitor struct {
-	count   int
-	resetAt time.Time
+type perKeyLimiter struct {
+	limiter  *rate.Limiter
+	lastSeen time.Time
 }
 
 // RateLimiter returns middleware that limits the number of requests per client.
-// Uses an in-memory map with lazy cleanup on each request.
+// Uses a token bucket (golang.org/x/time/rate) per client key.
 //
 // Example:
 //
@@ -73,10 +74,28 @@ func RateLimiterWithConfig(config RateLimiterConfig) zen.MiddlewareFunc {
 		}
 	}
 
+	r := rate.Limit(float64(config.Limit) / config.Duration.Seconds())
+	burst := config.Limit
+
 	var (
 		mu       sync.Mutex
-		visitors = make(map[string]*visitor)
+		limiters = make(map[string]*perKeyLimiter)
 	)
+
+	go func() {
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			mu.Lock()
+			now := time.Now()
+			for k, v := range limiters {
+				if now.After(v.lastSeen.Add(2 * config.Duration)) {
+					delete(limiters, k)
+				}
+			}
+			mu.Unlock()
+		}
+	}()
 
 	return func(c *zen.Context, next zen.NextFunc) {
 		if config.Skipper != nil && config.Skipper(c.Request) {
@@ -85,48 +104,25 @@ func RateLimiterWithConfig(config RateLimiterConfig) zen.MiddlewareFunc {
 		}
 
 		key := config.KeyFunc(c.Request)
-		now := time.Now()
 
 		mu.Lock()
-
-		for k, v := range visitors {
-			if now.After(v.resetAt) {
-				delete(visitors, k)
+		pkl, exists := limiters[key]
+		if !exists {
+			pkl = &perKeyLimiter{
+				limiter: rate.NewLimiter(r, burst),
 			}
+			limiters[key] = pkl
 		}
-
-		v, exists := visitors[key]
-
-		if !exists || now.After(v.resetAt) {
-			visitors[key] = &visitor{
-				count:   1,
-				resetAt: now.Add(config.Duration),
-			}
-			limit := config.Limit
-			remaining := limit - 1
-			mu.Unlock()
-
-			c.Response.Header().Set("X-RateLimit-Limit", fmt.Sprintf("%d", limit))
-			c.Response.Header().Set("X-RateLimit-Remaining", fmt.Sprintf("%d", remaining))
-			next(c)
-			return
-		}
-
-		v.count++
-		limit := config.Limit
-		remaining := limit - v.count
-		if remaining < 0 {
-			remaining = 0
-		}
+		pkl.lastSeen = time.Now()
 		mu.Unlock()
 
-		c.Response.Header().Set("X-RateLimit-Limit", fmt.Sprintf("%d", limit))
-		c.Response.Header().Set("X-RateLimit-Remaining", fmt.Sprintf("%d", remaining))
-
-		if v.count > limit {
+		if !pkl.limiter.Allow() {
 			http.Error(c.Response, "Rate limit exceeded", http.StatusTooManyRequests)
 			return
 		}
+
+		c.Response.Header().Set("X-RateLimit-Limit", strconv.Itoa(burst))
+		c.Response.Header().Set("X-RateLimit-Remaining", strconv.Itoa(int(math.Ceil(pkl.limiter.Tokens()))))
 
 		next(c)
 	}
