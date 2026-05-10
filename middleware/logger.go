@@ -24,7 +24,7 @@ func Logger(c *zen.Context, next zen.NextFunc) {
 
 	duration := time.Since(start)
 	logger.Info(
-		"HTTP: %s %s %d %v | ip=%s size=%d resp=%d bytes",
+		"%s %s %d %v ip=%s req=%d resp=%d",
 		c.Request.Method,
 		c.Request.URL.Path,
 		rw.status,
