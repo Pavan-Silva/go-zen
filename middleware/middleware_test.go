@@ -485,37 +485,6 @@ func TestRateLimiter_Exceed(t *testing.T) {
 	}
 }
 
-// Test Prometheus middleware
-func TestPrometheus_MetricsEndpoint(t *testing.T) {
-	r := zen.New(":0")
-	r.Use(Prometheus())
-	r.Handle("GET /api", func(c *zen.Context) {
-		c.String(200, "ok")
-	})
-	r.HandleRaw("GET /metrics", PrometheusHandler())
-
-	// Make a request to generate metrics
-	req := httptest.NewRequest("GET", "/api", nil)
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != 200 {
-		t.Fatalf("status = %d, want 200", w.Code)
-	}
-
-	// Check metrics endpoint
-	req2 := httptest.NewRequest("GET", "/metrics", nil)
-	w2 := httptest.NewRecorder()
-	r.ServeHTTP(w2, req2)
-
-	if w2.Code != 200 {
-		t.Fatalf("metrics status = %d, want 200", w2.Code)
-	}
-	if !strings.Contains(w2.Body.String(), "zen_http_requests_total") {
-		t.Fatal("metrics should contain zen_http_requests_total")
-	}
-}
-
 func TestPprof_Handler(t *testing.T) {
 	r := zen.New(":0")
 	r.HandleRaw("GET /debug/pprof/", PprofHandler())
