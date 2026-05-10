@@ -273,13 +273,13 @@ func (s *Router) Static(prefix, root string) {
 	}
 	fsHandler := http.StripPrefix(prefix, http.FileServer(http.Dir(root)))
 	if prefix == "/" {
-		s.HandleRaw("GET /*", fsHandler)
-		s.HandleRaw("HEAD /*", fsHandler)
+		s.HandleRaw("GET /", fsHandler)
+		s.HandleRaw("HEAD /", fsHandler)
 	} else {
 		s.HandleRaw("GET "+prefix, fsHandler)
 		s.HandleRaw("HEAD "+prefix, fsHandler)
-		s.HandleRaw("GET "+prefix+"/*", fsHandler)
-		s.HandleRaw("HEAD "+prefix+"/*", fsHandler)
+		s.HandleRaw("GET "+prefix+"/", fsHandler)
+		s.HandleRaw("HEAD "+prefix+"/", fsHandler)
 	}
 }
 
@@ -297,13 +297,13 @@ func (s *Router) StaticFS(prefix string, filesystem fs.FS) {
 	}
 	fsHandler := http.StripPrefix(prefix, http.FileServer(http.FS(filesystem)))
 	if prefix == "/" {
-		s.HandleRaw("GET /*", fsHandler)
-		s.HandleRaw("HEAD /*", fsHandler)
+		s.HandleRaw("GET /", fsHandler)
+		s.HandleRaw("HEAD /", fsHandler)
 	} else {
 		s.HandleRaw("GET "+prefix, fsHandler)
 		s.HandleRaw("HEAD "+prefix, fsHandler)
-		s.HandleRaw("GET "+prefix+"/*", fsHandler)
-		s.HandleRaw("HEAD "+prefix+"/*", fsHandler)
+		s.HandleRaw("GET "+prefix+"/", fsHandler)
+		s.HandleRaw("HEAD "+prefix+"/", fsHandler)
 	}
 }
 
