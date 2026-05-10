@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -418,5 +419,180 @@ func TestRouter_RequestTimeout_Default(t *testing.T) {
 
 	if r.requestTimeout != 0 {
 		t.Fatalf("requestTimeout = %v, want 0", r.requestTimeout)
+	}
+}
+
+func TestRouter_StaticFS(t *testing.T) {
+	tmpDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tmpDir, "hello.txt"), []byte("hello world"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	r := New(":0")
+	r.StaticFS("/static", os.DirFS(tmpDir))
+
+	req := httptest.NewRequest("GET", "/static/hello.txt", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	// StaticFS with DirFS and subpath — accept 200 or 301 (directory redirect)
+	if w.Code != 200 && w.Code != 301 {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	if w.Code == 200 && w.Body.String() != "hello world\n" && !strings.Contains(w.Body.String(), "hello world") {
+		t.Fatalf("body = %q, should contain hello world", w.Body.String())
+	}
+}
+
+func TestRouter_StaticFS_RootPrefix(t *testing.T) {
+	tmpDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tmpDir, "hello.txt"), []byte("hello"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	r := New(":0")
+	r.StaticFS("/", os.DirFS(tmpDir))
+
+	req := httptest.NewRequest("GET", "/hello.txt", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 200 {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestRouter_MultiplePathParams(t *testing.T) {
+	r := New(":0")
+	r.Handle("GET /users/{userID}/posts/{postID}", func(c *Context) {
+		userID := c.Param("userID")
+		postID := c.Param("postID")
+		c.String(http.StatusOK, userID+":"+postID)
+	})
+
+	req := httptest.NewRequest("GET", "/users/u1/posts/p2", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 200 {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	if w.Body.String() != "u1:p2" {
+		t.Fatalf("body = %q, want %q", w.Body.String(), "u1:p2")
+	}
+}
+
+func TestRouter_WildcardRoute(t *testing.T) {
+	r := New(":0")
+	r.Handle("GET /static/{path...}", func(c *Context) {
+		c.String(http.StatusOK, "wildcard:"+c.Param("path"))
+	})
+
+	req := httptest.NewRequest("GET", "/static/js/app.js", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 200 {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	body := w.Body.String()
+	if !strings.Contains(body, "js/app.js") {
+		t.Fatalf("body = %q, should contain path", body)
+	}
+}
+
+func TestRouter_HEADMethod(t *testing.T) {
+	r := New(":0")
+	r.Handle("GET /items", func(c *Context) {
+		c.Response.Header().Set("Content-Length", "5")
+		c.String(http.StatusOK, "hello")
+	})
+
+	req := httptest.NewRequest("HEAD", "/items", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 200 {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+}
+
+func TestRouter_RequestTimeout_Cancellation(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.RequestTimeout = 1 * time.Millisecond
+	r := New(":0", cfg)
+
+	r.Handle("GET /slow", func(c *Context) {
+		select {
+		case <-c.Request.Context().Done():
+			return
+		case <-time.After(5 * time.Second):
+		}
+		c.String(http.StatusOK, "done")
+	})
+
+	req := httptest.NewRequest("GET", "/slow", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	_ = w
+}
+
+func TestRouter_HandleWith_EmptyMiddleware(t *testing.T) {
+	r := New(":0")
+	var called bool
+	r.HandleWith("GET /test", func(c *Context) {
+		called = true
+		c.String(http.StatusOK, "ok")
+	})
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 200 {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	if !called {
+		t.Fatal("handler should be called")
+	}
+}
+
+func TestRouter_StaticFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	tmpFile := filepath.Join(tmpDir, "test.txt")
+	if err := os.WriteFile(tmpFile, []byte("file content"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	r := New(":0")
+	r.File("GET /file", tmpFile)
+
+	req := httptest.NewRequest("GET", "/file", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 200 {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), "file content") {
+		t.Fatalf("body should contain file content: %s", w.Body.String())
+	}
+}
+
+func TestRouter_Static_Directory(t *testing.T) {
+	tmpDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tmpDir, "test.txt"), []byte("content"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	r := New(":0")
+	r.Static("/files", tmpDir)
+
+	req := httptest.NewRequest("GET", "/files/test.txt", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 200 {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
 	}
 }

@@ -2,6 +2,7 @@ package zen
 
 import (
 	"net/http/httptest"
+	"sync"
 	"testing"
 )
 
@@ -101,6 +102,50 @@ func TestContext_RequestResponseSet(t *testing.T) {
 	}
 	if c.Request != r {
 		t.Fatal("Request not set correctly")
+	}
+}
+
+func TestContext_ConcurrentAccess(t *testing.T) {
+	c := &Context{}
+
+	var wg sync.WaitGroup
+	for i := 0; i < 20; i++ {
+		wg.Add(1)
+		go func(n int) {
+			defer wg.Done()
+			key := "goroutine"
+			c.Set(key, n)
+			val, ok := c.Get(key)
+			if !ok {
+				t.Errorf("goroutine %d: key not found", n)
+				return
+			}
+			if val.(int) != n {
+				t.Errorf("goroutine %d: val = %d, want %d", n, val, n)
+			}
+		}(i)
+	}
+	wg.Wait()
+}
+
+func TestContext_GetNilMu(t *testing.T) {
+	c := &Context{}
+	_, ok := c.Get("any")
+	if ok {
+		t.Fatal("Get on context with nil mu should return false")
+	}
+}
+
+func TestContext_GetNilStore(t *testing.T) {
+	c := &Context{}
+	c.Set("a", 1)
+
+	// Reset store to nil but keep mu
+	c.store = nil
+
+	_, ok := c.Get("a")
+	if ok {
+		t.Fatal("Get with nil store should return false")
 	}
 }
 
