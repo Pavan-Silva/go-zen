@@ -341,9 +341,7 @@ admin.HandleWith("GET /dashboard", func(c *zen.Context) {
 - `middleware.BodyLimit` — limits request body size with support for skippers
 - `middleware.Compress()` — gzip compression for clients that accept it
 - `middleware.RequestID()` — injects unique request ID via `X-Request-ID` header
-- `middleware.RateLimiter()` — in-memory rate limiting with configurable window
-- `middleware.Prometheus()` — Prometheus metrics (request count, latency, response size)
-- `middleware.OpenTelemetry()` — distributed tracing via OpenTelemetry
+- `middleware.RateLimiter()` — in-memory rate limiting with token bucket (golang.org/x/time/rate)
 
 ### Compression Middleware
 
@@ -372,23 +370,6 @@ config := middleware.DefaultRateLimiterConfig()
 config.Limit = 100
 config.Duration = time.Minute
 app.Use(middleware.RateLimiterWithConfig(config))
-```
-
-### Prometheus Metrics
-
-```go
-app.Use(middleware.Prometheus())
-app.HandleRaw("GET /metrics", middleware.PrometheusHandler())
-```
-
-### OpenTelemetry Tracing
-
-```go
-app.Use(middleware.OpenTelemetry())
-// Custom config
-config := middleware.DefaultOTelConfig()
-config.ServiceName = "my-api"
-app.Use(middleware.OpenTelemetryWithConfig(config))
 ```
 
 ### Pprof Debug Endpoint
