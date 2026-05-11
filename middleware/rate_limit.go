@@ -80,20 +80,26 @@ func RateLimiterWithConfig(config RateLimiterConfig) zen.MiddlewareFunc {
 	var (
 		mu       sync.Mutex
 		limiters = make(map[string]*perKeyLimiter)
+		stop     = make(chan struct{})
 	)
 
 	go func() {
 		ticker := time.NewTicker(time.Minute)
 		defer ticker.Stop()
-		for range ticker.C {
-			mu.Lock()
-			now := time.Now()
-			for k, v := range limiters {
-				if now.After(v.lastSeen.Add(2 * config.Duration)) {
-					delete(limiters, k)
+		for {
+			select {
+			case <-ticker.C:
+				mu.Lock()
+				now := time.Now()
+				for k, v := range limiters {
+					if now.After(v.lastSeen.Add(2 * config.Duration)) {
+						delete(limiters, k)
+					}
 				}
+				mu.Unlock()
+			case <-stop:
+				return
 			}
-			mu.Unlock()
 		}
 	}()
 

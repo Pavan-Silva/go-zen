@@ -59,6 +59,10 @@ func Middleware(auth Authenticator, onError func(*zen.Context)) func(*zen.Contex
 
 // MiddlewareWithSkipper creates HTTP middleware that authenticates requests and can skip selected routes.
 func MiddlewareWithSkipper(auth Authenticator, onError func(*zen.Context), skip zen.SkipFunc) func(*zen.Context, zen.NextFunc) {
+	if auth == nil {
+		panic("auth: nil Authenticator provided to MiddlewareWithSkipper")
+	}
+
 	if onError == nil {
 		onError = func(c *zen.Context) {
 			c.Error(http.StatusUnauthorized, http.StatusText(http.StatusUnauthorized))
