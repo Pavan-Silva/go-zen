@@ -5,7 +5,6 @@ import (
 	"reflect"
 	"regexp"
 	"strings"
-	"sync"
 
 	"github.com/go-playground/validator/v10"
 )
@@ -28,22 +27,19 @@ type Validator interface {
 
 // defaultValidator is the global validator instance.
 // Set a custom validator via SetValidator().
-var defaultValidator Validator = new(defaultValidate)
+var defaultValidator Validator = &defaultValidate{inst: newValidator()}
 
 // defaultValidate is the built-in validator using go-playground/validator/v10.
-// Lazily initialized on first use.
 type defaultValidate struct {
-	once sync.Once
 	inst *validator.Validate
 }
 
 func (v *defaultValidate) Validate(i any) error {
-	v.once.Do(func() { v.inst = newValidator() })
-	val := reflect.ValueOf(i)
-	if val.Kind() == reflect.Pointer {
-		val = val.Elem()
+	rv := reflect.ValueOf(i)
+	if rv.Kind() == reflect.Pointer {
+		rv = rv.Elem()
 	}
-	if val.Kind() != reflect.Struct {
+	if rv.Kind() != reflect.Struct {
 		return nil
 	}
 	return v.inst.Struct(i)
