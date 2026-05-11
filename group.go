@@ -169,12 +169,17 @@ func splitMethodPath(pattern string) (method, path string) {
 // Use appends middleware to this group. The middleware only applies to routes
 // registered through this specific group (not the parent router).
 //
+// Must be called before the server starts (before Run/RunTLS).
+//
 // Example:
 //
 //	users := r.Group("/api/users")
 //	users.Use(authMiddleware, loggingMiddleware)
 //	users.Handle("GET /{id}", getUser)
 func (g *Group) Use(m ...MiddlewareFunc) {
+	if g.router.started {
+		panic("zen: Group.Use called after server started")
+	}
 	g.middleware = append(g.middleware, m...)
 }
 

@@ -105,15 +105,26 @@ func TestContext_RequestResponseSet(t *testing.T) {
 	}
 }
 
+func TestContext_GetNilStore(t *testing.T) {
+	c := &Context{}
+	c.Set("a", 1)
+
+	c.store = nil
+
+	_, ok := c.Get("a")
+	if ok {
+		t.Fatal("Get with nil store should return false")
+	}
+}
+
 func TestContext_ConcurrentAccess(t *testing.T) {
 	c := &Context{}
-
 	var wg sync.WaitGroup
 	for i := 0; i < 20; i++ {
 		wg.Add(1)
 		go func(n int) {
 			defer wg.Done()
-			key := "goroutine"
+			key := "goroutine_" + itoa(n)
 			c.Set(key, n)
 			val, ok := c.Get(key)
 			if !ok {
@@ -128,25 +139,84 @@ func TestContext_ConcurrentAccess(t *testing.T) {
 	wg.Wait()
 }
 
-func TestContext_GetNilMu(t *testing.T) {
+func TestContext_Keys(t *testing.T) {
 	c := &Context{}
-	_, ok := c.Get("any")
-	if ok {
-		t.Fatal("Get on context with nil mu should return false")
+	c.Set("a", 1)
+	c.Set("b", "two")
+	c.Set("c", true)
+
+	keys := c.Keys()
+	if keys == nil {
+		t.Fatal("Keys() should not return nil")
+	}
+	if len(keys) != 3 {
+		t.Fatalf("Keys() len = %d, want 3", len(keys))
+	}
+	if keys["a"] != 1 || keys["b"] != "two" || keys["c"] != true {
+		t.Fatal("Keys() returned wrong values")
+	}
+
+	// modification to returned map should not affect original
+	keys["a"] = 99
+	if v, _ := c.Get("a"); v != 1 {
+		t.Fatal("modifying Keys() map should not affect context")
 	}
 }
 
-func TestContext_GetNilStore(t *testing.T) {
+func TestContext_Keys_NilStore(t *testing.T) {
+	c := &Context{}
+	if keys := c.Keys(); keys != nil {
+		t.Fatal("Keys() on empty context should return nil")
+	}
+}
+
+func TestContext_Copy(t *testing.T) {
 	c := &Context{}
 	c.Set("a", 1)
+	c.Set("b", "two")
 
-	// Reset store to nil but keep mu
-	c.store = nil
-
-	_, ok := c.Get("a")
-	if ok {
-		t.Fatal("Get with nil store should return false")
+	cp := c.Copy()
+	if cp == c {
+		t.Fatal("Copy() should return a new pointer")
 	}
+
+	v, ok := cp.Get("a")
+	if !ok || v != 1 {
+		t.Fatal("Copy() should preserve values")
+	}
+	v, ok = cp.Get("b")
+	if !ok || v != "two" {
+		t.Fatal("Copy() should preserve values")
+	}
+
+	// modify original, copy should be unaffected
+	c.Set("a", 99)
+	if v, _ := cp.Get("a"); v != 1 {
+		t.Fatal("Copy() should be independent of original")
+	}
+}
+
+func TestContext_Copy_NilStore(t *testing.T) {
+	c := &Context{}
+	cp := c.Copy()
+	if cp == c {
+		t.Fatal("Copy() should return a new pointer")
+	}
+	if _, ok := cp.Get("any"); ok {
+		t.Fatal("Copy() of empty context should have empty store")
+	}
+}
+
+func itoa(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	s := ""
+	for n > 0 {
+		s = string(rune('0'+n%10)) + s
+		n /= 10
+	}
+	return s
 }
 
 

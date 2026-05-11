@@ -79,6 +79,8 @@ type Router struct {
 	shutdownTimeout time.Duration
 	// requestTimeout is the default per-request timeout.
 	requestTimeout time.Duration
+	// started guards against Use() and Handle* calls after the server has started.
+	started bool
 }
 
 // New creates a new Router with the given address and optional configuration.
@@ -143,14 +145,9 @@ func New(addr string, config ...Config) *Router {
 }
 
 // ServeHTTP is the main entry point for every HTTP request.
-// It creates a zen Context once per request so zen handlers and middleware always
-// receive a non-nil Context. The request is then passed through the middleware
-// chain (if configured) or directly to the mux.
-// If RequestTimeout is configured, the request context is wrapped with a timeout.
+// It wraps the request with an optional timeout, creates a zen Context,
+// and dispatches through the middleware chain or directly to the mux.
 func (s *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	c, r := newContext(w, r)
-	defer releaseContext(c)
-
 	if s.requestTimeout > 0 {
 		ctx, cancel := context.WithTimeout(r.Context(), s.requestTimeout)
 		defer cancel()
@@ -158,16 +155,23 @@ func (s *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if s.hasMiddleware {
-		c.Response = w
-		c.Request = r
+		c, _ := newContextNoRequest(w, r)
+		defer releaseContext(c)
 		s.chainNext(c)
-	} else {
-		s.mux.ServeHTTP(w, r)
+		return
 	}
+
+	c, r := newContext(w, r)
+	defer releaseContext(c)
+
+	s.mux.ServeHTTP(w, r)
 }
 
 // Use appends middleware to the global chain and rebuilds it.
 // Middleware executes in the order added.
+//
+// Must be called before the server starts (before Run/RunTLS).
+// Calling Use after the server has started causes a data race.
 //
 // The chain is rebuilt and cached at setup time, so adding middleware has zero
 // performance impact on request processing.
@@ -180,6 +184,9 @@ func (s *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 //	r.Use(middleware.CORS(...))
 //	r.Use(middleware.AuthRequired)   // Can short-circuit before other handlers
 func (s *Router) Use(m ...MiddlewareFunc) {
+	if s.started {
+		panic("zen: Use called after server started")
+	}
 	s.middleware = append(s.middleware, m...)
 	s.chainNext = s.buildChain()
 	s.hasMiddleware = true
@@ -187,6 +194,11 @@ func (s *Router) Use(m ...MiddlewareFunc) {
 
 // buildChain creates the NextFunc chain from registered middleware.
 // The chain passes *Context directly — no FromRequest lookups, no per-request allocations.
+//
+// The tail handler dispatches to the mux: zen-style handlers (*zenHandler) are called
+// directly with the context, while raw http.Handler routes receive c.Response and
+// c.Request. This means any middleware that wraps c.Response (e.g. response logger)
+// or modifies c.Request (e.g. enriched context) automatically propagates to raw handlers.
 func (s *Router) buildChain() NextFunc {
 	if len(s.middleware) == 0 {
 		return nil
@@ -194,9 +206,12 @@ func (s *Router) buildChain() NextFunc {
 	var tail NextFunc
 	tail = func(c *Context) {
 		handler, _ := s.mux.Handler(c.Request)
-		if zh, ok := handler.(*zenHandler); ok {
-			zh.fn(c)
-		} else {
+		switch h := handler.(type) {
+		case *zenHandler:
+			h.fn(c)
+		case *contextAwareHandler:
+			h.final(c)
+		default:
 			handler.ServeHTTP(c.Response, c.Request)
 		}
 	}
@@ -344,10 +359,12 @@ func (s *Router) runServer(listen func() error) {
 	}
 
 	fmt.Print(system.Banner(addr))
+	s.started = true
 
 	go func() {
 		if err := listen(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			logger.Fatal("Server: error: %v", err)
+			logger.Error("Server: error: %v", err)
+			os.Exit(1)
 		}
 	}()
 
@@ -365,6 +382,6 @@ func (s *Router) gracefulShutdown() {
 	defer cancel()
 
 	if err := s.Server.Shutdown(ctx); err != nil {
-		logger.Fatal("Server: shutdown error: %v", err)
+		logger.Error("Server: shutdown error: %v", err)
 	}
 }
