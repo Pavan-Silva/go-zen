@@ -46,35 +46,7 @@ func (v *defaultValidate) Validate(i any) error {
 	if val.Kind() != reflect.Struct {
 		return nil
 	}
-	if !hasValidateTags(val.Type()) {
-		return nil
-	}
 	return v.inst.Struct(i)
-}
-
-// hasValidateTags caches whether a struct type has any validate tags.
-// After the one-time reflection scan (~43ns), subsequent lookups are a
-// fast sync.Map load (~8ns, 0 allocs).
-var hasValidateTagsCache sync.Map
-
-func hasValidateTags(t reflect.Type) bool {
-	if t.Kind() == reflect.Pointer {
-		t = t.Elem()
-	}
-	if t.Kind() != reflect.Struct {
-		return false
-	}
-	if v, ok := hasValidateTagsCache.Load(t); ok {
-		return v.(bool)
-	}
-	for i := 0; i < t.NumField(); i++ {
-		if t.Field(i).Tag.Get("validate") != "" {
-			hasValidateTagsCache.Store(t, true)
-			return true
-		}
-	}
-	hasValidateTagsCache.Store(t, false)
-	return false
 }
 
 // newValidator creates and configures the default go-playground/validator instance.
