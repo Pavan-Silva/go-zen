@@ -47,22 +47,16 @@ func (c *Context) BindForm(dest any) error {
 	rv = rv.Elem()
 	rt := rv.Type()
 
-	for i := 0; i < rt.NumField(); i++ {
-		field := rt.Field(i)
-		if field.PkgPath != "" {
-			continue
-		}
-
-		tag := parseStructTag(field, "form")
-
-		vals, ok := c.Request.Form[tag]
+	meta := getBindMeta(rt)
+	for _, field := range meta.fields {
+		vals, ok := c.Request.Form[field.formTag]
 		if !ok || len(vals) == 0 {
 			continue
 		}
 
-		fv := rv.Field(i)
-		if err := setFieldValue(fv, field.Type.Kind(), vals); err != nil {
-			return &FormError{Field: tag, Err: err}
+		fv := rv.Field(field.index)
+		if err := setFieldValue(fv, field.kind, vals); err != nil {
+			return &FormError{Field: field.formTag, Err: err}
 		}
 	}
 

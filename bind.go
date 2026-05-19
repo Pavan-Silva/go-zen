@@ -5,7 +5,50 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 )
+
+var bindMetaCache sync.Map // map[reflect.Type]*bindMeta
+
+type bindFieldInfo struct {
+	index    int
+	kind     reflect.Kind
+	paramTag string
+	queryTag string
+	formTag  string
+}
+
+type bindMeta struct {
+	fields []bindFieldInfo
+}
+
+func getBindMeta(rt reflect.Type) *bindMeta {
+	if meta, ok := bindMetaCache.Load(rt); ok {
+		return meta.(*bindMeta)
+	}
+	meta := buildBindMeta(rt)
+	actual, _ := bindMetaCache.LoadOrStore(rt, meta)
+	return actual.(*bindMeta)
+}
+
+func buildBindMeta(rt reflect.Type) *bindMeta {
+	fields := make([]bindFieldInfo, 0, rt.NumField())
+	for i := 0; i < rt.NumField(); i++ {
+		field := rt.Field(i)
+		if field.PkgPath != "" {
+			continue
+		}
+
+		fields = append(fields, bindFieldInfo{
+			index:    i,
+			kind:     field.Type.Kind(),
+			paramTag: parseStructTag(field, "param"),
+			queryTag: parseStructTag(field, "query"),
+			formTag:  parseStructTag(field, "form"),
+		})
+	}
+	return &bindMeta{fields: fields}
+}
 
 // BindBody binds only the request body to dest, ignoring path/query params.
 // This matches Echo's c.BindBody() behavior.
@@ -102,22 +145,16 @@ func (c *Context) BindPathParams(dest any) error {
 	rv = rv.Elem()
 	rt := rv.Type()
 
-	for i := 0; i < rt.NumField(); i++ {
-		field := rt.Field(i)
-		if field.PkgPath != "" {
-			continue
-		}
-
-		tag := parseStructTag(field, "param")
-
-		val := c.Param(tag)
+	meta := getBindMeta(rt)
+	for _, field := range meta.fields {
+		val := c.Param(field.paramTag)
 		if val == "" {
 			continue
 		}
 
-		fv := rv.Field(i)
-		if err := setFieldValue(fv, field.Type.Kind(), []string{val}); err != nil {
-			return fmt.Errorf("path param %q: %w", tag, err)
+		fv := rv.Field(field.index)
+		if err := setFieldValue(fv, field.kind, []string{val}); err != nil {
+			return fmt.Errorf("path param %q: %w", field.paramTag, err)
 		}
 	}
 	return nil
@@ -149,22 +186,16 @@ func (c *Context) BindQueryParams(dest any) error {
 		return nil
 	}
 
-	for i := 0; i < rt.NumField(); i++ {
-		field := rt.Field(i)
-		if field.PkgPath != "" {
-			continue
-		}
-
-		tag := parseStructTag(field, "query")
-
-		vals, ok := query[tag]
+	meta := getBindMeta(rt)
+	for _, field := range meta.fields {
+		vals, ok := query[field.queryTag]
 		if !ok || len(vals) == 0 {
 			continue
 		}
 
-		fv := rv.Field(i)
-		if err := setFieldValue(fv, field.Type.Kind(), vals); err != nil {
-			return fmt.Errorf("query param %q: %w", tag, err)
+		fv := rv.Field(field.index)
+		if err := setFieldValue(fv, field.kind, vals); err != nil {
+			return fmt.Errorf("query param %q: %w", field.queryTag, err)
 		}
 	}
 	return nil
