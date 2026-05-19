@@ -38,7 +38,11 @@ func writeResponse(c *Context, status int, contentType string, body []byte) {
 //	    </html>
 //	`)
 func (c *Context) HTML(status int, html string) {
-	writeResponse(c, status, "text/html; charset=utf-8", []byte(html))
+	c.Response.Header().Set("Content-Type", "text/html; charset=utf-8")
+	c.Response.WriteHeader(status)
+	if _, err := io.WriteString(c.Response, html); err != nil {
+		logger.Error("HTTP: response write error: %v", err)
+	}
 }
 
 // String writes a plain text string directly to the response with the given HTTP status.
@@ -55,7 +59,11 @@ func (c *Context) HTML(status int, html string) {
 //
 //	c.String(http.StatusUnauthorized, "Invalid credentials")
 func (c *Context) String(status int, text string) {
-	writeResponse(c, status, "text/plain; charset=utf-8", []byte(text))
+	c.Response.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	c.Response.WriteHeader(status)
+	if _, err := io.WriteString(c.Response, text); err != nil {
+		logger.Error("HTTP: response write error: %v", err)
+	}
 }
 
 // Status writes a response with no body and the given HTTP status.
