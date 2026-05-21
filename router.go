@@ -161,10 +161,15 @@ func (s *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	c, r := newContext(w, r)
-	defer releaseContext(c)
-
-	s.mux.ServeHTTP(w, r)
+	handler, _ := s.mux.Handler(r)
+	switch handler.(type) {
+	case *zenHandler, *contextAwareHandler:
+		c, r := newContext(w, r)
+		defer releaseContext(c)
+		s.mux.ServeHTTP(w, r)
+	default:
+		handler.ServeHTTP(w, r)
+	}
 }
 
 // Use appends middleware to the global chain and rebuilds it.
