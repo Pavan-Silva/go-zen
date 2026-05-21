@@ -93,6 +93,13 @@ func SetValidator(v Validator) {
 	defaultValidator = v
 }
 
+// DisableAutoValidation disables automatic request validation for BindJSON,
+// BindXML, and BindForm. This is useful for performance-sensitive handlers where
+// the request payload is already trusted or validation is performed elsewhere.
+func DisableAutoValidation() {
+	SetValidator(nil)
+}
+
 // Validate runs struct validation on dest using the configured Validator.
 // BindJSON, BindXML, and BindForm call this automatically after decoding.
 func Validate(dest any) error {
