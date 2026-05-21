@@ -166,6 +166,21 @@ func TestSetValidator_Nil(t *testing.T) {
 	}
 }
 
+func TestDisableAutoValidation(t *testing.T) {
+	original := defaultValidator
+	t.Cleanup(func() { defaultValidator = original })
+
+	DisableAutoValidation()
+
+	type S struct {
+		Name string `validate:"required"`
+	}
+	err := Validate(&S{Name: ""})
+	if err != nil {
+		t.Fatal("DisableAutoValidation should disable validation")
+	}
+}
+
 type ValidatorFunc func(i any) error
 
 func (f ValidatorFunc) Validate(i any) error {
