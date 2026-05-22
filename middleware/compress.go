@@ -21,6 +21,10 @@ var gzipWriterPool = sync.Pool{
 	},
 }
 
+var compressRWPool = sync.Pool{
+	New: func() any { return &compressResponseWriter{} },
+}
+
 // Compress returns gzip compression middleware using default compression.
 // It compresses responses for clients that accept gzip encoding.
 //
@@ -71,9 +75,13 @@ func compressWithLevel(level int, skipper zen.SkipFunc) zen.MiddlewareFunc {
 			gzipWriterPool.Put(gz)
 		}()
 
-		cw := &compressResponseWriter{ResponseWriter: c.Response, gz: gz}
+		cw := compressRWPool.Get().(*compressResponseWriter)
+		cw.ResponseWriter = c.Response
+		cw.gz = gz
+		cw.status = 0
 		c.Response = cw
 		next(c)
+		compressRWPool.Put(cw)
 	}
 }
 

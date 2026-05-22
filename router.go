@@ -71,9 +71,11 @@ type Router struct {
 	mux *http.ServeMux
 	// middleware holds all globally-registered middleware functions.
 	middleware []MiddlewareFunc
-	// chainNext is the pre-built middleware chain (NextFunc dispatch, no FromRequest).
-	chainNext NextFunc
-	// hasMiddleware tracks whether any middleware is registered (optimization for bypass).
+	// optionsChain is the pre-built middleware chain for OPTIONS preflight requests
+	// that have no explicit OPTIONS handler registered on the mux.
+	// The tail is a 204 no-op that lets CORS middleware write headers then short-circuit.
+	optionsChain NextFunc
+	// hasMiddleware tracks whether any middleware is registered.
 	hasMiddleware bool
 	// shutdownTimeout is the maximum duration for graceful shutdown.
 	shutdownTimeout time.Duration
@@ -81,6 +83,8 @@ type Router struct {
 	requestTimeout time.Duration
 	// started guards against Use() and Handle* calls after the server has started.
 	started bool
+	// routesRegistered guards against Use() after any route has been registered.
+	routesRegistered bool
 }
 
 // New creates a new Router with the given address and optional configuration.
@@ -106,7 +110,6 @@ func New(addr string, config ...Config) *Router {
 	mux := http.NewServeMux()
 	r := &Router{
 		mux:             mux,
-		hasMiddleware:   false,
 		shutdownTimeout: 5 * time.Second,
 		requestTimeout:  0,
 	}
@@ -145,8 +148,10 @@ func New(addr string, config ...Config) *Router {
 }
 
 // ServeHTTP is the main entry point for every HTTP request.
-// It wraps the request with an optional timeout, creates a zen Context,
-// and dispatches through the middleware chain or directly to the mux.
+// When middleware is registered, OPTIONS preflight requests are intercepted
+// before reaching the mux so CORS middleware can handle them. All other
+// requests dispatch directly through the mux where handlerAdapter manages
+// Context creation and middleware execution.
 func (s *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if s.requestTimeout > 0 {
 		ctx, cancel := context.WithTimeout(r.Context(), s.requestTimeout)
@@ -154,32 +159,33 @@ func (s *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		r = r.WithContext(ctx)
 	}
 
-	if s.hasMiddleware {
+	if s.hasMiddleware && r.Method == http.MethodOptions {
+		// Check if the mux has an explicit OPTIONS handler for this path.
+		// pattern is the most specific pattern that matches the request.
+		_, pattern := s.mux.Handler(r)
+		// If pattern starts with "OPTIONS ", an explicit OPTIONS route exists.
+		// Dispatch through the mux so the explicit handler runs.
+		if strings.HasPrefix(pattern, "OPTIONS ") {
+			s.mux.ServeHTTP(w, r)
+			return
+		}
+		// No explicit OPTIONS handler — run global middleware chain.
+		// CORS middleware intercepts here before reaching the 204 tail.
 		c, _ := newContextNoRequest(w, r)
 		defer releaseContext(c)
-		s.chainNext(c)
+		s.optionsChain(c)
 		return
 	}
 
-	handler, _ := s.mux.Handler(r)
-	switch handler.(type) {
-	case *zenHandler, *contextAwareHandler:
-		c, r := newContext(w, r)
-		defer releaseContext(c)
-		s.mux.ServeHTTP(w, r)
-	default:
-		handler.ServeHTTP(w, r)
-	}
+	s.mux.ServeHTTP(w, r)
 }
 
-// Use appends middleware to the global chain and rebuilds it.
+// Use appends middleware to the global chain.
 // Middleware executes in the order added.
 //
-// Must be called before the server starts (before Run/RunTLS).
-// Calling Use after the server has started causes a data race.
-//
-// The chain is rebuilt and cached at setup time, so adding middleware has zero
-// performance impact on request processing.
+// Must be called before the server starts (before Run/RunTLS) and before any
+// routes are registered (before Handle/HandleWith/HandleRaw). This ensures
+// middleware is baked into the handler adapter at registration time.
 //
 // Example:
 //
@@ -192,33 +198,48 @@ func (s *Router) Use(m ...MiddlewareFunc) {
 	if s.started {
 		panic("zen: Use called after server started")
 	}
+	if s.routesRegistered {
+		panic("zen: Use called after routes registered")
+	}
 	s.middleware = append(s.middleware, m...)
-	s.chainNext = s.buildChain()
+	s.optionsChain = s.buildOptionsChain()
 	s.hasMiddleware = true
 }
 
-// buildChain creates the NextFunc chain from registered middleware.
-// The chain passes *Context directly — no FromRequest lookups, no per-request allocations.
-//
-// The tail handler dispatches to the mux: zen-style handlers (*zenHandler) are called
-// directly with the context, while raw http.Handler routes receive c.Response and
-// c.Request. This means any middleware that wraps c.Response (e.g. response logger)
-// or modifies c.Request (e.g. enriched context) automatically propagates to raw handlers.
-func (s *Router) buildChain() NextFunc {
+// registerRoute bakes all middleware (global + route-level) with the final
+// handler into a handlerAdapter and registers it on the mux.
+func (s *Router) registerRoute(pattern string, handler func(*Context), routeMW []MiddlewareFunc) {
+	s.routesRegistered = true
+
+	// Build chain from innermost (handler) to outermost (first middleware).
+	// Global middleware goes before route-level middleware.
+	allMW := make([]MiddlewareFunc, 0, len(s.middleware)+len(routeMW))
+	allMW = append(allMW, s.middleware...)
+	allMW = append(allMW, routeMW...)
+
+	var chain NextFunc = func(c *Context) { handler(c) }
+	for i := len(allMW) - 1; i >= 0; i-- {
+		mw := allMW[i]
+		prev := chain
+		chain = func(c *Context) {
+			mw(c, prev)
+		}
+	}
+
+	s.mux.Handle(pattern, &handlerAdapter{chain: chain})
+}
+
+// buildOptionsChain creates the NextFunc chain for OPTIONS preflight requests
+// that have no explicit OPTIONS handler. The tail is a 204 no-op: when CORS
+// middleware calls next(c), control reaches the tail which writes the empty
+// 204 response. If CORS short-circuits (common preflight flow), the tail
+// is never reached.
+func (s *Router) buildOptionsChain() NextFunc {
 	if len(s.middleware) == 0 {
 		return nil
 	}
-	var tail NextFunc
-	tail = func(c *Context) {
-		handler, _ := s.mux.Handler(c.Request)
-		switch h := handler.(type) {
-		case *zenHandler:
-			h.fn(c)
-		case *contextAwareHandler:
-			h.final(c)
-		default:
-			handler.ServeHTTP(c.Response, c.Request)
-		}
+	tail := func(c *Context) {
+		c.Response.WriteHeader(http.StatusNoContent)
 	}
 	for i := len(s.middleware) - 1; i >= 0; i-- {
 		mw := s.middleware[i]
@@ -241,7 +262,7 @@ func (s *Router) buildChain() NextFunc {
 //	s.Handle("PUT /users/{id}", updateUser)
 //	s.Handle("DELETE /users/{id}", deleteUser)
 func (s *Router) Handle(pattern string, handler func(*Context)) {
-	s.mux.Handle(pattern, &zenHandler{fn: handler})
+	s.registerRoute(pattern, handler, nil)
 }
 
 // HandleWith registers a zen-style handler with per-route middleware.
@@ -253,7 +274,7 @@ func (s *Router) Handle(pattern string, handler func(*Context)) {
 //	s.HandleWith("GET /admin", adminHandler, authMiddleware, auditLog)
 //	s.HandleWith("POST /users", createUser, rateLimitMiddleware)
 func (s *Router) HandleWith(pattern string, handler func(*Context), middleware ...MiddlewareFunc) {
-	s.handleWithMiddleware(pattern, handler, middleware)
+	s.registerRoute(pattern, handler, middleware)
 }
 
 // HandleRaw registers a standard http.Handler directly, bypassing zen Context wrapping.
@@ -264,6 +285,7 @@ func (s *Router) HandleWith(pattern string, handler func(*Context), middleware .
 //	s.HandleRaw("GET /debug/pprof/*", http.HandlerFunc(pprof.Index))
 //	s.HandleRaw("GET /static/*", http.FileServer(http.Dir("static")))
 func (s *Router) HandleRaw(pattern string, handler http.Handler) {
+	s.routesRegistered = true
 	s.mux.Handle(pattern, handler)
 }
 
