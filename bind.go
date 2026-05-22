@@ -67,7 +67,8 @@ func (c *Context) BindBody(dest any) error {
 	if ct == "" {
 		return nil // No body to bind (e.g., GET with query params only)
 	}
-	ct = strings.ToLower(strings.TrimSpace(strings.Split(ct, ";")[0]))
+	before, _, _ := strings.Cut(ct, ";")
+	ct = strings.ToLower(strings.TrimSpace(before))
 
 	switch ct {
 	case "application/json":

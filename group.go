@@ -216,23 +216,5 @@ func (g *Group) Prefix() string {
 
 // handleWithMiddleware wraps a handler with middleware and registers it on the mux.
 func (r *Router) handleWithMiddleware(pattern string, handler func(*Context), middleware []MiddlewareFunc) {
-	if len(middleware) == 0 {
-		r.mux.Handle(pattern, &zenHandler{fn: handler})
-		return
-	}
-
-	// Build NextFunc chain (innermost to outermost)
-	var tail NextFunc
-	tail = func(c *Context) {
-		handler(c)
-	}
-	for i := len(middleware) - 1; i >= 0; i-- {
-		mw := middleware[i]
-		prev := tail
-		tail = func(c *Context) {
-			mw(c, prev)
-		}
-	}
-
-	r.mux.Handle(pattern, &contextAwareHandler{final: tail})
+	r.registerRoute(pattern, handler, middleware)
 }

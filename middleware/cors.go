@@ -1,8 +1,8 @@
 package middleware
 
 import (
-	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/Pavan-Silva/go-zen"
@@ -28,6 +28,12 @@ type CORSConfig struct {
 	AllowCredentials bool
 	// MaxAge cache duration (seconds) for preflight OPTIONS responses. Default: 3600 (1 hour).
 	MaxAge int
+
+	// Pre-computed strings to avoid per-request allocations.
+	allowedMethodsStr string
+	allowedHeadersStr string
+	exposeHeadersStr  string
+	maxAgeStr         string
 }
 
 // DefaultCORSConfig returns a CORSConfig with secure defaults.
@@ -92,9 +98,12 @@ func buildOriginsMap(origins []string) map[string]bool {
 //	config.AllowCredentials = true
 //	r.Use(middleware.CORS(config))
 func CORS(config CORSConfig) zen.MiddlewareFunc {
-	// Always build the origins map from current AllowedOrigins
-	// This handles cases where AllowedOrigins is modified after config creation
+	// Pre-compute all header strings at setup time — never changes per request.
 	config.allowedOriginsMap = buildOriginsMap(config.AllowedOrigins)
+	config.allowedMethodsStr = strings.Join(config.AllowedMethods, ", ")
+	config.allowedHeadersStr = strings.Join(config.AllowedHeaders, ", ")
+	config.exposeHeadersStr = strings.Join(config.ExposeHeaders, ", ")
+	config.maxAgeStr = strconv.Itoa(config.MaxAge)
 	allowAll := len(config.AllowedOrigins) == 1 && config.AllowedOrigins[0] == "*"
 
 	return func(c *zen.Context, next zen.NextFunc) {
@@ -117,10 +126,10 @@ func CORS(config CORSConfig) zen.MiddlewareFunc {
 		}
 
 		c.Response.Header().Set("Access-Control-Allow-Origin", allowOrigin)
-		c.Response.Header().Set("Access-Control-Allow-Methods", strings.Join(config.AllowedMethods, ", "))
-		c.Response.Header().Set("Access-Control-Allow-Headers", strings.Join(config.AllowedHeaders, ", "))
-		c.Response.Header().Set("Access-Control-Expose-Headers", strings.Join(config.ExposeHeaders, ", "))
-		c.Response.Header().Set("Access-Control-Max-Age", fmt.Sprintf("%d", config.MaxAge))
+		c.Response.Header().Set("Access-Control-Allow-Methods", config.allowedMethodsStr)
+		c.Response.Header().Set("Access-Control-Allow-Headers", config.allowedHeadersStr)
+		c.Response.Header().Set("Access-Control-Expose-Headers", config.exposeHeadersStr)
+		c.Response.Header().Set("Access-Control-Max-Age", config.maxAgeStr)
 
 		if config.AllowCredentials {
 			c.Response.Header().Set("Access-Control-Allow-Credentials", "true")

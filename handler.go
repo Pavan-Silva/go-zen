@@ -13,40 +13,20 @@ type NextFunc func(*Context)
 // Middleware receives the zen Context and the next handler in the chain.
 type MiddlewareFunc func(*Context, NextFunc)
 
-// zenHandler wraps a zen-style handler (func(*Context)).
-// Registered on the mux for route matching; called directly via fn(c)
-// when dispatched through the middleware chain, or via ServeHTTP (with
-// FromRequest) when the mux routes to it directly (no middleware path).
-type zenHandler struct {
-	fn func(*Context)
+// handlerAdapter wraps a NextFunc chain as an http.Handler.
+// Its only purpose is to convert the zen handler signature (func(*Context))
+// to the standard net/http handler signature by acquiring a pooled Context,
+// running the chain, and releasing it.
+type handlerAdapter struct {
+	chain NextFunc
 }
 
-// ServeHTTP implements http.Handler for the no-middleware path.
-func (zh *zenHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	c, ok := FromRequest(r)
-	if !ok {
-		return
-	}
-	c.Response = w
-	zh.fn(c)
-}
-
-// contextAwareHandler wraps a NextFunc chain with Context creation/release.
-// Used by group and per-route middleware when the global chain hasn't already
-// created a Context.
-type contextAwareHandler struct {
-	final NextFunc
-}
-
-// ServeHTTP implements http.Handler by creating a Context, running the chain, and releasing.
-func (h *contextAwareHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if c, ok := FromRequest(r); ok {
-		c.Response = w
-		h.final(c)
-		return
-	}
-
-	c, r := newContext(w, r)
-	defer releaseContext(c)
-	h.final(c)
+// ServeHTTP implements http.Handler by acquiring a Context from the pool,
+// running the middleware+handler chain, and releasing the Context.
+func (a *handlerAdapter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	c := contextPool.Get().(*Context)
+	c.reset(w, r)
+	a.chain(c)
+	c.reset(nil, nil)
+	contextPool.Put(c)
 }

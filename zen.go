@@ -43,13 +43,13 @@
 //
 // # Context and Lifecycle
 //
-// A zen.Context is created per request via sync.Pool, stored in Go's context.Context
-// using context.WithValue, and released back to the pool after the request completes.
-// Retrieval is via FromRequest(r) or FromContext(ctx), both returning (*Context, bool).
+// A zen.Context is created per request via sync.Pool and released back after the
+// request completes. The hot path avoids context.WithValue entirely; FromRequest
+// is only needed for interop with standard http.Handler patterns.
 //
 // # Performance
 //
 // Zen is designed for zero-allocation middleware chains, pooled Context objects,
-// and streaming JSON/XML encoding. Benchmark against Gin/Echo shows comparable
-// throughput within 1–2% at ~49k req/s.
+// and streaming JSON/XML encoding. Benchmark against net/http ServeMux shows
+// ~95% throughput with comparable middleware at ~110k req/s.
 package zen

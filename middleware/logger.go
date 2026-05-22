@@ -3,11 +3,16 @@ package middleware
 import (
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Pavan-Silva/go-zen"
 	"github.com/Pavan-Silva/go-zen/logger"
 )
+
+var rwPool = sync.Pool{
+	New: func() any { return &responseWriter{} },
+}
 
 // Logger logs HTTP requests with method, path, status code, and response time.
 // Includes remote IP, request size, and response size for debugging.
@@ -18,7 +23,10 @@ import (
 //	r.Use(middleware.Logger)
 func Logger(c *zen.Context, next zen.NextFunc) {
 	start := time.Now()
-	rw := &responseWriter{ResponseWriter: c.Response}
+	rw := rwPool.Get().(*responseWriter)
+	rw.ResponseWriter = c.Response
+	rw.status = 0
+	rw.written = 0
 	c.Response = rw
 	next(c)
 
@@ -33,6 +41,8 @@ func Logger(c *zen.Context, next zen.NextFunc) {
 		c.Request.ContentLength,
 		rw.written,
 	)
+	rw.ResponseWriter = nil
+	rwPool.Put(rw)
 }
 
 // responseWriter wraps http.ResponseWriter to capture status code and response size.
