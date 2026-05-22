@@ -24,8 +24,6 @@ var contextPool = sync.Pool{
 //
 // Context is valid only for the lifetime of the request.
 // Do not store references to it beyond the handler's return.
-// Context is NOT safe for concurrent access; to use values in a goroutine,
-// call Copy() first and pass the copied Context.
 type Context struct {
 	// Response is the http.ResponseWriter for this request.
 	Response http.ResponseWriter
@@ -35,7 +33,7 @@ type Context struct {
 	// Lazily initialized on first Set() call.
 	store map[string]any
 	// mu protects store from concurrent access.
-	mu sync.Mutex
+	mu sync.RWMutex
 }
 
 // reset clears the Context for reuse.
@@ -43,7 +41,7 @@ func (c *Context) reset(w http.ResponseWriter, r *http.Request) {
 	c.Response = w
 	c.Request = r
 	c.store = nil
-	c.mu = sync.Mutex{}
+	c.mu = sync.RWMutex{}
 }
 
 // Set stores a value in the context with the given key.
@@ -60,27 +58,27 @@ func (c *Context) Set(key string, val any) {
 // indicating whether the key exists. This distinguishes between a key that was
 // explicitly set to nil and a key that was never set.
 func (c *Context) Get(key string) (any, bool) {
-	c.mu.Lock()
+	c.mu.RLock()
 	if c.store == nil {
-		c.mu.Unlock()
+		c.mu.RUnlock()
 		return nil, false
 	}
 	val, ok := c.store[key]
-	c.mu.Unlock()
+	c.mu.RUnlock()
 	return val, ok
 }
 
 // Keys returns a copy of the context's key-value store.
 // Useful for logging, tracing, and middleware propagation.
 func (c *Context) Keys() map[string]any {
-	c.mu.Lock()
+	c.mu.RLock()
 	if c.store == nil {
-		c.mu.Unlock()
+		c.mu.RUnlock()
 		return nil
 	}
 	cp := make(map[string]any, len(c.store))
 	maps.Copy(cp, c.store)
-	c.mu.Unlock()
+	c.mu.RUnlock()
 	return cp
 }
 
@@ -92,12 +90,12 @@ func (c *Context) Copy() *Context {
 		Response: c.Response,
 		Request:  c.Request,
 	}
-	c.mu.Lock()
+	c.mu.RLock()
 	if c.store != nil {
 		cp.store = make(map[string]any, len(c.store))
 		maps.Copy(cp.store, c.store)
 	}
-	c.mu.Unlock()
+	c.mu.RUnlock()
 	return cp
 }
 
