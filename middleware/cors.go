@@ -8,138 +8,113 @@ import (
 	"github.com/Pavan-Silva/go-zen"
 )
 
-// CORSConfig holds configuration for CORS middleware.
-// All fields have sensible defaults via DefaultCORSConfig().
-//
-// Note: AllowedOrigins = []string{"*"} allows any origin and is only safe for
-// public APIs without authentication. For APIs with credentials, explicitly list origins.
+// CORSConfig holds pre-computed configuration schemas for CORS middleware.
 type CORSConfig struct {
-	// AllowedOrigins list of allowed origins. "*" allows any origin (insecure for private APIs).
-	AllowedOrigins []string
-	// allowedOriginsMap provides O(1) lookup for origin checking.
-	allowedOriginsMap map[string]bool
-	// AllowedMethods HTTP methods clients can use in CORS requests. Default: GET, POST, PUT, DELETE, PATCH, OPTIONS.
-	AllowedMethods []string
-	// AllowedHeaders request headers clients are allowed to send. Default: Content-Type, Authorization.
-	AllowedHeaders []string
-	// ExposeHeaders response headers the browser will expose to client JS. Default: Content-Length, Date.
-	ExposeHeaders []string
-	// AllowCredentials whether to allow credentials (cookies, Authorization header) in cross-origin requests. Default: false.
+	AllowedOrigins   []string
+	AllowedMethods   []string
+	AllowedHeaders   []string
+	ExposeHeaders    []string
 	AllowCredentials bool
-	// MaxAge cache duration (seconds) for preflight OPTIONS responses. Default: 3600 (1 hour).
-	MaxAge int
+	MaxAge           int
 
-	// Pre-computed strings to avoid per-request allocations.
+	// Internal zero-allocation lookup optimization properties
+	allowedOriginsMap map[string]struct{} // Using empty struct{} saves 1 byte per key vs bool
 	allowedMethodsStr string
 	allowedHeadersStr string
 	exposeHeadersStr  string
 	maxAgeStr         string
+	allowAll          bool
 }
 
-// DefaultCORSConfig returns a CORSConfig with secure defaults.
-// Customize fields as needed for your API.
-//
-// Default values:
-// - AllowedOrigins: [] (empty - no CORS by default, must be explicitly configured)
-// - AllowedMethods: [GET, POST, PUT, DELETE, PATCH, OPTIONS]
-// - AllowedHeaders: [Content-Type, Authorization]
-// - ExposeHeaders: [Content-Length, Date]
-// - AllowCredentials: false
-// - MaxAge: 3600 seconds
-//
-// Example:
-//
-//	config := middleware.DefaultCORSConfig()
-//	config.AllowedOrigins = []string{"https://example.com"}
-//	config.AllowCredentials = true  // Allow cookies in cross-origin requests
-//	r.Use(middleware.CORS(config))
+// DefaultCORSConfig returns a CORSConfig with secure production-ready defaults.
 func DefaultCORSConfig() CORSConfig {
-	config := CORSConfig{
-		AllowedOrigins: []string{},
-		AllowedMethods: []string{"GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"},
-		AllowedHeaders: []string{"Content-Type", "Authorization"},
+	return CORSConfig{
+		AllowedOrigins: []string{}, // Locked down by default
+		AllowedMethods: []string{"GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"},
+		AllowedHeaders: []string{"Content-Type", "Authorization", "Accept", "X-Requested-With"},
 		ExposeHeaders:  []string{"Content-Length", "Date"},
 		MaxAge:         3600,
 	}
-	config.allowedOriginsMap = buildOriginsMap(config.AllowedOrigins)
-	return config
 }
 
-// buildOriginsMap creates a map for O(1) origin lookup.
-func buildOriginsMap(origins []string) map[string]bool {
-	m := make(map[string]bool, len(origins))
-	for _, origin := range origins {
-		m[origin] = true
-	}
-	return m
-}
-
-// CORS returns a middleware that handles CORS (Cross-Origin Resource Sharing) requests.
-// It processes preflight OPTIONS requests and sets appropriate CORS headers.
-//
-// The middleware checks if the request origin is allowed. If not, it skips CORS processing
-// (no Access-Control headers are set). If allowed, it:
-// 1. Sets Access-Control-Allow-Origin to the request origin
-// 2. Sets other Access-Control headers per config
-// 3. For OPTIONS requests, responds with 204 No Content (preflight response)
-// 4. For other methods, passes to the next handler
-//
-// Example (open to all origins - only for public APIs):
-//
-//	r.Use(middleware.CORS(middleware.DefaultCORSConfig()))
-//
-// Example (specific origins - for private APIs):
-//
-//	config := middleware.DefaultCORSConfig()
-//	config.AllowedOrigins = []string{
-//	    "https://app.example.com",
-//	    "https://admin.example.com",
-//	}
-//	config.AllowCredentials = true
-//	r.Use(middleware.CORS(config))
+// CORS returns a high-performance framework middleware that securely isolates cross-origin resources.
 func CORS(config CORSConfig) zen.HandlerFunc {
-	// Pre-compute all header strings at setup time — never changes per request.
-	config.allowedOriginsMap = buildOriginsMap(config.AllowedOrigins)
-	config.allowedMethodsStr = strings.Join(config.AllowedMethods, ", ")
-	config.allowedHeadersStr = strings.Join(config.AllowedHeaders, ", ")
-	config.exposeHeadersStr = strings.Join(config.ExposeHeaders, ", ")
-	config.maxAgeStr = strconv.Itoa(config.MaxAge)
-	allowAll := len(config.AllowedOrigins) == 1 && config.AllowedOrigins[0] == "*"
+	// Pre-compute configuration states into local lexical variables during initialization
+	allowedOriginsMap := make(map[string]struct{}, len(config.AllowedOrigins))
+	allowAll := false
+
+	for _, origin := range config.AllowedOrigins {
+		if origin == "*" {
+			allowAll = true
+			break
+		}
+		allowedOriginsMap[origin] = struct{}{}
+	}
+
+	allowedMethodsStr := strings.Join(config.AllowedMethods, ", ")
+	allowedHeadersStr := strings.Join(config.AllowedHeaders, ", ")
+	exposeHeadersStr := strings.Join(config.ExposeHeaders, ", ")
+	maxAgeStr := strconv.Itoa(config.MaxAge)
 
 	return func(c *zen.Ctx) {
 		origin := c.Request.Header.Get("Origin")
 
-		if origin != "" {
-			allowed := allowAll || config.allowedOriginsMap[origin]
-			if !allowed {
-				c.Next()
-				return
-			}
-		} else if !allowAll && len(config.allowedOriginsMap) > 0 {
+		// Case 1: If there's no Origin header, this isn't a cross-origin web browser request. Pass through.
+		if origin == "" {
 			c.Next()
 			return
 		}
 
-		allowOrigin := origin
-		if !config.AllowCredentials {
-			allowOrigin = "*"
+		// Case 2: Validate origin boundaries if wildcard mode is turned off
+		if !allowAll {
+			if _, allowed := allowedOriginsMap[origin]; !allowed {
+				// Abort early without exposing internal route layout details to rogue actors
+				c.Response.WriteHeader(http.StatusForbidden)
+				_, _ = c.Response.Write(zen.StringToBytes("CORS: Origin Disallowed"))
+				return
+			}
 		}
 
-		c.Response.Header().Set("Access-Control-Allow-Origin", allowOrigin)
-		c.Response.Header().Set("Access-Control-Allow-Methods", config.allowedMethodsStr)
-		c.Response.Header().Set("Access-Control-Allow-Headers", config.allowedHeadersStr)
-		c.Response.Header().Set("Access-Control-Expose-Headers", config.exposeHeadersStr)
-		c.Response.Header().Set("Access-Control-Max-Age", config.maxAgeStr)
+		respHeaders := c.Response.Header()
 
+		// --- W3C Compliance Guard Layer ---
+		if allowAll {
+			if config.AllowCredentials {
+				// CRITICAL SECURITY COMPLIANCE: Web browsers explicitly ban mixing "*" with AllowCredentials.
+				// We must echo back the incoming request origin dynamically to maintain structural validity.
+				respHeaders.Set("Access-Control-Allow-Origin", origin)
+				respHeaders.Set("Vary", "Origin")
+			} else {
+				respHeaders.Set("Access-Control-Allow-Origin", "*")
+			}
+		} else {
+			respHeaders.Set("Access-Control-Allow-Origin", origin)
+			// MANDATORY FOR CDNs: Tells intermediate proxies to isolate separate caches per origin
+			respHeaders.Set("Vary", "Origin")
+		}
+
+		// Inject pre-computed string blocks down the network pipeline with zero allocation steps
+		if exposeHeadersStr != "" {
+			respHeaders.Set("Access-Control-Expose-Headers", exposeHeadersStr)
+		}
 		if config.AllowCredentials {
-			c.Response.Header().Set("Access-Control-Allow-Credentials", "true")
+			respHeaders.Set("Access-Control-Allow-Credentials", "true")
 		}
 
+		// Handle Preflight Handshakes (OPTIONS)
 		if c.Request.Method == http.MethodOptions {
+			respHeaders.Set("Access-Control-Allow-Methods", allowedMethodsStr)
+			respHeaders.Set("Access-Control-Allow-Headers", allowedHeadersStr)
+			if maxAgeStr != "0" {
+				respHeaders.Set("Access-Control-Max-Age", maxAgeStr)
+			}
+
+			// Return a clean 204 No Content to instantly conclude preflight checks
 			c.Response.WriteHeader(http.StatusNoContent)
 			return
 		}
 
+		// Continue downstream routing for standard data traffic (GET, POST, etc.)
 		c.Next()
 	}
 }

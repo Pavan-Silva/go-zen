@@ -3,11 +3,13 @@ package middleware
 import (
 	"net/http"
 	"net/http/pprof"
+
+	"github.com/Pavan-Silva/go-zen"
 )
 
-// PprofConfig holds configuration for pprof middleware.
+// PprofConfig holds configuration options for mounting profiling endpoints.
 type PprofConfig struct {
-	// Prefix is the URL prefix for pprof endpoints.
+	// Prefix defines the base path for profiling hooks.
 	// Default: "/debug/pprof"
 	Prefix string
 }
@@ -19,30 +21,41 @@ func DefaultPprofConfig() PprofConfig {
 	}
 }
 
-// PprofHandler returns an http.Handler that serves pprof endpoints under the given prefix.
-// This is a one-line way to mount pprof for profiling and debugging.
+// RegisterPprof mounts Go's runtime profiling tools directly onto the Zen router.
+// This bypasses intermediate mux wrappers, ensuring compatibility with standard
+// visualization tools like `go tool pprof`.
 //
 // Example:
 //
-//	r.HandleRaw("GET /debug/pprof/*", middleware.PprofHandler())
-func PprofHandler() http.Handler {
-	return PprofHandlerWithConfig(DefaultPprofConfig())
+//	r := zen.New()
+//	middleware.RegisterPprof(r)
+func RegisterPprof(r *zen.Engine) {
+	RegisterPprofWithConfig(r, DefaultPprofConfig())
 }
 
-// PprofHandlerWithConfig returns a pprof handler with the given configuration.
-func PprofHandlerWithConfig(config PprofConfig) http.Handler {
+// RegisterPprofWithConfig mounts the profiling toolset using a custom configuration prefix.
+func RegisterPprofWithConfig(r *zen.Engine, config PprofConfig) {
 	if config.Prefix == "" {
 		config.Prefix = "/debug/pprof"
 	}
 
-	mux := http.NewServeMux()
-	prefix := config.Prefix
+	p := config.Prefix
 
-	mux.HandleFunc(prefix+"/", pprof.Index)
-	mux.HandleFunc(prefix+"/cmdline", pprof.Cmdline)
-	mux.HandleFunc(prefix+"/profile", pprof.Profile)
-	mux.HandleFunc(prefix+"/symbol", pprof.Symbol)
-	mux.HandleFunc(prefix+"/trace", pprof.Trace)
+	// Map structural endpoints directly to the Zen engine router.
+	// Bypassing extra sub-muxes prevents route-matching and trailing-slash bugs.
+	r.GET(p+"/", wrapHandler(pprof.Index))
+	r.GET(p+"/cmdline", wrapHandler(pprof.Cmdline))
+	r.GET(p+"/profile", wrapHandler(pprof.Profile))
+	r.GET(p+"/symbol", wrapHandler(pprof.Symbol))
+	r.GET(p+"/trace", wrapHandler(pprof.Trace))
 
-	return mux
+	// Post endpoints are required for symbol lookups during interactive CLI debugging sessions
+	r.POST(p+"/symbol", wrapHandler(pprof.Symbol))
+}
+
+// wrapHandler converts a standard http.HandlerFunc into a native zen.HandlerFunc
+func wrapHandler(h http.HandlerFunc) zen.HandlerFunc {
+	return func(c *zen.Ctx) {
+		h(c.Response, c.Request)
+	}
 }
