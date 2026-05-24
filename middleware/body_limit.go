@@ -9,75 +9,31 @@ import (
 	"github.com/Pavan-Silva/go-zen"
 )
 
-// BodyLimitMiddlewareConfig holds configuration for BodyLimit middleware.
-type BodyLimitMiddlewareConfig struct {
-	// Limit is the maximum allowed request body size.
-	// Can be a number (bytes) or with suffix: K, M, G (e.g., "2M", "1K").
-	Limit string
-	// Skipper defines a function to skip middleware.
+// BodyLimitConfig holds configuration parameters for the request volume firewall.
+type BodyLimitConfig struct {
+	// Limit can be a raw byte integer value (int/int64) or a string metric suffix like "2M", "250K", "1G".
+	Limit   any
 	Skipper zen.SkipFunc
 }
 
-// BodyLimitConfig returns a config with default values.
-func BodyLimitConfig() BodyLimitMiddlewareConfig {
-	return BodyLimitMiddlewareConfig{
+// DefaultBodyLimitConfig returns a standard configuration template (Default: 2 Megabytes).
+func DefaultBodyLimitConfig() BodyLimitConfig {
+	return BodyLimitConfig{
 		Limit: "2M",
 	}
 }
 
-// BodyLimit returns a middleware that limits the request body size.
-// It wraps the request body with http.MaxBytesReader to enforce the limit.
-// If the body exceeds the limit, it returns a 413 Request Entity Too Large response.
-//
-// This function uses the default configuration with the specified limit.
-// The limit can be a string (e.g., "2M", "1K") or an int64 (bytes).
-//
-// Example:
-//
-//	r.Use(middleware.BodyLimit("2M"))
-//	r.Use(middleware.BodyLimit(2_097_152))
+// BodyLimit protects downstream routing handlers from accommodating bloated request payloads.
 func BodyLimit(limit any) zen.HandlerFunc {
-	config := BodyLimitConfig()
-	switch v := limit.(type) {
-	case string:
-		config.Limit = v
-	case int64:
-		config.Limit = strconv.FormatInt(v, 10)
-	case int:
-		config.Limit = strconv.Itoa(v)
-	default:
-		panic("BodyLimit: limit must be string or int64")
-	}
-	return BodyLimitWithConfig(config)
+	return BodyLimitWithConfig(BodyLimitConfig{Limit: limit})
 }
 
-// BodyLimitWithConfig returns a middleware that limits the request body size.
-// It wraps the request body with http.MaxBytesReader to enforce the limit.
-// If the body exceeds the limit, it returns a 413 Request Entity Too Large response.
-//
-// The middleware can be skipped for certain routes using the Skipper function.
-//
-// Example:
-//
-//	r.Use(middleware.BodyLimitWithConfig(middleware.DefaultBodyLimitConfig()))
-//
-// Example with custom limit:
-//
-//	config := middleware.DefaultBodyLimitConfig()
-//	config.Limit = "1M"
-//	r.Use(middleware.BodyLimitWithConfig(config))
-//
-// Example with skipper:
-//
-//	config := middleware.DefaultBodyLimitConfig()
-//	config.Skipper = func(r *http.Request) bool {
-//		return r.URL.Path == "/upload/large"
-//	}
-//	r.Use(middleware.BodyLimitWithConfig(config))
-func BodyLimitWithConfig(config BodyLimitMiddlewareConfig) zen.HandlerFunc {
-	limit, err := parseLimit(config.Limit)
+// BodyLimitWithConfig initializes the size boundary check using a structural configuration object.
+func BodyLimitWithConfig(config BodyLimitConfig) zen.HandlerFunc {
+	// Parse the interface input into a flat int64 byte scalar value once during startup
+	computedLimit, err := parseLimitToBytes(config.Limit)
 	if err != nil {
-		panic(fmt.Sprintf("invalid body limit: %v", err))
+		panic(fmt.Sprintf("BodyLimit compilation failure: %v", err))
 	}
 
 	return func(c *zen.Ctx) {
@@ -86,45 +42,60 @@ func BodyLimitWithConfig(config BodyLimitMiddlewareConfig) zen.HandlerFunc {
 			return
 		}
 
-		if c.Request.ContentLength > limit {
-			http.Error(c.Response, http.StatusText(http.StatusRequestEntityTooLarge), http.StatusRequestEntityTooLarge)
+		// Hardened Fast-Path Verification: Verify content metrics if provided by the client.
+		// A negative ContentLength indicates a chunked execution stream (-1), which we bypass here
+		// and allow MaxBytesReader to catch safely at the driver layer below.
+		if c.Request.ContentLength > computedLimit {
+			c.Response.WriteHeader(http.StatusRequestEntityTooLarge)
+			_, _ = c.Response.Write(zen.StringToBytes(http.StatusText(http.StatusRequestEntityTooLarge)))
 			return
 		}
 
-		c.Request.Body = http.MaxBytesReader(c.Response, c.Request.Body, limit)
+		// Wrap the native connection scanner context to break the stream if it crosses the limit
+		c.Request.Body = http.MaxBytesReader(c.Response, c.Request.Body, computedLimit)
 
 		c.Next()
 	}
 }
 
-// parseLimit parses a size string like "2M", "1K", "512" into bytes.
-func parseLimit(limit string) (int64, error) {
+// parseLimitToBytes resolves raw ints, int64s, or string metric rules safely down to primitive byte numbers.
+func parseLimitToBytes(limit any) (int64, error) {
+	switch v := limit.(type) {
+	case int64:
+		return v, nil
+	case int:
+		return int64(v), nil
+	case string:
+		return parseStringMetric(v)
+	default:
+		return 0, fmt.Errorf("unsupported limit type definition (must be string, int, or int64)")
+	}
+}
+
+func parseStringMetric(limit string) (int64, error) {
 	limit = strings.TrimSpace(limit)
 	if limit == "" {
-		return 0, fmt.Errorf("empty limit")
+		return 0, fmt.Errorf("empty constraint declaration")
 	}
 
-	// Check for suffix
 	var multiplier int64 = 1
-	if len(limit) > 1 {
-		suffix := limit[len(limit)-1]
-		switch suffix {
-		case 'K', 'k':
-			multiplier = 1024
-			limit = limit[:len(limit)-1]
-		case 'M', 'm':
-			multiplier = 1024 * 1024
-			limit = limit[:len(limit)-1]
-		case 'G', 'g':
-			multiplier = 1024 * 1024 * 1024
-			limit = limit[:len(limit)-1]
-		}
+	suffix := limit[len(limit)-1]
+
+	switch suffix {
+	case 'K', 'k':
+		multiplier = 1024
+		limit = limit[:len(limit)-1]
+	case 'M', 'm':
+		multiplier = 1024 * 1024
+		limit = limit[:len(limit)-1]
+	case 'G', 'g':
+		multiplier = 1024 * 1024 * 1024
+		limit = limit[:len(limit)-1]
 	}
 
-	// Parse the number
 	value, err := strconv.ParseInt(limit, 10, 64)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("failed to extract base metric: %w", err)
 	}
 
 	return value * multiplier, nil

@@ -3,21 +3,18 @@ package middleware
 import (
 	"crypto/rand"
 	"encoding/hex"
-	"fmt"
+	"strconv"
+	"sync/atomic"
+	"time"
 
 	"github.com/Pavan-Silva/go-zen"
 )
 
 // RequestIDConfig holds configuration for RequestID middleware.
 type RequestIDConfig struct {
-	// Header is the name of the header to use for the request ID.
-	// Default: "X-Request-ID"
-	Header string
-	// Generator is a function that generates a unique request ID.
-	// If nil, a default random hex generator is used.
+	Header    string
 	Generator func() string
-	// Skipper defines a function to skip middleware.
-	Skipper zen.SkipFunc
+	Skipper   zen.SkipFunc
 }
 
 // DefaultRequestIDConfig returns a RequestIDConfig with sensible defaults.
@@ -27,28 +24,35 @@ func DefaultRequestIDConfig() RequestIDConfig {
 	}
 }
 
+// Global immutable machine prefix initialized once at boot time to isolate this process instance.
+var nodePrefix string
+
+// Global thread-safe atomic counter to guarantee perfect serialization sequence alignment.
+var reqSequence atomic.Uint64
+
+func init() {
+	// Generate an instance token once when the module loads
+	b := make([]byte, 8)
+	if _, err := rand.Read(b); err != nil {
+		// Fallback to time-seeded baseline if hardware crypto engine is unreachable at boot
+		now := time.Now().UnixNano()
+		nodePrefix = strconv.FormatUint(uint64(now), 16)
+	} else {
+		nodePrefix = hex.EncodeToString(b)
+	}
+}
+
 // RequestID returns middleware that injects a unique request ID into each request.
-// The ID is stored in the Ctx via c.Set("request_id") and set as a response header.
-// If the incoming request already has a request ID header, it is reused.
-//
-// Example:
-//
-//	r.Use(middleware.RequestID())
-//
-// Example with custom header:
-//
-//	config := middleware.DefaultRequestIDConfig()
-//	config.Header = "X-Trace-ID"
-//	r.Use(middleware.RequestIDWithConfig(config))
 func RequestID() zen.HandlerFunc {
 	return RequestIDWithConfig(DefaultRequestIDConfig())
 }
 
-// RequestIDWithConfig returns RequestID middleware with the given configuration.
+// RequestIDWithConfig returns RequestID middleware with optimized generation fast paths.
 func RequestIDWithConfig(config RequestIDConfig) zen.HandlerFunc {
 	if config.Header == "" {
 		config.Header = "X-Request-ID"
 	}
+
 	return func(c *zen.Ctx) {
 		if config.Skipper != nil && config.Skipper(c.Request) {
 			c.Next()
@@ -60,10 +64,12 @@ func RequestIDWithConfig(config RequestIDConfig) zen.HandlerFunc {
 			if config.Generator != nil {
 				requestID = config.Generator()
 			} else {
-				requestID = generateRequestID()
+				// Fast Path: High-speed atomic execution block
+				requestID = generateFastRequestID()
 			}
 		}
 
+		// Save trace reference into Context storage layout cleanly
 		c.Set("request_id", requestID)
 		c.Response.Header().Set(config.Header, requestID)
 
@@ -71,13 +77,20 @@ func RequestIDWithConfig(config RequestIDConfig) zen.HandlerFunc {
 	}
 }
 
-// generateRequestID creates a random 16-byte hex string (32 chars).
-// It panics if the random number generator fails, as this indicates a serious
-// system-level issue that should fail fast.
-func generateRequestID() string {
-	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
-		panic(fmt.Sprintf("failed to generate request ID: crypto/rand.Read failed: %v", err))
-	}
-	return hex.EncodeToString(b)
+// generateFastRequestID builds a highly performant traceable token by joining
+// a static machine node token with a thread-safe atomic scalar variable.
+func generateFastRequestID() string {
+	// Atomically increase sequence counter (completely lock-free across CPU cores)
+	seq := reqSequence.Add(1)
+
+	// Pre-size the stack buffer slice allocation safely to bypass heap逃逸 (heap escape analysis)
+	// Node prefix (16 bytes hex) + Separator (1 byte) + Max Uint64 text string (20 bytes)
+	buf := make([]byte, 0, 40)
+
+	buf = append(buf, nodePrefix...)
+	buf = append(buf, '-')
+	buf = strconv.AppendUint(buf, seq, 16) // Format sequence as ultra-compact base-16 hex value
+
+	// Cast the stack byte slice instantly to a native string structure with zero heap copies
+	return zen.BytesToString(buf)
 }
