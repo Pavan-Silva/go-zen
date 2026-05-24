@@ -74,7 +74,7 @@ func TestEncodeSSEData_CRLFNormalization(t *testing.T) {
 
 func TestSSEvent_FullHTTP(t *testing.T) {
 	r := New(":0")
-	r.Handle("GET /events", func(c *Ctx) {
+	r.GET("/events", func(c *Ctx) {
 		c.Response.Header().Set("Content-Type", "text/event-stream")
 		if err := c.SSEvent("update", "hello"); err != nil {
 			t.Errorf("SSEvent error: %v", err)
@@ -99,7 +99,7 @@ func TestSSEvent_FullHTTP(t *testing.T) {
 
 func TestSSEvent_JSON(t *testing.T) {
 	r := New(":0")
-	r.Handle("GET /events", func(c *Ctx) {
+	r.GET("/events", func(c *Ctx) {
 		c.Response.Header().Set("Content-Type", "text/event-stream")
 		if err := c.SSEvent("", map[string]string{"msg": "hello"}); err != nil {
 			t.Errorf("SSEvent error: %v", err)
@@ -121,7 +121,7 @@ func TestSSEvent_JSON(t *testing.T) {
 
 func TestSSEvent_Headers(t *testing.T) {
 	r := New(":0")
-	r.Handle("GET /events", func(c *Ctx) {
+	r.GET("/events", func(c *Ctx) {
 		if err := c.SSEvent("msg", "hello"); err != nil {
 			t.Errorf("SSEvent error: %v", err)
 		}
@@ -170,10 +170,10 @@ func TestSSEvent_WriteError(t *testing.T) {
 
 type errWriter struct{}
 
-func (w *errWriter) Header() http.Header         { return http.Header{} }
-func (w *errWriter) Write([]byte) (int, error)   { return 0, io.ErrUnexpectedEOF }
-func (w *errWriter) WriteHeader(int)             {}
-func (w *errWriter) Flush()                      {}
+func (w *errWriter) Header() http.Header       { return http.Header{} }
+func (w *errWriter) Write([]byte) (int, error) { return 0, io.ErrUnexpectedEOF }
+func (w *errWriter) WriteHeader(int)           {}
+func (w *errWriter) Flush()                    {}
 
 func TestHasSSEContentType(t *testing.T) {
 	tests := []struct {

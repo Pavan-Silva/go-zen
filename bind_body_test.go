@@ -14,7 +14,7 @@ func TestBindBody_JSON(t *testing.T) {
 	}
 
 	r := New(":0")
-	r.Handle("POST /body", func(c *Ctx) {
+	r.POST("/body", func(c *Ctx) {
 		var p payload
 		if err := c.BindBody(&p); err != nil {
 			c.Error(http.StatusBadRequest, err.Error())
@@ -43,7 +43,7 @@ func TestBindBody_XML(t *testing.T) {
 	}
 
 	r := New(":0")
-	r.Handle("POST /body", func(c *Ctx) {
+	r.POST("/body", func(c *Ctx) {
 		var p payload
 		if err := c.BindBody(&p); err != nil {
 			c.Error(http.StatusBadRequest, err.Error())
@@ -73,7 +73,7 @@ func TestBindBody_Form(t *testing.T) {
 	}
 
 	r := New(":0")
-	r.Handle("POST /body", func(c *Ctx) {
+	r.POST("/body", func(c *Ctx) {
 		var p payload
 		if err := c.BindBody(&p); err != nil {
 			c.Error(http.StatusBadRequest, err.Error())
@@ -102,7 +102,7 @@ func TestBindBody_PlusJSON(t *testing.T) {
 	}
 
 	r := New(":0")
-	r.Handle("POST /body", func(c *Ctx) {
+	r.POST("/body", func(c *Ctx) {
 		var p payload
 		if err := c.BindBody(&p); err != nil {
 			c.Error(http.StatusBadRequest, err.Error())
@@ -124,7 +124,7 @@ func TestBindBody_PlusJSON(t *testing.T) {
 
 func TestBindBody_Empty(t *testing.T) {
 	r := New(":0")
-	r.Handle("GET /body", func(c *Ctx) {
+	r.GET("/body", func(c *Ctx) {
 		if err := c.BindBody(nil); err != nil {
 			c.Error(http.StatusBadRequest, err.Error())
 			return
@@ -143,7 +143,7 @@ func TestBindBody_Empty(t *testing.T) {
 
 func TestBindBody_Unsupported(t *testing.T) {
 	r := New(":0")
-	r.Handle("POST /body", func(c *Ctx) {
+	r.POST("/body", func(c *Ctx) {
 		var p struct{}
 		if err := c.BindBody(&p); err != nil {
 			c.String(http.StatusBadRequest, err.Error())
@@ -171,7 +171,7 @@ func TestBind_Body(t *testing.T) {
 	}
 
 	r := New(":0")
-	r.Handle("POST /bind", func(c *Ctx) {
+	r.POST("/bind", func(c *Ctx) {
 		var p payload
 		if err := c.Bind(&p); err != nil {
 			c.Error(http.StatusBadRequest, err.Error())
@@ -202,7 +202,7 @@ func TestBind_GET(t *testing.T) {
 	}
 
 	r := New(":0")
-	r.Handle("GET /search", func(c *Ctx) {
+	r.GET("/search", func(c *Ctx) {
 		var q query
 		if err := c.Bind(&q); err != nil {
 			c.Error(http.StatusBadRequest, err.Error())
@@ -222,7 +222,7 @@ func TestBind_GET(t *testing.T) {
 
 func TestBind_NoBody(t *testing.T) {
 	r := New(":0")
-	r.Handle("POST /nobody", func(c *Ctx) {
+	r.POST("/nobody", func(c *Ctx) {
 		if err := c.Bind(nil); err != nil {
 			c.Error(http.StatusBadRequest, err.Error())
 			return
@@ -246,7 +246,7 @@ func TestBindPathParams(t *testing.T) {
 	}
 
 	r := New(":0")
-	r.Handle("GET /users/{userID}/posts/{postID}", func(c *Ctx) {
+	r.GET("/users/{userID}/posts/{postID}", func(c *Ctx) {
 		var p params
 		if err := c.BindPathParams(&p); err != nil {
 			c.Error(http.StatusBadRequest, err.Error())
@@ -273,7 +273,7 @@ func TestBindPathParams_NoMatch(t *testing.T) {
 	}
 
 	r := New(":0")
-	r.Handle("GET /users/{userID}", func(c *Ctx) {
+	r.GET("/users/{userID}", func(c *Ctx) {
 		var p params
 		if err := c.BindPathParams(&p); err != nil {
 			c.Error(http.StatusBadRequest, err.Error())
@@ -296,7 +296,7 @@ func TestBindPathParams_NoMatch(t *testing.T) {
 
 func TestBindPathParams_NonStruct(t *testing.T) {
 	r := New(":0")
-	r.Handle("GET /users/{id}", func(c *Ctx) {
+	r.GET("/users/{id}", func(c *Ctx) {
 		var s string
 		if err := c.BindPathParams(&s); err != nil {
 			c.Error(http.StatusBadRequest, err.Error())
@@ -320,7 +320,7 @@ func TestBindPathParams_Int(t *testing.T) {
 	}
 
 	r := New(":0")
-	r.Handle("GET /items/{id}", func(c *Ctx) {
+	r.GET("/items/{id}", func(c *Ctx) {
 		var p params
 		if err := c.BindPathParams(&p); err != nil {
 			c.Error(http.StatusBadRequest, err.Error())
@@ -346,7 +346,7 @@ func TestBindQueryParams(t *testing.T) {
 	}
 
 	r := New(":0")
-	r.Handle("GET /items", func(c *Ctx) {
+	r.GET("/items", func(c *Ctx) {
 		var q query
 		if err := c.BindQueryParams(&q); err != nil {
 			c.Error(http.StatusBadRequest, err.Error())
@@ -370,7 +370,7 @@ func TestBindQueryParams_Missing(t *testing.T) {
 	}
 
 	r := New(":0")
-	r.Handle("GET /items", func(c *Ctx) {
+	r.GET("/items", func(c *Ctx) {
 		var q query
 		if err := c.BindQueryParams(&q); err != nil {
 			c.Error(http.StatusBadRequest, err.Error())
@@ -390,7 +390,7 @@ func TestBindQueryParams_Missing(t *testing.T) {
 
 func TestBindQueryParams_NonStruct(t *testing.T) {
 	r := New(":0")
-	r.Handle("GET /items", func(c *Ctx) {
+	r.GET("/items", func(c *Ctx) {
 		var s string
 		if err := c.BindQueryParams(&s); err != nil {
 			c.Error(http.StatusBadRequest, err.Error())
@@ -416,7 +416,7 @@ func TestBind_WithPathAndQuery(t *testing.T) {
 	}
 
 	r := New(":0")
-	r.Handle("POST /items/{id}", func(c *Ctx) {
+	r.POST("/items/{id}", func(c *Ctx) {
 		var p bindReq
 		if err := c.Bind(&p); err != nil {
 			c.Error(http.StatusBadRequest, err.Error())
