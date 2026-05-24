@@ -1,8 +1,8 @@
 package zen
 
 import (
-	"fmt"
 	"io"
+	"strings"
 )
 
 // QueryParam returns the first value of a query parameter from the request URL.
@@ -12,16 +12,36 @@ import (
 //
 //	page := c.QueryParam("page")      // GET /posts?page=2 → "2"
 //	search := c.QueryParam("q")       // GET /posts?q=golang → "golang"
-//	missing := c.QueryParam("foo")    // GET /posts → ""
-//
-// Multiple values (e.g., "?item=1&item=2") return only the first value.
-// Use c.Request.URL.Query() directly for access to all values.
 func (c *Ctx) QueryParam(key string) string {
-	vals := c.Request.URL.Query()[key]
-	if len(vals) > 0 {
-		return vals[0]
+	rawQuery := c.Request.URL.RawQuery
+	if rawQuery == "" || key == "" {
+		return ""
 	}
-	return ""
+
+	// Look for the key boundary configurations matching target bounds
+	keyLen := len(key)
+	pos := 0
+	for {
+		idx := strings.Index(rawQuery[pos:], key)
+		if idx == -1 {
+			return ""
+		}
+		start := pos + idx
+		pos = start + keyLen
+
+		// Ensure we matched the whole key, not just a substring suffix
+		if (start == 0 || rawQuery[start-1] == '&') && (pos == len(rawQuery) || rawQuery[pos] == '=') {
+			if pos == len(rawQuery) || rawQuery[pos] != '=' {
+				return ""
+			}
+			valueStart := pos + 1
+			valueEnd := strings.IndexByte(rawQuery[valueStart:], '&')
+			if valueEnd == -1 {
+				return rawQuery[valueStart:]
+			}
+			return rawQuery[valueStart : valueStart+valueEnd]
+		}
+	}
 }
 
 // Param returns the URL path parameter for the given key using Go 1.22+
@@ -31,41 +51,16 @@ func (c *Ctx) QueryParam(key string) string {
 // the captured segment with:
 //
 //	id := c.Param("id")  // GET /users/42  →  "42"
-//
-// Returns an empty string if the parameter is not found. Requires Go 1.22+ router.
 func (c *Ctx) Param(key string) string {
 	return c.Request.PathValue(key)
 }
 
 // Body reads and returns the complete raw request body as a byte slice.
-// It is the caller's responsibility to interpret the bytes (e.g. as plain
-// text, XML, or a custom binary format).
-//
-// For JSON payloads prefer [Ctx.BindJSON], which streams directly and
-// runs validation in the same call.
-//
-// The request body is closed after reading. Close errors are silently
-// discarded.
-//
-// Example:
-//
-//	data, err := c.Body()
-//	if err != nil {
-//	    c.Error(http.StatusInternalServerError, "failed to read body")
-//	    return
-//	}
-//	// Process raw bytes, e.g. XML parsing, custom format, etc.
+// It is the caller's responsibility to interpret the bytes.
 func (c *Ctx) Body() ([]byte, error) {
 	b, err := io.ReadAll(c.Request.Body)
-	closeErr := c.Request.Body.Close()
 	if err != nil {
-		if closeErr != nil {
-			return nil, fmt.Errorf("%w; body close error: %v", err, closeErr)
-		}
 		return nil, err
-	}
-	if closeErr != nil {
-		return nil, closeErr
 	}
 	return b, nil
 }

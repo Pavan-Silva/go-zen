@@ -1,23 +1,12 @@
 package zen
 
 import (
-	"fmt"
 	"io"
 	"net/http"
 	"path/filepath"
 
 	"github.com/Pavan-Silva/go-zen/logger"
 )
-
-// writeResponse sets content type, status, writes body, and logs errors.
-// Consolidates the repeated response writing pattern across methods.
-func writeResponse(c *Ctx, status int, contentType string, body []byte) {
-	c.Response.Header().Set("Content-Type", contentType)
-	c.Response.WriteHeader(status)
-	if _, err := c.Response.Write(body); err != nil {
-		logger.Error("HTTP: response write error: %v", err)
-	}
-}
 
 // HTML writes an HTML string directly to the response with the given HTTP status.
 // The response Content-Type header is automatically set to "text/html; charset=utf-8".
@@ -29,19 +18,11 @@ func writeResponse(c *Ctx, status int, contentType string, body []byte) {
 // Example:
 //
 //	c.HTML(http.StatusOK, "<h1>Hello World</h1>")
-//
-//	c.HTML(http.StatusOK, `
-//	    <!DOCTYPE html>
-//	    <html>
-//	    <head><title>My App</title></head>
-//	    <body><h1>Welcome</h1></body>
-//	    </html>
-//	`)
 func (c *Ctx) HTML(status int, html string) {
 	c.Response.Header().Set("Content-Type", "text/html; charset=utf-8")
 	c.Response.WriteHeader(status)
 	if _, err := io.WriteString(c.Response, html); err != nil {
-		logger.Error("HTTP: response write error: %v", err)
+		logger.Error("HTTP: HTML response write error: %v", err)
 	}
 }
 
@@ -54,19 +35,15 @@ func (c *Ctx) HTML(status int, html string) {
 // Example:
 //
 //	c.String(http.StatusOK, "Hello World")
-//
-//	c.String(http.StatusOK, "your-api-key-here")
-//
-//	c.String(http.StatusUnauthorized, "Invalid credentials")
 func (c *Ctx) String(status int, text string) {
 	c.Response.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	c.Response.WriteHeader(status)
 	if _, err := io.WriteString(c.Response, text); err != nil {
-		logger.Error("HTTP: response write error: %v", err)
+		logger.Error("HTTP: string response write error: %v", err)
 	}
 }
 
-// Status writes a response with no body and the given HTTP status.
+// Status writes a response header with no body and the given HTTP status.
 // This matches Gin's c.Status() behavior.
 //
 // Example:
@@ -107,7 +84,8 @@ func (c *Ctx) Attachment(filePath, attachmentName string) {
 	if attachmentName == "" {
 		attachmentName = filepath.Base(filePath)
 	}
-	c.Response.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", attachmentName))
+
+	c.Response.Header().Set("Content-Disposition", "attachment; filename=\""+attachmentName+"\"")
 	http.ServeFile(c.Response, c.Request, filePath)
 }
 
@@ -130,9 +108,12 @@ func (c *Ctx) Inline(filePath string) {
 //
 //	data := []byte("id,name\n1,John Doe")
 //	c.Blob(http.StatusOK, "text/csv", data)
-func (c *Ctx) Blob(status int, contentType string, data []byte) error {
-	writeResponse(c, status, contentType, data)
-	return nil
+func (c *Ctx) Blob(status int, contentType string, data []byte) {
+	c.Response.Header().Set("Content-Type", contentType)
+	c.Response.WriteHeader(status)
+	if _, err := c.Response.Write(data); err != nil {
+		logger.Error("HTTP: blob response write error: %v", err)
+	}
 }
 
 // Stream copies data from an io.Reader to the response body with the given content type.
@@ -167,8 +148,6 @@ func (c *Ctx) Stream(status int, contentType string, body io.Reader) error {
 // Example:
 //
 //	c.Error(http.StatusBadRequest, "invalid email format")
-//	c.Error(http.StatusUnauthorized, "authentication required")
-//	c.Error(http.StatusInternalServerError, "database connection failed")
 func (c *Ctx) Error(status int, message string) {
 	http.Error(c.Response, message, status)
 }

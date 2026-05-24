@@ -225,7 +225,7 @@ func TestContext_Redirect(t *testing.T) {
 func TestContext_Blob(t *testing.T) {
 	r := New(":0")
 	r.GET("/blob", func(c *Ctx) {
-		_ = c.Blob(200, "text/csv", []byte("id,name\n1,John"))
+		c.Blob(200, "text/csv", []byte("id,name\n1,John"))
 	})
 
 	req := httptest.NewRequest("GET", "/blob", nil)

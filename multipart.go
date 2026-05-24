@@ -22,10 +22,12 @@ const defaultMultipartMemory int64 = 32 << 20
 //	    return
 //	}
 //	defer file.Close()
-//	// Stream or read file as needed...
 func (c *Ctx) FormFile(fieldName string) (*multipart.FileHeader, multipart.File, error) {
-	if err := c.Request.ParseMultipartForm(defaultMultipartMemory); err != nil {
-		return nil, nil, fmt.Errorf("http: ParseMultipartForm error: %w", err)
+	// Fast Path: Skip parsing entirely if an upstream component or middleware already handled it
+	if c.Request.MultipartForm == nil {
+		if err := c.Request.ParseMultipartForm(defaultMultipartMemory); err != nil {
+			return nil, nil, fmt.Errorf("http: ParseMultipartForm error: %w", err)
+		}
 	}
 
 	file, header, err := c.Request.FormFile(fieldName)
@@ -49,11 +51,12 @@ func (c *Ctx) FormFile(fieldName string) (*multipart.FileHeader, multipart.File,
 //	for _, h := range headers {
 //	    file, _ := h.Open()
 //	    defer file.Close()
-//	    // process file...
 //	}
 func (c *Ctx) FormFiles(fieldName string) ([]*multipart.FileHeader, error) {
-	if err := c.Request.ParseMultipartForm(defaultMultipartMemory); err != nil {
-		return nil, fmt.Errorf("http: ParseMultipartForm error: %w", err)
+	if c.Request.MultipartForm == nil {
+		if err := c.Request.ParseMultipartForm(defaultMultipartMemory); err != nil {
+			return nil, fmt.Errorf("http: ParseMultipartForm error: %w", err)
+		}
 	}
 
 	formFiles := c.Request.MultipartForm.File[fieldName]
@@ -71,6 +74,8 @@ func (c *Ctx) ReadFile(fieldName string) (header *multipart.FileHeader, content 
 	if err != nil {
 		return nil, nil, err
 	}
+
+	// Named return parameter scope ensures clean defer error capture mechanics
 	defer func() {
 		if closeErr := file.Close(); closeErr != nil && err == nil {
 			err = closeErr
