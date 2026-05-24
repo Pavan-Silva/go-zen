@@ -1,13 +1,27 @@
 package middleware
 
 import (
+	"bufio"
+	"net"
 	"net/http"
+	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/Pavan-Silva/go-zen"
-	"github.com/Pavan-Silva/go-zen/logger"
+)
+
+// Pre-allocated ANSI color codes as byte arrays
+var (
+	colorReset   = []byte("\033[0m")
+	colorRed     = []byte("\033[31m")
+	colorGreen   = []byte("\033[32m")
+	colorYellow  = []byte("\033[33m")
+	colorBlue    = []byte("\033[34m")
+	colorMagenta = []byte("\033[35m")
+	colorCyan    = []byte("\033[36m")
 )
 
 var rwPool = sync.Pool{
@@ -15,67 +29,103 @@ var rwPool = sync.Pool{
 }
 
 // Logger logs HTTP requests with method, path, status code, and response time.
-// Includes remote IP, request size, and response size for debugging.
-//
-// Example:
-//
-//	r := zen.New(":8080")
-//	r.Use(middleware.Logger)
+// It matches Gin's highly readable color layout while executing at maximum performance.
 func Logger(c *zen.Ctx) {
 	start := time.Now()
+
 	rw := rwPool.Get().(*responseWriter)
 	rw.ResponseWriter = c.Response
-	rw.status = 0
+	rw.status = http.StatusOK // Default HTTP status if WriteHeader is not explicitly called
 	rw.written = 0
+
+	// Swap out the framework's writer wrapper
 	c.Response = rw
+
 	c.Next()
 
 	duration := time.Since(start)
-	logger.Info(
-		"%s %s %d %v ip=%s req=%d resp=%d",
-		c.Request.Method,
-		c.Request.URL.Path,
-		rw.status,
-		duration,
-		clientIP(c.Request),
-		c.Request.ContentLength,
-		rw.written,
-	)
+	method := c.Request.Method
+	path := c.Request.URL.Path
+
+	// Acquire a fast stack-allocated working buffer slice
+	buf := make([]byte, 0, 160)
+
+	// Prefix Framework Tag
+	buf = append(buf, "[ZEN] "...)
+
+	// Format Status Code with unique Gin-style status backgrounds
+	buf = appendStatusColor(buf, rw.status)
+	buf = strconv.AppendInt(buf, int64(rw.status), 10)
+	buf = append(buf, colorReset...)
+	buf = append(buf, " | "...)
+
+	// Format Latency Engine Metrics
+	buf = appendLatency(buf, duration)
+	buf = append(buf, " | "...)
+
+	// Client Metadata Details (IP | Req Size | Resp Size)
+	buf = append(buf, clientIP(c.Request)...)
+	buf = append(buf, " | "...)
+	buf = strconv.AppendInt(buf, c.Request.ContentLength, 10)
+	buf = append(buf, "->"...)
+	buf = strconv.AppendInt(buf, int64(rw.written), 10)
+	buf = append(buf, "B | "...)
+
+	// Format HTTP Method with unique ANSI colors per verb
+	buf = appendMethodColor(buf, method)
+	buf = append(buf, method...)
+	buf = append(buf, colorReset...)
+	buf = append(buf, " "...)
+
+	// Append Request Route Path
+	buf = append(buf, path...)
+	buf = append(buf, '\n')
+
+	// Write directly to standard output in a single atomic syscall block
+	_, _ = os.Stdout.Write(buf)
+
+	// Recycle allocations cleanly
 	rw.ResponseWriter = nil
 	rwPool.Put(rw)
 }
 
-// responseWriter wraps http.ResponseWriter to capture status code and response size.
-// This allows Logger to report metrics after the handler completes.
+// responseWriter wraps http.ResponseWriter to capture status codes and output sizes.
+// It implements Flush and Hijack to guarantee streaming systems and WebSockets don't break.
 type responseWriter struct {
 	http.ResponseWriter
 	status  int
 	written int
 }
 
-// WriteHeader records the HTTP status code.
 func (rw *responseWriter) WriteHeader(status int) {
 	rw.status = status
 	rw.ResponseWriter.WriteHeader(status)
 }
 
-// Write records bytes written and delegates to the underlying writer.
 func (rw *responseWriter) Write(b []byte) (int, error) {
-	if rw.status == 0 {
-		rw.status = http.StatusOK
-	}
 	n, err := rw.ResponseWriter.Write(b)
 	rw.written += n
 	return n, err
 }
 
-// clientIP extracts the client IP address for logging.
-// Checks X-Forwarded-For (for reverse proxies), X-Real-IP, then RemoteAddr.
-// For X-Forwarded-For with multiple IPs, returns the first (original client) after trimming whitespace.
+// Flush ensures Server-Sent Events (SSE) and HTTP streaming routes work seamlessly.
+func (rw *responseWriter) Flush() {
+	if flusher, ok := rw.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
+}
+
+// Hijack ensures WebSocket connections bypass standard routing mechanics without failing.
+func (rw *responseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	if hijacker, ok := rw.ResponseWriter.(http.Hijacker); ok {
+		return hijacker.Hijack()
+	}
+	return nil, nil, http.ErrNotSupported
+}
+
+// clientIP extracts the client IP address efficiently.
 func clientIP(r *http.Request) string {
 	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
-		// X-Forwarded-For format: "client, proxy1, proxy2"
-		// Take the first IP (original client), trimming whitespace.
 		if before, _, ok := strings.Cut(forwarded, ","); ok {
 			return strings.TrimSpace(before)
 		}
@@ -85,4 +135,49 @@ func clientIP(r *http.Request) string {
 		return strings.TrimSpace(realIP)
 	}
 	return r.RemoteAddr
+}
+
+func appendStatusColor(buf []byte, status int) []byte {
+	switch {
+	case status >= 200 && status < 300:
+		return append(buf, colorGreen...)
+	case status >= 300 && status < 400:
+		return append(buf, colorCyan...)
+	case status >= 400 && status < 500:
+		return append(buf, colorYellow...)
+	default:
+		return append(buf, colorRed...)
+	}
+}
+
+func appendMethodColor(buf []byte, method string) []byte {
+	switch method {
+	case "GET":
+		return append(buf, colorBlue...)
+	case "POST":
+		return append(buf, colorCyan...)
+	case "PUT":
+		return append(buf, colorYellow...)
+	case "DELETE":
+		return append(buf, colorRed...)
+	default:
+		return append(buf, colorMagenta...)
+	}
+}
+
+func appendLatency(buf []byte, d time.Duration) []byte {
+	switch {
+	case d > time.Second:
+		buf = strconv.AppendFloat(buf, float64(d)/float64(time.Second), 'f', 2, 64)
+		return append(buf, 's')
+	case d > time.Millisecond:
+		buf = strconv.AppendFloat(buf, float64(d)/float64(time.Millisecond), 'f', 1, 64)
+		return append(buf, "ms"...)
+	case d > time.Microsecond:
+		buf = strconv.AppendFloat(buf, float64(d)/float64(time.Microsecond), 'f', 1, 64)
+		return append(buf, "µs"...)
+	default:
+		buf = strconv.AppendInt(buf, int64(d), 10)
+		return append(buf, "ns"...)
+	}
 }

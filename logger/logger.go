@@ -2,10 +2,11 @@ package logger
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"log/slog"
 	"os"
+	"runtime"
+	"time"
 )
 
 // Level represents the severity of log entries.
@@ -38,32 +39,46 @@ func (l Level) String() string {
 	}
 }
 
-// toSlogLevel converts our Level to slog.Level.
-func toSlogLevel(l Level) slog.Level {
-	return slog.Level(l)
-}
-
 // Logger provides structured logging with slog backend.
 type Logger struct {
 	logger  *slog.Logger
 	level   Level
 	out     io.Writer
-	leveler slog.LevelVar
+	leveler *slog.LevelVar
 }
 
 // New creates a new logger with the specified level and output writer.
 // The level can be changed dynamically via SetLevel.
 func New(level Level, out io.Writer) *Logger {
-	l := &Logger{
-		level: level,
-		out:   out,
+	leveler := &slog.LevelVar{}
+	leveler.Set(slog.Level(level))
+
+	// Intercept and cleanly normalize custom TRACE/FATAL strings inside the output writer
+	replaceAttr := func(groups []string, a slog.Attr) slog.Attr {
+		if a.Key == slog.LevelKey {
+			l := a.Value.Any().(slog.Level)
+			switch l {
+			case slog.Level(TRACE):
+				a.Value = slog.StringValue("TRACE")
+			case slog.Level(FATAL):
+				a.Value = slog.StringValue("FATAL")
+			}
+		}
+		return a
 	}
-	l.leveler.Set(toSlogLevel(level))
+
 	handler := slog.NewTextHandler(out, &slog.HandlerOptions{
-		Level: &l.leveler,
+		Level:       leveler,
+		ReplaceAttr: replaceAttr,
+		AddSource:   true, // Automatically captures correct file:line details
 	})
-	l.logger = slog.New(handler)
-	return l
+
+	return &Logger{
+		level:   level,
+		out:     out,
+		leveler: leveler,
+		logger:  slog.New(handler),
+	}
 }
 
 // Default creates a logger with INFO level and stderr output.
@@ -74,100 +89,66 @@ func Default() *Logger {
 // SetLevel changes the minimum log level dynamically.
 func (l *Logger) SetLevel(level Level) {
 	l.level = level
-	l.leveler.Set(toSlogLevel(level))
+	l.leveler.Set(slog.Level(level))
 }
 
-// enabled checks if the level is enabled.
-func (l *Logger) enabled(level Level) bool {
-	return level >= l.level
+// Enabled checks if the given level is permitted to print.
+func (l *Logger) Enabled(level Level) bool {
+	return slog.Level(level) >= l.leveler.Level()
 }
 
-// log writes a log entry if the level is enabled.
+// log writes a log entry if the level is enabled, adjusting call depth natively
+// to track correct file lines instead of the wrapper helper line.
 func (l *Logger) log(level Level, message string, args ...any) {
-	if !l.enabled(level) {
+	slogLevel := slog.Level(level)
+	if !l.logger.Enabled(context.Background(), slogLevel) {
 		return
 	}
 
-	if len(args) > 0 {
-		l.logger.Log(context.TODO(), toSlogLevel(level), fmt.Sprintf(message, args...))
-	} else {
-		l.logger.Log(context.TODO(), toSlogLevel(level), message)
+	// Capture caller PC to fix source file/line reporting accuracy
+	var pc uintptr
+	var pcs [1]uintptr
+	// Skip 3 frames: runtime.Callers -> l.log -> Public Wrapper (e.g. Info) -> Real Application Caller
+	if n := runtime.Callers(3, pcs[:]); n > 0 {
+		pc = pcs[0]
 	}
+
+	r := slog.NewRecord(time.Now(), slogLevel, message, pc)
+	r.Add(args...)
+	_ = l.logger.Handler().Handle(context.Background(), r)
 
 	if level >= FATAL {
 		os.Exit(1)
 	}
 }
 
-// Trace logs a trace message.
-func (l *Logger) Trace(message string, args ...any) {
-	l.log(TRACE, message, args...)
-}
+// Trace logs a trace message with key-value fields.
+func (l *Logger) Trace(message string, args ...any) { l.log(TRACE, message, args...) }
 
-// Debug logs a debug message.
-func (l *Logger) Debug(message string, args ...any) {
-	l.log(DEBUG, message, args...)
-}
+// Debug logs a debug message with key-value fields.
+func (l *Logger) Debug(message string, args ...any) { l.log(DEBUG, message, args...) }
 
-// Info logs an info message.
-func (l *Logger) Info(message string, args ...any) {
-	l.log(INFO, message, args...)
-}
+// Info logs an info message with key-value fields.
+func (l *Logger) Info(message string, args ...any) { l.log(INFO, message, args...) }
 
-// Warn logs a warning message.
-func (l *Logger) Warn(message string, args ...any) {
-	l.log(WARN, message, args...)
-}
+// Warn logs a warning message with key-value fields.
+func (l *Logger) Warn(message string, args ...any) { l.log(WARN, message, args...) }
 
-// Error logs an error message.
-func (l *Logger) Error(message string, args ...any) {
-	l.log(ERROR, message, args...)
-}
+// Error logs an error message with key-value fields.
+func (l *Logger) Error(message string, args ...any) { l.log(ERROR, message, args...) }
 
-// Fatal logs a fatal message and exits.
-func (l *Logger) Fatal(message string, args ...any) {
-	l.log(FATAL, message, args...)
-}
+// Fatal logs a fatal message, flushes, and invokes os.Exit(1).
+func (l *Logger) Fatal(message string, args ...any) { l.log(FATAL, message, args...) }
 
-// Global logger instance.
+// --- Global Facade Layer ---
+
 var defaultLogger = Default()
 
-// SetDefault replaces the global logger instance.
-func SetDefault(l *Logger) {
-	defaultLogger = l
-}
-
-// SetLevel sets the global logger level.
-func SetLevel(level Level) {
-	defaultLogger.SetLevel(level)
-}
-
-// Trace logs to the global logger.
-func Trace(message string, args ...any) {
-	defaultLogger.Trace(message, args...)
-}
-
-// Debug logs to the global logger.
-func Debug(message string, args ...any) {
-	defaultLogger.Debug(message, args...)
-}
-
-// Info logs to the global logger.
-func Info(message string, args ...any) {
-	defaultLogger.Info(message, args...)
-}
-
-// Warn logs to the global logger.
-func Warn(message string, args ...any) {
-	defaultLogger.Warn(message, args...)
-}
-
-// Error logs to the global logger.
-func Error(message string, args ...any) {
-	defaultLogger.Error(message, args...)
-}
-
-// Fatal logs to the global logger.
-func Fatal(message string, args ...any) {
-	defaultLogger.Fatal(message, args...)
-}
+func SetDefault(l *Logger)          { defaultLogger = l }
+func SetLevel(level Level)          { defaultLogger.SetLevel(level) }
+func Trace(msg string, args ...any) { defaultLogger.log(TRACE, msg, args...) }
+func Debug(msg string, args ...any) { defaultLogger.log(DEBUG, msg, args...) }
+func Info(msg string, args ...any)  { defaultLogger.log(INFO, msg, args...) }
+func Warn(msg string, args ...any)  { defaultLogger.log(WARN, msg, args...) }
+func Error(msg string, args ...any) { defaultLogger.log(ERROR, msg, args...) }
+func Fatal(msg string, args ...any) { defaultLogger.log(FATAL, msg, args...) }
