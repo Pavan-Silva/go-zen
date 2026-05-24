@@ -9,21 +9,9 @@ import (
 
 // BindJSON parses the request body as JSON and decodes it into dest.
 // Uses json.NewDecoder which streams directly from the request body, avoiding
-// an intermediate byte slice allocation (unlike json.Unmarshal).
+// intermediate byte slice allocations.
 //
 // Automatically runs struct validation after decode if a Validator is configured.
-// To skip validation, use SetValidator(nil).
-//
-// Returns an error if the body is not valid JSON, cannot be decoded, or
-// struct validation fails.
-//
-// Example:
-//
-//	var req CreateUserRequest
-//	if err := c.BindJSON(&req); err != nil {
-//	    c.Error(http.StatusBadRequest, err.Error())
-//	    return
-//	}
 func (c *Ctx) BindJSON(dest any) error {
 	dec := json.NewDecoder(c.Request.Body)
 	if err := dec.Decode(dest); err != nil {
@@ -32,17 +20,10 @@ func (c *Ctx) BindJSON(dest any) error {
 	return Validate(dest)
 }
 
-// JSON encodes data as JSON and writes it to the response with the given HTTP status code.
-// Uses json.NewEncoder which streams directly to the response writer, avoiding an
-// intermediate byte slice allocation (unlike json.Marshal).
+// JSON encodes data as JSON and streams it straight to the response writer.
 //
-// The response Content-Type header is automatically set to "application/json".
-// Write errors are logged but not returned (they indicate connection issues).
-//
-// Example:
-//
-//	c.JSON(http.StatusOK, map[string]string{"message": "hello"})
-//	c.JSON(http.StatusOK, user)
+// Sets the "Content-Type" header to "application/json" automatically.
+// Write errors are handled and logged safely via internal system loggers.
 func (c *Ctx) JSON(status int, data any) {
 	c.Response.Header().Set("Content-Type", "application/json")
 	c.Response.WriteHeader(status)
