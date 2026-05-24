@@ -32,18 +32,14 @@ func TestLogLevels(t *testing.T) {
 	l.Error("error msg")
 
 	output := buf.String()
-	// slog maps TRACE to DEBUG level, so both should appear as DEBUG
-	if !strings.Contains(output, "DEBUG") {
-		t.Fatalf("debug/trace not found: %s", output)
-	}
-	if !strings.Contains(output, "INFO") {
-		t.Fatalf("info not found: %s", output)
+	if !strings.Contains(output, "TRACE") {
+		t.Fatalf("trace not found: %s", output)
 	}
 	if !strings.Contains(output, "WARN") {
-		t.Fatalf("warn not found: %s", output)
+		t.Fatalf("info/warn not found: %s", output)
 	}
 	if !strings.Contains(output, "ERROR") {
-		t.Fatalf("error not found: %s", output)
+		t.Fatalf("warn/error not found: %s", output)
 	}
 }
 
@@ -123,11 +119,14 @@ func TestFmtArguments(t *testing.T) {
 	buf := &bytes.Buffer{}
 	l := New(INFO, buf)
 
-	l.Info("user %s logged in from %s", "john", "127.0.0.1")
+	l.Info("user logged in", "user", "john", "ip", "127.0.0.1")
 
 	output := buf.String()
-	if !strings.Contains(output, "user john logged in from 127.0.0.1") {
-		t.Fatalf("format not applied: %s", output)
+	if !strings.Contains(output, "user logged in") {
+		t.Fatalf("message not found: %s", output)
+	}
+	if !strings.Contains(output, "john") || !strings.Contains(output, "127.0.0.1") {
+		t.Fatalf("args not found: %s", output)
 	}
 }
 

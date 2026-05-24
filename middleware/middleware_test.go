@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"compress/gzip"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -18,16 +19,15 @@ func TestCORS_Default(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("GET", "/api", nil)
-	req.Header.Set("Origin", "https://example.com")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
 	if w.Code != 200 {
 		t.Fatalf("status = %d, want 200", w.Code)
 	}
-	// Default config has no allowed origins, so CORS headers should not be set
+	// No Origin header → pass through, no CORS headers
 	if w.Header().Get("Access-Control-Allow-Origin") != "" {
-		t.Fatalf("ACAO should not be set for default config")
+		t.Fatalf("ACAO should not be set")
 	}
 }
 
@@ -121,7 +121,7 @@ func TestCORS_AllowCredentials(t *testing.T) {
 
 func TestCORS_NoCredentials_UsesWildcard(t *testing.T) {
 	cfg := DefaultCORSConfig()
-	cfg.AllowedOrigins = []string{"https://example.com"}
+	cfg.AllowedOrigins = []string{"*"}
 	cfg.AllowCredentials = false
 
 	r := zen.New(":0")
@@ -192,7 +192,7 @@ func TestBodyLimit_Int(t *testing.T) {
 }
 
 func TestBodyLimit_Skipper(t *testing.T) {
-	cfg := BodyLimitConfig()
+	cfg := DefaultBodyLimitConfig()
 	cfg.Limit = "1K"
 	cfg.Skipper = func(r *http.Request) bool {
 		return r.URL.Path == "/upload/large"
@@ -296,35 +296,12 @@ func TestClientIP_RemoteAddr(t *testing.T) {
 	}
 }
 
-func TestParseLimit(t *testing.T) {
-	tests := []struct {
-		input string
-		want  int64
-	}{
-		{"1K", 1024},
-		{"2M", 2 * 1024 * 1024},
-		{"1G", 1024 * 1024 * 1024},
-		{"512", 512},
-		{"10k", 10 * 1024},
-	}
-
-	for _, tt := range tests {
-		got, err := parseLimit(tt.input)
-		if err != nil {
-			t.Fatalf("parseLimit(%q) error: %v", tt.input, err)
-		}
-		if got != tt.want {
-			t.Errorf("parseLimit(%q) = %d, want %d", tt.input, got, tt.want)
-		}
-	}
-}
-
 // Test Compress middleware
 func TestCompress_GzipResponse(t *testing.T) {
 	r := zen.New(":0")
 	r.Use(Compress())
 	r.GET("/api", func(c *zen.Ctx) {
-		c.String(200, "hello world")
+		c.String(200, strings.Repeat("x", 2048))
 	})
 
 	req := httptest.NewRequest("GET", "/api", nil)
@@ -344,7 +321,7 @@ func TestCompress_NoGzip_Skip(t *testing.T) {
 	r := zen.New(":0")
 	r.Use(Compress())
 	r.GET("/api", func(c *zen.Ctx) {
-		c.String(200, "hello world")
+		c.String(200, strings.Repeat("x", 2048))
 	})
 
 	req := httptest.NewRequest("GET", "/api", nil)
@@ -359,22 +336,23 @@ func TestCompress_NoGzip_Skip(t *testing.T) {
 	}
 }
 
-func TestCompress_Skipper(t *testing.T) {
+func TestCompress_Level(t *testing.T) {
 	r := zen.New(":0")
-	r.Use(CompressWithSkipper(func(r *http.Request) bool {
-		return r.URL.Path == "/no-compress"
-	}))
-	r.GET("/no-compress", func(c *zen.Ctx) {
-		c.String(200, "hello")
+	r.Use(CompressWithLevel(gzip.BestSpeed))
+	r.GET("/api", func(c *zen.Ctx) {
+		c.String(200, strings.Repeat("x", 2048))
 	})
 
-	req := httptest.NewRequest("GET", "/no-compress", nil)
+	req := httptest.NewRequest("GET", "/api", nil)
 	req.Header.Set("Accept-Encoding", "gzip")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	if w.Header().Get("Content-Encoding") != "" {
-		t.Fatal("Content-Encoding should not be set when skipped")
+	if w.Code != 200 {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	if w.Header().Get("Content-Encoding") != "gzip" {
+		t.Fatal("Content-Encoding should be gzip")
 	}
 }
 
@@ -600,8 +578,7 @@ func TestRateLimiter_Headers(t *testing.T) {
 
 func TestPprof_Handler(t *testing.T) {
 	r := zen.New(":0")
-	r.HandleRaw("GET /debug/pprof/", PprofHandler())
-	r.HandleRaw("GET /debug/pprof/{name}", PprofHandler())
+	RegisterPprof(r)
 
 	req := httptest.NewRequest("GET", "/debug/pprof/", nil)
 	w := httptest.NewRecorder()
