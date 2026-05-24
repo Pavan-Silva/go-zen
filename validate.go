@@ -1,9 +1,7 @@
 package zen
 
 import (
-	"net/mail"
 	"reflect"
-	"regexp"
 	"strings"
 
 	"github.com/go-playground/validator/v10"
@@ -50,6 +48,7 @@ func newValidator() *validator.Validate {
 	inst := validator.New()
 	inst.SetTagName("validate")
 
+	// Configures error messages to use the structural JSON name tags instead of Go field names
 	inst.RegisterTagNameFunc(func(fld reflect.StructField) string {
 		tag := fld.Tag.Get("json")
 		if tag == "" || tag == "-" {
@@ -60,29 +59,6 @@ func newValidator() *validator.Validate {
 		}
 		return tag
 	})
-
-	emailRegex := regexp.MustCompile(`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$`)
-
-	if err := inst.RegisterValidation("email", func(fl validator.FieldLevel) bool {
-		f := fl.Field()
-		if f.Kind() != reflect.String {
-			return false
-		}
-		return emailRegex.MatchString(f.String())
-	}); err != nil {
-		panic(err)
-	}
-
-	if err := inst.RegisterValidation("email-strict", func(fl validator.FieldLevel) bool {
-		f := fl.Field()
-		if f.Kind() != reflect.String {
-			return false
-		}
-		_, err := mail.ParseAddress(f.String())
-		return err == nil
-	}); err != nil {
-		panic(err)
-	}
 
 	return inst
 }
