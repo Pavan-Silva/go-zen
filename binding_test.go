@@ -15,7 +15,7 @@ func TestBindHeader(t *testing.T) {
 	}
 
 	r := New(":0")
-	r.Handle("GET /headers", func(c *Context) {
+	r.Handle("GET /headers", func(c *Ctx) {
 		var h Headers
 		if err := c.BindHeader(&h); err != nil {
 			c.Error(http.StatusBadRequest, err.Error())
@@ -45,7 +45,7 @@ func TestBindHeader_NotFound(t *testing.T) {
 	}
 
 	r := New(":0")
-	r.Handle("GET /headers", func(c *Context) {
+	r.Handle("GET /headers", func(c *Ctx) {
 		var h Headers
 		if err := c.BindHeader(&h); err != nil {
 			c.Error(http.StatusBadRequest, err.Error())
@@ -65,7 +65,7 @@ func TestBindHeader_NotFound(t *testing.T) {
 
 func TestBindHeader_InvalidDest(t *testing.T) {
 	r := New(":0")
-	r.Handle("GET /headers", func(c *Context) {
+	r.Handle("GET /headers", func(c *Ctx) {
 		// Pass a non-pointer (invalid dest)
 		var h struct{}
 		if err := c.BindHeader(h); err != nil {

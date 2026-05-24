@@ -23,7 +23,7 @@ const defaultMultipartMemory int64 = 32 << 20
 //	}
 //	defer file.Close()
 //	// Stream or read file as needed...
-func (c *Context) FormFile(fieldName string) (*multipart.FileHeader, multipart.File, error) {
+func (c *Ctx) FormFile(fieldName string) (*multipart.FileHeader, multipart.File, error) {
 	if err := c.Request.ParseMultipartForm(defaultMultipartMemory); err != nil {
 		return nil, nil, fmt.Errorf("http: ParseMultipartForm error: %w", err)
 	}
@@ -51,7 +51,7 @@ func (c *Context) FormFile(fieldName string) (*multipart.FileHeader, multipart.F
 //	    defer file.Close()
 //	    // process file...
 //	}
-func (c *Context) FormFiles(fieldName string) ([]*multipart.FileHeader, error) {
+func (c *Ctx) FormFiles(fieldName string) ([]*multipart.FileHeader, error) {
 	if err := c.Request.ParseMultipartForm(defaultMultipartMemory); err != nil {
 		return nil, fmt.Errorf("http: ParseMultipartForm error: %w", err)
 	}
@@ -66,7 +66,7 @@ func (c *Context) FormFiles(fieldName string) ([]*multipart.FileHeader, error) {
 
 // ReadFile is a convenience method that reads a single uploaded file into memory.
 // For large files, use FormFile() and stream the content instead.
-func (c *Context) ReadFile(fieldName string) (header *multipart.FileHeader, content []byte, err error) {
+func (c *Ctx) ReadFile(fieldName string) (header *multipart.FileHeader, content []byte, err error) {
 	header, file, err := c.FormFile(fieldName)
 	if err != nil {
 		return nil, nil, err

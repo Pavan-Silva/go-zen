@@ -16,7 +16,7 @@ import (
 //
 // Multiple values (e.g., "?item=1&item=2") return only the first value.
 // Use c.Request.URL.Query() directly for access to all values.
-func (c *Context) QueryParam(key string) string {
+func (c *Ctx) QueryParam(key string) string {
 	vals := c.Request.URL.Query()[key]
 	if len(vals) > 0 {
 		return vals[0]
@@ -33,7 +33,7 @@ func (c *Context) QueryParam(key string) string {
 //	id := c.Param("id")  // GET /users/42  →  "42"
 //
 // Returns an empty string if the parameter is not found. Requires Go 1.22+ router.
-func (c *Context) Param(key string) string {
+func (c *Ctx) Param(key string) string {
 	return c.Request.PathValue(key)
 }
 
@@ -41,7 +41,7 @@ func (c *Context) Param(key string) string {
 // It is the caller's responsibility to interpret the bytes (e.g. as plain
 // text, XML, or a custom binary format).
 //
-// For JSON payloads prefer [Context.BindJSON], which streams directly and
+// For JSON payloads prefer [Ctx.BindJSON], which streams directly and
 // runs validation in the same call.
 //
 // The request body is closed after reading. Close errors are silently
@@ -55,7 +55,7 @@ func (c *Context) Param(key string) string {
 //	    return
 //	}
 //	// Process raw bytes, e.g. XML parsing, custom format, etc.
-func (c *Context) Body() ([]byte, error) {
+func (c *Ctx) Body() ([]byte, error) {
 	b, err := io.ReadAll(c.Request.Body)
 	closeErr := c.Request.Body.Close()
 	if err != nil {

@@ -31,7 +31,7 @@ var compressRWPool = sync.Pool{
 // Example:
 //
 //	r.Use(middleware.Compress())
-func Compress() zen.MiddlewareFunc {
+func Compress() zen.HandlerFunc {
 	return compressWithLevel(gzip.DefaultCompression, nil)
 }
 
@@ -40,29 +40,29 @@ func Compress() zen.MiddlewareFunc {
 // Example:
 //
 //	r.Use(middleware.CompressWithLevel(gzip.BestSpeed))
-func CompressWithLevel(level int) zen.MiddlewareFunc {
+func CompressWithLevel(level int) zen.HandlerFunc {
 	return compressWithLevel(level, nil)
 }
 
 // CompressWithSkipper returns compression middleware with a skipper function.
-func CompressWithSkipper(skipper zen.SkipFunc) zen.MiddlewareFunc {
+func CompressWithSkipper(skipper zen.SkipFunc) zen.HandlerFunc {
 	return compressWithLevel(gzip.DefaultCompression, skipper)
 }
 
-func compressWithLevel(level int, skipper zen.SkipFunc) zen.MiddlewareFunc {
-	return func(c *zen.Context, next zen.NextFunc) {
+func compressWithLevel(level int, skipper zen.SkipFunc) zen.HandlerFunc {
+	return func(c *zen.Ctx) {
 		if skipper != nil && skipper(c.Request) {
-			next(c)
+			c.Next()
 			return
 		}
 
 		if !strings.Contains(c.Request.Header.Get("Accept-Encoding"), "gzip") {
-			next(c)
+			c.Next()
 			return
 		}
 
 		if c.Response.Header().Get("Content-Encoding") != "" {
-			next(c)
+			c.Next()
 			return
 		}
 
@@ -80,7 +80,7 @@ func compressWithLevel(level int, skipper zen.SkipFunc) zen.MiddlewareFunc {
 		cw.gz = gz
 		cw.status = 0
 		c.Response = cw
-		next(c)
+		c.Next()
 		compressRWPool.Put(cw)
 	}
 }

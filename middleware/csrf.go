@@ -10,18 +10,18 @@ type CrossOriginProtectionConfig struct {
 	Skipper                zen.SkipFunc
 	TrustedOrigins         []string
 	InsecureBypassPatterns []string
-	DenyHandler            func(c *zen.Context)
+	DenyHandler            func(c *zen.Ctx)
 }
 
 func DefaultCrossOriginProtectionConfig() CrossOriginProtectionConfig {
 	return CrossOriginProtectionConfig{}
 }
 
-func CrossOriginProtection() zen.MiddlewareFunc {
+func CrossOriginProtection() zen.HandlerFunc {
 	return CrossOriginProtectionWithConfig(DefaultCrossOriginProtectionConfig())
 }
 
-func CrossOriginProtectionWithConfig(config CrossOriginProtectionConfig) zen.MiddlewareFunc {
+func CrossOriginProtectionWithConfig(config CrossOriginProtectionConfig) zen.HandlerFunc {
 	cop := http.NewCrossOriginProtection()
 	for _, origin := range config.TrustedOrigins {
 		if err := cop.AddTrustedOrigin(origin); err != nil {
@@ -32,9 +32,9 @@ func CrossOriginProtectionWithConfig(config CrossOriginProtectionConfig) zen.Mid
 		cop.AddInsecureBypassPattern(pattern)
 	}
 
-	return func(c *zen.Context, next zen.NextFunc) {
+	return func(c *zen.Ctx) {
 		if config.Skipper != nil && config.Skipper(c.Request) {
-			next(c)
+			c.Next()
 			return
 		}
 		if err := cop.Check(c.Request); err != nil {
@@ -45,6 +45,6 @@ func CrossOriginProtectionWithConfig(config CrossOriginProtectionConfig) zen.Mid
 			http.Error(c.Response, http.StatusText(http.StatusForbidden), http.StatusForbidden)
 			return
 		}
-		next(c)
+		c.Next()
 	}
 }

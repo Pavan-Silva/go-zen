@@ -17,7 +17,7 @@ type testXMLUser struct {
 func TestBindXML_Valid(t *testing.T) {
 	r := New(":0")
 	var captured testXMLUser
-	r.Handle("POST /user", func(c *Context) {
+	r.Handle("POST /user", func(c *Ctx) {
 		if err := c.BindXML(&captured); err != nil {
 			c.Error(400, err.Error())
 			return
@@ -41,7 +41,7 @@ func TestBindXML_Valid(t *testing.T) {
 func TestBindXML_Malformed(t *testing.T) {
 	r := New(":0")
 	var captured testXMLUser
-	r.Handle("POST /user", func(c *Context) {
+	r.Handle("POST /user", func(c *Ctx) {
 		if err := c.BindXML(&captured); err != nil {
 			c.Error(400, err.Error())
 			return
@@ -62,7 +62,7 @@ func TestBindXML_Malformed(t *testing.T) {
 func TestBindXML_TrailingData(t *testing.T) {
 	r := New(":0")
 	var captured testXMLUser
-	r.Handle("POST /user", func(c *Context) {
+	r.Handle("POST /user", func(c *Ctx) {
 		if err := c.BindXML(&captured); err != nil {
 			c.Error(400, err.Error())
 			return
@@ -87,7 +87,7 @@ func TestBindXML_NonStruct(t *testing.T) {
 		Value string `xml:"value"`
 	}
 	var captured container
-	r.Handle("POST /xml", func(c *Context) {
+	r.Handle("POST /xml", func(c *Ctx) {
 		if err := c.BindXML(&captured); err != nil {
 			c.Error(400, err.Error())
 			return
@@ -110,7 +110,7 @@ func TestBindXML_NonStruct(t *testing.T) {
 
 func TestXML_Response(t *testing.T) {
 	r := New(":0")
-	r.Handle("GET /xml", func(c *Context) {
+	r.Handle("GET /xml", func(c *Ctx) {
 		c.XML(200, testXMLUser{Name: "John", Email: "john@example.com", Age: 30})
 	})
 
@@ -131,7 +131,7 @@ func TestXML_Response(t *testing.T) {
 
 func TestXML_EncodeError(t *testing.T) {
 	r := New(":0")
-	r.Handle("GET /bad", func(c *Context) {
+	r.Handle("GET /bad", func(c *Ctx) {
 		c.XML(200, make(chan int))
 	})
 
@@ -148,7 +148,7 @@ func TestXML_EncodeError(t *testing.T) {
 func BenchmarkBindXML(b *testing.B) {
 	r := New(":0")
 	var captured testXMLUser
-	r.Handle("POST /user", func(c *Context) {
+	r.Handle("POST /user", func(c *Ctx) {
 		_ = c.BindXML(&captured)
 		c.String(200, "ok")
 	})
@@ -166,7 +166,7 @@ func BenchmarkBindXML(b *testing.B) {
 
 func BenchmarkXML(b *testing.B) {
 	r := New(":0")
-	r.Handle("GET /xml", func(c *Context) {
+	r.Handle("GET /xml", func(c *Ctx) {
 		c.XML(200, testXMLUser{Name: "John", Email: "john@example.com", Age: 30})
 	})
 

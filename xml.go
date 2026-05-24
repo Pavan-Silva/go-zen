@@ -22,7 +22,7 @@ import (
 //	    c.Error(http.StatusBadRequest, err.Error())
 //	    return
 //	}
-func (c *Context) BindXML(dest any) error {
+func (c *Ctx) BindXML(dest any) error {
 	dec := xml.NewDecoder(c.Request.Body)
 	if err := dec.Decode(dest); err != nil {
 		return fmt.Errorf("XML decode: %w", err)
@@ -43,7 +43,7 @@ func (c *Context) BindXML(dest any) error {
 //	    Message string   `xml:"message"`
 //	}
 //	c.XML(http.StatusOK, Response{Message: "hello"})
-func (c *Context) XML(status int, data any) {
+func (c *Ctx) XML(status int, data any) {
 	c.Response.Header().Set("Content-Type", "application/xml")
 	c.Response.WriteHeader(status)
 

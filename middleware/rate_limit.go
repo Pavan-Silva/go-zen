@@ -50,12 +50,12 @@ type perKeyLimiter struct {
 //	config.Limit = 10
 //	config.Duration = time.Second * 10
 //	r.Use(middleware.RateLimiterWithConfig(config))
-func RateLimiter() zen.MiddlewareFunc {
+func RateLimiter() zen.HandlerFunc {
 	return RateLimiterWithConfig(DefaultRateLimiterConfig())
 }
 
 // RateLimiterWithConfig returns rate limiter middleware with the given configuration.
-func RateLimiterWithConfig(config RateLimiterConfig) zen.MiddlewareFunc {
+func RateLimiterWithConfig(config RateLimiterConfig) zen.HandlerFunc {
 	if config.Duration == 0 {
 		config.Duration = time.Minute
 	}
@@ -103,9 +103,9 @@ func RateLimiterWithConfig(config RateLimiterConfig) zen.MiddlewareFunc {
 		}
 	}()
 
-	return func(c *zen.Context, next zen.NextFunc) {
+	return func(c *zen.Ctx) {
 		if config.Skipper != nil && config.Skipper(c.Request) {
-			next(c)
+			c.Next()
 			return
 		}
 
@@ -130,6 +130,6 @@ func RateLimiterWithConfig(config RateLimiterConfig) zen.MiddlewareFunc {
 		c.Response.Header().Set("X-RateLimit-Limit", strconv.Itoa(burst))
 		c.Response.Header().Set("X-RateLimit-Remaining", strconv.Itoa(int(math.Ceil(pkl.limiter.Tokens()))))
 
-		next(c)
+		c.Next()
 	}
 }

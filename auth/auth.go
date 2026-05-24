@@ -16,7 +16,7 @@ var defaultAuthHTTPClient = &http.Client{Timeout: 10 * time.Second}
 // Implement this to provide custom authentication for HTTP, WebSocket, and SSE.
 type Authenticator interface {
 	// Authenticate validates the request and returns user info or an error.
-	// For HTTP: called in middleware with the zen.Context.
+	// For HTTP: called in middleware with the zen.Ctx.
 	// For WS/SSE: called with the http.Request.
 	Authenticate(r *http.Request) (User, error)
 }
@@ -35,7 +35,7 @@ func (u User) HasRole(role string) bool {
 }
 
 // RequireAuth creates authentication middleware.
-// It stores the authenticated User in the zen.Context under the key "user".
+// It stores the authenticated User in the zen.Ctx under the key "user".
 // On failure, it sends a 401 response (customizable via WithOnError option).
 // Optional skip functions bypass authentication for selected routes.
 //
@@ -43,7 +43,7 @@ func (u User) HasRole(role string) bool {
 //
 //	r.Use(auth.RequireAuth(jwtAuth))
 //	r.Use(auth.RequireAuth(jwtAuth, auth.SkipPaths("/health")))
-func RequireAuth(auth Authenticator, skip ...zen.SkipFunc) func(*zen.Context, zen.NextFunc) {
+func RequireAuth(auth Authenticator, skip ...zen.SkipFunc) zen.HandlerFunc {
 	var skipper zen.SkipFunc
 	if len(skip) > 0 {
 		skipper = skip[0]
@@ -53,25 +53,25 @@ func RequireAuth(auth Authenticator, skip ...zen.SkipFunc) func(*zen.Context, ze
 
 // Middleware creates HTTP middleware that authenticates requests using the provided Authenticator.
 // A custom error handler can be provided for unauthorized requests (nil sends 401).
-func Middleware(auth Authenticator, onError func(*zen.Context)) func(*zen.Context, zen.NextFunc) {
+func Middleware(auth Authenticator, onError func(*zen.Ctx)) zen.HandlerFunc {
 	return MiddlewareWithSkipper(auth, onError, nil)
 }
 
 // MiddlewareWithSkipper creates HTTP middleware that authenticates requests and can skip selected routes.
-func MiddlewareWithSkipper(auth Authenticator, onError func(*zen.Context), skip zen.SkipFunc) func(*zen.Context, zen.NextFunc) {
+func MiddlewareWithSkipper(auth Authenticator, onError func(*zen.Ctx), skip zen.SkipFunc) zen.HandlerFunc {
 	if auth == nil {
 		panic("auth: nil Authenticator provided to MiddlewareWithSkipper")
 	}
 
 	if onError == nil {
-		onError = func(c *zen.Context) {
+		onError = func(c *zen.Ctx) {
 			c.Error(http.StatusUnauthorized, http.StatusText(http.StatusUnauthorized))
 		}
 	}
 
-	return func(c *zen.Context, next zen.NextFunc) {
+	return func(c *zen.Ctx) {
 		if skip != nil && skip(c.Request) {
-			next(c)
+			c.Next()
 			return
 		}
 
@@ -82,20 +82,20 @@ func MiddlewareWithSkipper(auth Authenticator, onError func(*zen.Context), skip 
 		}
 
 		c.Set("user", &user)
-		next(c)
+		c.Next()
 	}
 }
 
 // RequireRole creates middleware that requires a specific role.
 // It must be used after RequireAuth.
-func RequireRole(role string, onError func(*zen.Context)) func(*zen.Context, zen.NextFunc) {
+func RequireRole(role string, onError func(*zen.Ctx)) zen.HandlerFunc {
 	if onError == nil {
-		onError = func(c *zen.Context) {
+		onError = func(c *zen.Ctx) {
 			c.Error(http.StatusForbidden, http.StatusText(http.StatusForbidden))
 		}
 	}
 
-	return func(c *zen.Context, next zen.NextFunc) {
+	return func(c *zen.Ctx) {
 		userVal, ok := c.Get("user")
 		if !ok || userVal == nil {
 			onError(c)
@@ -108,13 +108,13 @@ func RequireRole(role string, onError func(*zen.Context)) func(*zen.Context, zen
 			return
 		}
 
-		next(c)
+		c.Next()
 	}
 }
 
-// GetUser retrieves the authenticated user from the zen.Context.
+// GetUser retrieves the authenticated user from the zen.Ctx.
 // Returns nil if not authenticated.
-func GetUser(c *zen.Context) *User {
+func GetUser(c *zen.Ctx) *User {
 	if userVal, ok := c.Get("user"); ok && userVal != nil {
 		if user, ok := userVal.(*User); ok {
 			return user

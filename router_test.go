@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 )
 
 func TestRouter_New(t *testing.T) {
@@ -15,11 +14,11 @@ func TestRouter_New(t *testing.T) {
 	if r == nil {
 		t.Fatal("New returned nil")
 	}
-	if r.Server == nil {
+	if r.server == nil {
 		t.Fatal("Server not initialized")
 	}
-	if r.Server.Addr != ":8080" {
-		t.Fatalf("Addr = %q, want %q", r.Server.Addr, ":8080")
+	if r.server.Addr != ":8080" {
+		t.Fatalf("Addr = %q, want %q", r.server.Addr, ":8080")
 	}
 }
 
@@ -28,18 +27,8 @@ func TestRouter_New_WithConfig(t *testing.T) {
 	cfg.ReadTimeout = 15 * 1000000000
 	r := New(":9090", cfg)
 
-	if r.Server.ReadTimeout != 15*1000000000 {
-		t.Fatalf("ReadTimeout = %v, want %v", r.Server.ReadTimeout, 15*1000000000)
-	}
-}
-
-func TestRouter_New_CustomServer(t *testing.T) {
-	srv := &http.Server{Addr: ":3000"}
-	cfg := Config{Server: srv}
-	r := New("", cfg)
-
-	if r.Server != srv {
-		t.Fatal("Custom server not used")
+	if r.server.ReadTimeout != 15*1000000000 {
+		t.Fatalf("ReadTimeout = %v, want %v", r.server.ReadTimeout, 15*1000000000)
 	}
 }
 
@@ -66,7 +55,7 @@ func TestRouter_DefaultConfig(t *testing.T) {
 func TestRouter_ServeHTTP_NoMiddleware(t *testing.T) {
 	r := New(":0")
 	var called bool
-	r.Handle("GET /test", func(c *Context) {
+	r.Handle("GET /test", func(c *Ctx) {
 		called = true
 		c.String(200, "ok")
 	})
@@ -89,11 +78,11 @@ func TestRouter_ServeHTTP_NoMiddleware(t *testing.T) {
 func TestRouter_ServeHTTP_WithMiddleware(t *testing.T) {
 	r := New(":0")
 	var mwCalled, handlerCalled bool
-	r.Use(func(c *Context, next NextFunc) {
+	r.Use(func(c *Ctx) {
 		mwCalled = true
-		next(c)
+		c.Next()
 	})
-	r.Handle("GET /test", func(c *Context) {
+	r.Handle("GET /test", func(c *Ctx) {
 		handlerCalled = true
 		c.String(200, "ok")
 	})
@@ -113,10 +102,10 @@ func TestRouter_ServeHTTP_WithMiddleware(t *testing.T) {
 func TestRouter_Middleware_ShortCircuit(t *testing.T) {
 	r := New(":0")
 	var handlerCalled bool
-	r.Use(func(c *Context, next NextFunc) {
+	r.Use(func(c *Ctx) {
 		c.Error(401, "unauthorized")
 	})
-	r.Handle("GET /test", func(c *Context) {
+	r.Handle("GET /test", func(c *Ctx) {
 		handlerCalled = true
 		c.String(200, "ok")
 	})
@@ -136,17 +125,17 @@ func TestRouter_Middleware_ShortCircuit(t *testing.T) {
 func TestRouter_Middleware_Order(t *testing.T) {
 	r := New(":0")
 	var order []string
-	r.Use(func(c *Context, next NextFunc) {
+	r.Use(func(c *Ctx) {
 		order = append(order, "1-before")
-		next(c)
+		c.Next()
 		order = append(order, "1-after")
 	})
-	r.Use(func(c *Context, next NextFunc) {
+	r.Use(func(c *Ctx) {
 		order = append(order, "2-before")
-		next(c)
+		c.Next()
 		order = append(order, "2-after")
 	})
-	r.Handle("GET /test", func(c *Context) {
+	r.Handle("GET /test", func(c *Ctx) {
 		order = append(order, "handler")
 		c.String(200, "ok")
 	})
@@ -191,7 +180,7 @@ func TestRouter_File(t *testing.T) {
 	_ = os.WriteFile(path, []byte("file content"), 0644)
 
 	r := New(":0")
-	r.File("GET /file", path)
+	r.File("/file", path)
 
 	req := httptest.NewRequest("GET", "/file", nil)
 	w := httptest.NewRecorder()
@@ -224,7 +213,7 @@ func TestRouter_Static(t *testing.T) {
 func TestRouter_PathParams(t *testing.T) {
 	r := New(":0")
 	var captured string
-	r.Handle("GET /users/{id}", func(c *Context) {
+	r.Handle("GET /users/{id}", func(c *Ctx) {
 		captured = c.Param("id")
 		c.String(200, captured)
 	})
@@ -241,7 +230,7 @@ func TestRouter_PathParams(t *testing.T) {
 func TestRouter_QueryParams(t *testing.T) {
 	r := New(":0")
 	var captured string
-	r.Handle("GET /search", func(c *Context) {
+	r.Handle("GET /search", func(c *Ctx) {
 		captured = c.QueryParam("q")
 		c.String(200, captured)
 	})
@@ -257,7 +246,7 @@ func TestRouter_QueryParams(t *testing.T) {
 
 func TestRouter_NotFound(t *testing.T) {
 	r := New(":0")
-	r.Handle("GET /exists", func(c *Context) {
+	r.Handle("GET /exists", func(c *Ctx) {
 		c.String(200, "ok")
 	})
 
@@ -272,7 +261,7 @@ func TestRouter_NotFound(t *testing.T) {
 
 func TestRouter_MethodNotAllowed(t *testing.T) {
 	r := New(":0")
-	r.Handle("GET /only-get", func(c *Context) {
+	r.Handle("GET /only-get", func(c *Ctx) {
 		c.String(200, "ok")
 	})
 
@@ -297,7 +286,7 @@ func TestRouter_ShutdownTimeout(t *testing.T) {
 
 func BenchmarkRouter_ServeHTTP(b *testing.B) {
 	r := New(":0")
-	r.Handle("GET /bench", func(c *Context) {
+	r.Handle("GET /bench", func(c *Ctx) {
 		c.String(200, "ok")
 	})
 
@@ -313,10 +302,10 @@ func BenchmarkRouter_ServeHTTP(b *testing.B) {
 
 func BenchmarkRouter_ServeHTTP_WithMiddleware(b *testing.B) {
 	r := New(":0")
-	r.Use(func(c *Context, next NextFunc) {
-		next(c)
+	r.Use(func(c *Ctx) {
+		c.Next()
 	})
-	r.Handle("GET /bench", func(c *Context) {
+	r.Handle("GET /bench", func(c *Ctx) {
 		c.String(200, "ok")
 	})
 
@@ -332,7 +321,7 @@ func BenchmarkRouter_ServeHTTP_WithMiddleware(b *testing.B) {
 
 func BenchmarkRouter_PathParams(b *testing.B) {
 	r := New(":0")
-	r.Handle("GET /users/{id}", func(c *Context) {
+	r.Handle("GET /users/{id}", func(c *Ctx) {
 		c.Param("id")
 		c.String(200, "ok")
 	})
@@ -352,11 +341,11 @@ func TestRouter_HandleWith_PerRouteMiddleware(t *testing.T) {
 	r := New(":0")
 	var middlewareCalled bool
 
-	r.HandleWith("GET /protected", func(c *Context) {
+	r.HandleWith("GET /protected", func(c *Ctx) {
 		c.String(200, "protected")
-	}, func(c *Context, next NextFunc) {
+	}, func(c *Ctx) {
 		middlewareCalled = true
-		next(c)
+		c.Next()
 	})
 
 	req := httptest.NewRequest("GET", "/protected", nil)
@@ -375,17 +364,17 @@ func TestRouter_HandleWith_MiddlewareOrder(t *testing.T) {
 	r := New(":0")
 	var order []string
 
-	r.Use(func(c *Context, next NextFunc) {
+	r.Use(func(c *Ctx) {
 		order = append(order, "global")
-		next(c)
+		c.Next()
 	})
 
-	r.HandleWith("GET /test", func(c *Context) {
+	r.HandleWith("GET /test", func(c *Ctx) {
 		order = append(order, "handler")
 		c.String(200, "ok")
-	}, func(c *Context, next NextFunc) {
+	}, func(c *Ctx) {
 		order = append(order, "per-route")
-		next(c)
+		c.Next()
 	})
 
 	req := httptest.NewRequest("GET", "/test", nil)
@@ -400,25 +389,6 @@ func TestRouter_HandleWith_MiddlewareOrder(t *testing.T) {
 		if order[i] != want[i] {
 			t.Errorf("order[%d] = %q, want %q", i, order[i], want[i])
 		}
-	}
-}
-
-// Test RequestTimeout config
-func TestRouter_RequestTimeout(t *testing.T) {
-	cfg := DefaultConfig()
-	cfg.RequestTimeout = 50 * time.Millisecond
-	r := New(":0", cfg)
-
-	if r.requestTimeout != 50*time.Millisecond {
-		t.Fatalf("requestTimeout = %v, want %v", r.requestTimeout, 50*time.Millisecond)
-	}
-}
-
-func TestRouter_RequestTimeout_Default(t *testing.T) {
-	r := New(":0")
-
-	if r.requestTimeout != 0 {
-		t.Fatalf("requestTimeout = %v, want 0", r.requestTimeout)
 	}
 }
 
@@ -464,7 +434,7 @@ func TestRouter_StaticFS_RootPrefix(t *testing.T) {
 
 func TestRouter_MultiplePathParams(t *testing.T) {
 	r := New(":0")
-	r.Handle("GET /users/{userID}/posts/{postID}", func(c *Context) {
+	r.Handle("GET /users/{userID}/posts/{postID}", func(c *Ctx) {
 		userID := c.Param("userID")
 		postID := c.Param("postID")
 		c.String(http.StatusOK, userID+":"+postID)
@@ -484,7 +454,7 @@ func TestRouter_MultiplePathParams(t *testing.T) {
 
 func TestRouter_WildcardRoute(t *testing.T) {
 	r := New(":0")
-	r.Handle("GET /static/{path...}", func(c *Context) {
+	r.Handle("GET /static/{path...}", func(c *Ctx) {
 		c.String(http.StatusOK, "wildcard:"+c.Param("path"))
 	})
 
@@ -503,7 +473,7 @@ func TestRouter_WildcardRoute(t *testing.T) {
 
 func TestRouter_HEADMethod(t *testing.T) {
 	r := New(":0")
-	r.Handle("GET /items", func(c *Context) {
+	r.Handle("GET /items", func(c *Ctx) {
 		c.Response.Header().Set("Content-Length", "5")
 		c.String(http.StatusOK, "hello")
 	})
@@ -517,30 +487,10 @@ func TestRouter_HEADMethod(t *testing.T) {
 	}
 }
 
-func TestRouter_RequestTimeout_Cancellation(t *testing.T) {
-	cfg := DefaultConfig()
-	cfg.RequestTimeout = 1 * time.Millisecond
-	r := New(":0", cfg)
-
-	r.Handle("GET /slow", func(c *Context) {
-		select {
-		case <-c.Request.Context().Done():
-			return
-		case <-time.After(5 * time.Second):
-		}
-		c.String(http.StatusOK, "done")
-	})
-
-	req := httptest.NewRequest("GET", "/slow", nil)
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-	_ = w
-}
-
 func TestRouter_HandleWith_EmptyMiddleware(t *testing.T) {
 	r := New(":0")
 	var called bool
-	r.HandleWith("GET /test", func(c *Context) {
+	r.HandleWith("GET /test", func(c *Ctx) {
 		called = true
 		c.String(http.StatusOK, "ok")
 	})
@@ -565,7 +515,7 @@ func TestRouter_StaticFile(t *testing.T) {
 	}
 
 	r := New(":0")
-	r.File("GET /file", tmpFile)
+	r.File("/file", tmpFile)
 
 	req := httptest.NewRequest("GET", "/file", nil)
 	w := httptest.NewRecorder()

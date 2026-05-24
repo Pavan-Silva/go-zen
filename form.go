@@ -34,7 +34,7 @@ type FormError struct {
 //	if err := c.BindForm(&form); err != nil {
 //	    // handle error
 //	}
-func (c *Context) BindForm(dest any) error {
+func (c *Ctx) BindForm(dest any) error {
 	if err := c.Request.ParseForm(); err != nil {
 		return fmt.Errorf("http: ParseForm error: %w", err)
 	}

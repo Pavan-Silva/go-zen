@@ -36,7 +36,7 @@ func BodyLimitConfig() BodyLimitMiddlewareConfig {
 //
 //	r.Use(middleware.BodyLimit("2M"))
 //	r.Use(middleware.BodyLimit(2_097_152))
-func BodyLimit(limit any) zen.MiddlewareFunc {
+func BodyLimit(limit any) zen.HandlerFunc {
 	config := BodyLimitConfig()
 	switch v := limit.(type) {
 	case string:
@@ -74,15 +74,15 @@ func BodyLimit(limit any) zen.MiddlewareFunc {
 //		return r.URL.Path == "/upload/large"
 //	}
 //	r.Use(middleware.BodyLimitWithConfig(config))
-func BodyLimitWithConfig(config BodyLimitMiddlewareConfig) zen.MiddlewareFunc {
+func BodyLimitWithConfig(config BodyLimitMiddlewareConfig) zen.HandlerFunc {
 	limit, err := parseLimit(config.Limit)
 	if err != nil {
 		panic(fmt.Sprintf("invalid body limit: %v", err))
 	}
 
-	return func(c *zen.Context, next zen.NextFunc) {
+	return func(c *zen.Ctx) {
 		if config.Skipper != nil && config.Skipper(c.Request) {
-			next(c)
+			c.Next()
 			return
 		}
 
@@ -93,7 +93,7 @@ func BodyLimitWithConfig(config BodyLimitMiddlewareConfig) zen.MiddlewareFunc {
 
 		c.Request.Body = http.MaxBytesReader(c.Response, c.Request.Body, limit)
 
-		next(c)
+		c.Next()
 	}
 }
 

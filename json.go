@@ -24,7 +24,7 @@ import (
 //	    c.Error(http.StatusBadRequest, err.Error())
 //	    return
 //	}
-func (c *Context) BindJSON(dest any) error {
+func (c *Ctx) BindJSON(dest any) error {
 	dec := json.NewDecoder(c.Request.Body)
 	if err := dec.Decode(dest); err != nil {
 		return fmt.Errorf("JSON decode: %w", err)
@@ -43,7 +43,7 @@ func (c *Context) BindJSON(dest any) error {
 //
 //	c.JSON(http.StatusOK, map[string]string{"message": "hello"})
 //	c.JSON(http.StatusOK, user)
-func (c *Context) JSON(status int, data any) {
+func (c *Ctx) JSON(status int, data any) {
 	c.Response.Header().Set("Content-Type", "application/json")
 	c.Response.WriteHeader(status)
 

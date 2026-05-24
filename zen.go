@@ -4,7 +4,7 @@
 // # Quick Start
 //
 //	r := zen.New(":8080")
-//	r.Handle("GET /hello", func(c *zen.Context) {
+//	r.GET("/hello", func(c *zen.Ctx) {
 //	    c.String(200, "Hello, World!")
 //	})
 //	r.Run()
@@ -19,10 +19,12 @@
 //
 // # Routing
 //
-// Routes use Go 1.22+ patterns with method prefix and path parameters:
+// Routes use Go 1.22+ patterns with path parameters:
 //
-//	r.Handle("GET /users/{id}", getUser)
-//	r.Handle("POST /users", createUser)
+//	r.GET("/users/{id}", getUser)
+//	r.POST("/users", createUser)
+//	r.PUT("/users/{id}", updateUser)
+//	r.DELETE("/users/{id}", deleteUser)
 //
 // # Route Groups
 //
@@ -43,13 +45,12 @@
 //
 // # Context and Lifecycle
 //
-// A zen.Context is created per request via sync.Pool and released back after the
+// A zen.Ctx is created per request via sync.Pool and released back after the
 // request completes. The hot path avoids context.WithValue entirely; FromRequest
 // is only needed for interop with standard http.Handler patterns.
 //
 // # Performance
 //
-// Zen is designed for zero-allocation middleware chains, pooled Context objects,
-// and streaming JSON/XML encoding. Benchmark against net/http ServeMux shows
-// ~95% throughput with comparable middleware at ~110k req/s.
+// Zen is designed for zero-allocation middleware chains, pooled Ctx
+// and streaming JSON/XML encoding.
 package zen

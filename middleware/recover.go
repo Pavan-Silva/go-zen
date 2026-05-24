@@ -18,7 +18,7 @@ import (
 //	r.Use(middleware.Recover)  // Must be first
 //	r.Use(middleware.Logger)
 //	// ... other middleware and handlers
-func Recover(c *zen.Context, next zen.NextFunc) {
+func Recover(c *zen.Ctx) {
 	defer func() {
 		if err := recover(); err != nil {
 			logger.Error(
@@ -32,5 +32,5 @@ func Recover(c *zen.Context, next zen.NextFunc) {
 			http.Error(c.Response, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		}
 	}()
-	next(c)
+	c.Next()
 }
