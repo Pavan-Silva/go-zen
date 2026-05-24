@@ -8,8 +8,10 @@ import (
 	"sync"
 )
 
-var bindMetaCache sync.Map // map[reflect.Type]*bindMeta
+// Global thread-safe metadata cache for multi-source data binding.
+var bindMetaCache sync.Map
 
+// bindFieldInfo tracks pre-compiled field metadata and memory mapping layouts.
 type bindFieldInfo struct {
 	index    int
 	kind     reflect.Kind
@@ -18,10 +20,12 @@ type bindFieldInfo struct {
 	formTag  string
 }
 
+// bindMeta holds the optimized slice of field plans for a unique type configuration.
 type bindMeta struct {
 	fields []bindFieldInfo
 }
 
+// getBindMeta fetches a compiled struct plan from the cache or creates it on a miss.
 func getBindMeta(rt reflect.Type) *bindMeta {
 	if meta, ok := bindMetaCache.Load(rt); ok {
 		return meta.(*bindMeta)
@@ -31,11 +35,14 @@ func getBindMeta(rt reflect.Type) *bindMeta {
 	return actual.(*bindMeta)
 }
 
+// buildBindMeta parses struct fields and tag configurations exactly once.
 func buildBindMeta(rt reflect.Type) *bindMeta {
-	fields := make([]bindFieldInfo, 0, rt.NumField())
-	for i := 0; i < rt.NumField(); i++ {
+	numFields := rt.NumField()
+	fields := make([]bindFieldInfo, 0, numFields)
+
+	for i := 0; i < numFields; i++ {
 		field := rt.Field(i)
-		if field.PkgPath != "" {
+		if field.PkgPath != "" && !field.Anonymous {
 			continue
 		}
 
@@ -50,23 +57,36 @@ func buildBindMeta(rt reflect.Type) *bindMeta {
 	return &bindMeta{fields: fields}
 }
 
-// BindBody binds only the request body to dest, ignoring path/query params.
-// This matches Echo's c.BindBody() behavior.
-//
-// Returns an error if the content type is unsupported or binding fails.
-//
-// Example:
-//
-//	var req SignupRequest
-//	if err := c.BindBody(&req); err != nil {
-//	    c.Error(http.StatusBadRequest, err.Error())
-//	    return
-//	}
+// Bind auto-detects the request content type and decodes the payload into dest.
+// For GET, DELETE, and HEAD requests, it automatically populates query parameters first.
+func (c *Ctx) Bind(dest any) error {
+	if err := c.BindPathParams(dest); err != nil {
+		return err
+	}
+
+	method := c.Request.Method
+	if method == "GET" || method == "DELETE" || method == "HEAD" {
+		if err := c.BindQueryParams(dest); err != nil {
+			return err
+		}
+	}
+
+	ct := c.Request.Header.Get("Content-Type")
+	if ct != "" {
+		return c.BindBody(dest)
+	}
+	return nil
+}
+
+// BindBody parses the request body into dest based on the Content-Type header,
+// completely skipping path and query parameters.
 func (c *Ctx) BindBody(dest any) error {
 	ct := c.Request.Header.Get("Content-Type")
 	if ct == "" {
-		return nil // No body to bind (e.g., GET with query params only)
+		return nil
 	}
+
+	// Fast-track extraction of mime-type boundary text
 	before, _, _ := strings.Cut(ct, ";")
 	ct = strings.ToLower(strings.TrimSpace(before))
 
@@ -85,69 +105,19 @@ func (c *Ctx) BindBody(dest any) error {
 	}
 }
 
-// Bind auto-detects the content type and binds the request body to dest.
-// For GET/DELETE/HEAD requests, it also binds query parameters.
-// This matches Echo's c.Bind() behavior.
-//
-// NOTE: This does NOT auto-validate (matching Gin/Echo behavior).
-// Call Validate(dest) separately if you want struct validation.
-//
-// Example:
-//
-//	var req SignupRequest
-//	if err := c.Bind(&req); err != nil {
-//	    c.Error(http.StatusBadRequest, err.Error())
-//	    return
-//	}
-//	if err := Validate(&req); err != nil {
-//	    c.Error(http.StatusBadRequest, err.Error())
-//	    return
-//	}
-func (c *Ctx) Bind(dest any) error {
-	// Bind path parameters
-	if err := c.BindPathParams(dest); err != nil {
-		return err
-	}
-
-	// For GET/DELETE/HEAD, also bind query params (Echo behavior)
-	method := c.Request.Method
-	if method == "GET" || method == "DELETE" || method == "HEAD" {
-		if err := c.BindQueryParams(dest); err != nil {
-			return err
-		}
-	}
-
-	// For requests with body, bind the body
-	ct := c.Request.Header.Get("Content-Type")
-	if ct != "" {
-		return c.BindBody(dest)
-	}
-	return nil
-}
-
-// BindPathParams binds path parameters to dest struct fields.
-// Field names are matched using "param" struct tags, falling back to "json" tags.
-//
-// This matches Echo's c.BindPathParams() behavior.
-//
-// Example:
-//
-//	var req ProfileRequest
-//	if err := c.BindPathParams(&req); err != nil {
-//	    c.Error(http.StatusBadRequest, err.Error())
-//	    return
-//	}
+// BindPathParams extracts route wildcards using native Go 1.22+ request context maps.
 func (c *Ctx) BindPathParams(dest any) error {
 	rv := reflect.ValueOf(dest)
 	if rv.Kind() != reflect.Pointer || rv.Elem().Kind() != reflect.Struct {
-		return nil // nothing to bind
+		return nil
 	}
 
 	rv = rv.Elem()
 	rt := rv.Type()
 
 	meta := getBindMeta(rt)
-	for _, field := range meta.fields {
+	for i := 0; i < len(meta.fields); i++ {
+		field := meta.fields[i]
 		val := c.Param(field.paramTag)
 		if val == "" {
 			continue
@@ -161,50 +131,39 @@ func (c *Ctx) BindPathParams(dest any) error {
 	return nil
 }
 
-// BindQueryParams binds query parameters to dest struct fields.
-// Field names are matched using "query" struct tags, falling back to "json" tags.
-//
-// This matches Echo's c.BindQueryParams() behavior.
-//
-// Example:
-//
-//	var req SearchRequest
-//	if err := c.BindQueryParams(&req); err != nil {
-//	    c.Error(http.StatusBadRequest, err.Error())
-//	    return
-//	}
+// BindQueryParams parses query parameters into dest struct fields.
 func (c *Ctx) BindQueryParams(dest any) error {
 	rv := reflect.ValueOf(dest)
 	if rv.Kind() != reflect.Pointer || rv.Elem().Kind() != reflect.Struct {
-		return nil // nothing to bind
+		return nil
+	}
+
+	if c.Request.URL.RawQuery == "" {
+		return nil
 	}
 
 	rv = rv.Elem()
 	rt := rv.Type()
 
-	query := c.Request.URL.Query()
-	if len(query) == 0 {
-		return nil
-	}
-
 	meta := getBindMeta(rt)
-	for _, field := range meta.fields {
-		vals, ok := query[field.queryTag]
-		if !ok || len(vals) == 0 {
+	for i := 0; i < len(meta.fields); i++ {
+		field := meta.fields[i]
+
+		// Fast Path: Zero map allocations, parses offsets directly from the raw string line
+		val := c.QueryParam(field.queryTag)
+		if val == "" {
 			continue
 		}
 
 		fv := rv.Field(field.index)
-		if err := setFieldValue(fv, field.kind, vals); err != nil {
+		if err := setFieldValue(fv, field.kind, []string{val}); err != nil {
 			return fmt.Errorf("query param %q: %w", field.queryTag, err)
 		}
 	}
 	return nil
 }
 
-// parseStructTag extracts the field name from struct tag.
-// It uses tagName first, falls back to "json", then the field name.
-// Options after comma (e.g., ",omitempty") are stripped.
+// parseStructTag isolates clean lookup strings from structured field tag entries.
 func parseStructTag(field reflect.StructField, tagName string) string {
 	tag := field.Tag.Get(tagName)
 	if tag == "" || tag == "-" {
@@ -219,41 +178,42 @@ func parseStructTag(field reflect.StructField, tagName string) string {
 	return tag
 }
 
-// setFieldValue converts string values to the target field type.
-// This is shared with BindForm.
+// setFieldValue safely converts raw string slices into the concrete target field types.
 func setFieldValue(fv reflect.Value, kind reflect.Kind, vals []string) error {
+	val := vals[0]
+
 	switch kind {
 	case reflect.String:
-		fv.SetString(vals[0])
+		fv.SetString(val)
+	case reflect.Slice:
+		// Specialized support for string slices ([]string)
+		if fv.Type().Elem().Kind() == reflect.String {
+			fv.Set(reflect.ValueOf(vals))
+		}
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		n, err := strconv.ParseInt(vals[0], 10, 64)
+		n, err := strconv.ParseInt(val, 10, 64)
 		if err != nil {
 			return err
 		}
 		fv.SetInt(n)
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		n, err := strconv.ParseUint(vals[0], 10, 64)
+		n, err := strconv.ParseUint(val, 10, 64)
 		if err != nil {
 			return err
 		}
 		fv.SetUint(n)
 	case reflect.Float32, reflect.Float64:
-		f, err := strconv.ParseFloat(vals[0], 64)
+		n, err := strconv.ParseFloat(val, 64)
 		if err != nil {
 			return err
 		}
-		fv.SetFloat(f)
+		fv.SetFloat(n)
 	case reflect.Bool:
-		switch vals[0] {
-		case "true", "TRUE", "True", "1", "yes", "YES", "Yes", "on", "ON", "On":
-			fv.SetBool(true)
-		default:
-			fv.SetBool(false)
+		b, err := strconv.ParseBool(val)
+		if err != nil {
+			return err
 		}
-	case reflect.Slice:
-		if fv.Type().Elem().Kind() == reflect.String {
-			fv.Set(reflect.ValueOf(vals))
-		}
+		fv.SetBool(b)
 	default:
 	}
 	return nil
