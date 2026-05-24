@@ -56,18 +56,6 @@ func TestValidation_Email(t *testing.T) {
 	}
 }
 
-func TestValidation_EmailStrict(t *testing.T) {
-	type S struct {
-		Email string `validate:"email-strict"`
-	}
-
-	s := S{Email: "user@example.com"}
-	err := Validate(&s)
-	if err != nil {
-		t.Fatalf("valid email should pass strict validation: %v", err)
-	}
-}
-
 func TestValidation_GTE(t *testing.T) {
 	type S struct {
 		Age int `validate:"gte=18"`

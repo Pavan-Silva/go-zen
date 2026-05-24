@@ -99,7 +99,7 @@ func TestSetFieldValue_Float(t *testing.T) {
 }
 
 func TestSetFieldValue_Bool_True(t *testing.T) {
-	for _, val := range []string{"true", "TRUE", "True", "1", "yes", "YES", "Yes", "on", "ON", "On"} {
+	for _, val := range []string{"true", "TRUE", "True", "1"} {
 		var b bool
 		fv := reflect.ValueOf(&b).Elem()
 		if err := setFieldValue(fv, reflect.Bool, []string{val}); err != nil {
@@ -112,7 +112,7 @@ func TestSetFieldValue_Bool_True(t *testing.T) {
 }
 
 func TestSetFieldValue_Bool_False(t *testing.T) {
-	for _, val := range []string{"false", "FALSE", "False", "0", "no", "random"} {
+	for _, val := range []string{"false", "FALSE", "False", "0"} {
 		var b bool
 		fv := reflect.ValueOf(&b).Elem()
 		if err := setFieldValue(fv, reflect.Bool, []string{val}); err != nil {

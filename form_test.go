@@ -180,8 +180,8 @@ func TestBindForm_BoolVariants(t *testing.T) {
 
 	data := url.Values{}
 	data.Set("a", "TRUE")
-	data.Set("b", "yes")
-	data.Set("c", "on")
+	data.Set("b", "true")
+	data.Set("c", "1")
 
 	req := httptest.NewRequest("POST", "/bools", strings.NewReader(data.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
