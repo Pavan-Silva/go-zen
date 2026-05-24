@@ -1,13 +1,14 @@
 package zen
 
 import (
+	"context"
 	"net/http/httptest"
 	"sync"
 	"testing"
 )
 
 func TestContext_Set_Get(t *testing.T) {
-	c := &Context{}
+	c := &Ctx{}
 
 	c.Set("user_id", 42)
 	c.Set("request_id", "abc-123")
@@ -28,7 +29,7 @@ func TestContext_Set_Get(t *testing.T) {
 }
 
 func TestContext_Set_UpdatesExisting(t *testing.T) {
-	c := &Context{}
+	c := &Ctx{}
 
 	c.Set("foo", "bar")
 	c.Set("foo", "baz")
@@ -39,7 +40,7 @@ func TestContext_Set_UpdatesExisting(t *testing.T) {
 }
 
 func TestContext_Reset(t *testing.T) {
-	c := &Context{}
+	c := &Ctx{}
 
 	c.Set("a", 1)
 	c.Set("b", 2)
@@ -62,41 +63,43 @@ func TestContext_FromRequest(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	c, r := newContext(w, r)
-	defer releaseContext(c)
+	c := &Ctx{Response: w, Request: r}
+	req := r.WithContext(context.WithValue(r.Context(), zenCtxKey{}, c))
 
-	got, ok := FromRequest(r)
+	got, ok := FromRequest(req)
 	if !ok {
-		t.Fatal("FromRequest should return (context, true) when attached")
+		t.Fatal("FromRequest should return (ctx, true) when attached")
 	}
 	if got != c {
-		t.Fatal("FromRequest should return the attached context")
+		t.Fatal("FromRequest should return the attached ctx")
 	}
 }
 
 func TestContextPool_Reuse(t *testing.T) {
+	e := New(":0")
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/", nil)
 
-	c1, r1 := newContext(w, r)
+	c1 := e.pool.Get().(*Ctx)
+	c1.reset(w, r)
 	c1.Set("temp", "value")
-	releaseContext(c1)
+	c1.reset(nil, nil)
+	e.pool.Put(c1)
 
-	c2, _ := newContext(w, r1)
-	defer releaseContext(c2)
-
+	c2 := e.pool.Get().(*Ctx)
+	c2.reset(w, r)
 	if _, ok := c2.Get("temp"); ok {
-		t.Fatal("pooled context should not leak data from previous request")
+		t.Fatal("pooled ctx should not leak data from previous request")
 	}
+	c2.reset(nil, nil)
+	e.pool.Put(c2)
 }
 
 func TestContext_RequestResponseSet(t *testing.T) {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/test", nil)
 
-	c, r := newContext(w, r)
-	defer releaseContext(c)
-
+	c := &Ctx{Response: w, Request: r}
 	if c.Response != w {
 		t.Fatal("Response not set correctly")
 	}
@@ -106,7 +109,7 @@ func TestContext_RequestResponseSet(t *testing.T) {
 }
 
 func TestContext_GetNilStore(t *testing.T) {
-	c := &Context{}
+	c := &Ctx{}
 	c.Set("a", 1)
 
 	c.store = nil
@@ -118,7 +121,7 @@ func TestContext_GetNilStore(t *testing.T) {
 }
 
 func TestContext_ConcurrentAccess(t *testing.T) {
-	c := &Context{}
+	c := &Ctx{}
 	var wg sync.WaitGroup
 	for i := 0; i < 20; i++ {
 		wg.Add(1)
@@ -140,7 +143,7 @@ func TestContext_ConcurrentAccess(t *testing.T) {
 }
 
 func TestContext_Keys(t *testing.T) {
-	c := &Context{}
+	c := &Ctx{}
 	c.Set("a", 1)
 	c.Set("b", "two")
 	c.Set("c", true)
@@ -164,14 +167,14 @@ func TestContext_Keys(t *testing.T) {
 }
 
 func TestContext_Keys_NilStore(t *testing.T) {
-	c := &Context{}
+	c := &Ctx{}
 	if keys := c.Keys(); keys != nil {
 		t.Fatal("Keys() on empty context should return nil")
 	}
 }
 
 func TestContext_Copy(t *testing.T) {
-	c := &Context{}
+	c := &Ctx{}
 	c.Set("a", 1)
 	c.Set("b", "two")
 
@@ -197,7 +200,7 @@ func TestContext_Copy(t *testing.T) {
 }
 
 func TestContext_Copy_NilStore(t *testing.T) {
-	c := &Context{}
+	c := &Ctx{}
 	cp := c.Copy()
 	if cp == c {
 		t.Fatal("Copy() should return a new pointer")

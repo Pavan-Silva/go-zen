@@ -26,7 +26,7 @@ func TestRequireAuth_Success(t *testing.T) {
 	}))
 
 	var captured *User
-	r.Handle("GET /protected", func(c *zen.Context) {
+	r.Handle("GET /protected", func(c *zen.Ctx) {
 		captured = GetUser(c)
 		c.String(200, "ok")
 	})
@@ -50,7 +50,7 @@ func TestRequireAuth_Failure(t *testing.T) {
 	r := zen.New(":0")
 	r.Use(RequireAuth(&testAuth{err: errUnauth}))
 
-	r.Handle("GET /protected", func(c *zen.Context) {
+	r.Handle("GET /protected", func(c *zen.Ctx) {
 		c.String(200, "ok")
 	})
 
@@ -78,7 +78,7 @@ func TestRequireAuth_Skip(t *testing.T) {
 	r.Use(RequireAuth(&testAuth{err: errUnauth}, SkipPaths("/public")))
 
 	var captured bool
-	r.Handle("GET /public", func(c *zen.Context) {
+	r.Handle("GET /public", func(c *zen.Ctx) {
 		captured = true
 		c.String(200, "ok")
 	})
@@ -103,7 +103,7 @@ func TestRequireRole(t *testing.T) {
 	r.Use(RequireRole("admin", nil))
 
 	var captured bool
-	r.Handle("GET /admin", func(c *zen.Context) {
+	r.Handle("GET /admin", func(c *zen.Ctx) {
 		captured = true
 		c.String(200, "ok")
 	})
@@ -124,7 +124,7 @@ func TestRequireRole_Failure(t *testing.T) {
 	}))
 	r.Use(RequireRole("admin", nil))
 
-	r.Handle("GET /admin", func(c *zen.Context) {
+	r.Handle("GET /admin", func(c *zen.Ctx) {
 		c.String(200, "ok")
 	})
 
@@ -139,7 +139,7 @@ func TestRequireRole_Failure(t *testing.T) {
 
 func TestGetUser_Nil(t *testing.T) {
 	r := zen.New(":0")
-	r.Handle("GET /no-auth", func(c *zen.Context) {
+	r.Handle("GET /no-auth", func(c *zen.Ctx) {
 		u := GetUser(c)
 		if u != nil {
 			t.Fatal("GetUser should return nil when not authenticated")
@@ -745,7 +745,7 @@ func TestMiddleware_Deprecated(t *testing.T) {
 		user: User{ID: "1"},
 	}, nil))
 
-	r.Handle("GET /test", func(c *zen.Context) {
+	r.Handle("GET /test", func(c *zen.Ctx) {
 		c.String(200, "ok")
 	})
 

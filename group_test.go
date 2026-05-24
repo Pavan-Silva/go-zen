@@ -11,7 +11,7 @@ func TestGroup_Handle(t *testing.T) {
 	api := r.Group("/api")
 
 	var captured string
-	api.Handle("GET /users/{id}", func(c *Context) {
+	api.Handle("GET /users/{id}", func(c *Ctx) {
 		captured = c.Param("id")
 		c.String(200, captured)
 	})
@@ -66,13 +66,13 @@ func TestGroup_HandleRaw(t *testing.T) {
 func TestGroup_Middleware(t *testing.T) {
 	r := New(":0")
 	var mwCalled bool
-	api := r.Group("/api", func(c *Context, next NextFunc) {
+	api := r.Group("/api", func(c *Ctx) {
 		mwCalled = true
-		next(c)
+		c.Next()
 	})
 
 	var handlerCalled bool
-	api.Handle("GET /test", func(c *Context) {
+	api.Handle("GET /test", func(c *Ctx) {
 		handlerCalled = true
 		c.String(200, "ok")
 	})
@@ -91,12 +91,12 @@ func TestGroup_Middleware(t *testing.T) {
 
 func TestGroup_Middleware_ShortCircuit(t *testing.T) {
 	r := New(":0")
-	api := r.Group("/api", func(c *Context, next NextFunc) {
+	api := r.Group("/api", func(c *Ctx) {
 		c.Error(403, "forbidden")
 	})
 
 	var handlerCalled bool
-	api.Handle("GET /test", func(c *Context) {
+	api.Handle("GET /test", func(c *Ctx) {
 		handlerCalled = true
 		c.String(200, "ok")
 	})
@@ -116,13 +116,13 @@ func TestGroup_Middleware_ShortCircuit(t *testing.T) {
 func TestGroup_Use(t *testing.T) {
 	r := New(":0")
 	api := r.Group("/api")
-	api.Use(func(c *Context, next NextFunc) {
+	api.Use(func(c *Ctx) {
 		c.Set("auth", "token")
-		next(c)
+		c.Next()
 	})
 
 	var token string
-	api.Handle("GET /test", func(c *Context) {
+	api.Handle("GET /test", func(c *Ctx) {
 		if val, ok := c.Get("auth"); ok {
 			token = val.(string)
 		}
@@ -138,17 +138,17 @@ func TestGroup_Use(t *testing.T) {
 	}
 }
 
-func TestSubGroup(t *testing.T) {
+func TestGroup(t *testing.T) {
 	r := New(":0")
 	api := r.Group("/api")
-	admin := api.SubGroup("/admin")
+	admin := api.Group("/admin")
 
 	if admin.prefix != "/api/admin" {
 		t.Fatalf("prefix = %q, want %q", admin.prefix, "/api/admin")
 	}
 
 	var captured string
-	admin.Handle("GET /users", func(c *Context) {
+	admin.Handle("GET /users", func(c *Ctx) {
 		captured = "admin"
 		c.String(200, "ok")
 	})
@@ -165,19 +165,19 @@ func TestSubGroup(t *testing.T) {
 	}
 }
 
-func TestSubGroup_MiddlewareInheritance(t *testing.T) {
+func TestGroup_MiddlewareInheritance(t *testing.T) {
 	r := New(":0")
 	var order []string
-	api := r.Group("/api", func(c *Context, next NextFunc) {
+	api := r.Group("/api", func(c *Ctx) {
 		order = append(order, "api-mw")
-		next(c)
+		c.Next()
 	})
-	users := api.SubGroup("/users", func(c *Context, next NextFunc) {
+	users := api.Group("/users", func(c *Ctx) {
 		order = append(order, "users-mw")
-		next(c)
+		c.Next()
 	})
 
-	users.Handle("GET /list", func(c *Context) {
+	users.Handle("GET /list", func(c *Ctx) {
 		order = append(order, "handler")
 		c.String(200, "ok")
 	})
@@ -197,34 +197,6 @@ func TestSubGroup_MiddlewareInheritance(t *testing.T) {
 	}
 }
 
-func TestSubGroup_PrefixWithoutSlash(t *testing.T) {
-	r := New(":0")
-	api := r.Group("/api")
-	users := api.SubGroup("users")
-	if users.prefix != "/api/users" {
-		t.Fatalf("prefix = %q, want %q", users.prefix, "/api/users")
-	}
-}
-
-func TestCleanPath(t *testing.T) {
-	tests := []struct {
-		input string
-		want  string
-	}{
-		{"/", "/"},
-		{"/api//users", "/api/users"},
-		{"/api/users/", "/api/users/"},
-		{"///", "//"},
-	}
-
-	for _, tt := range tests {
-		got := cleanPath(tt.input)
-		if got != tt.want {
-			t.Errorf("cleanPath(%q) = %q, want %q", tt.input, got, tt.want)
-		}
-	}
-}
-
 func TestSplitMethodPath(t *testing.T) {
 	tests := []struct {
 		input    string
@@ -233,7 +205,7 @@ func TestSplitMethodPath(t *testing.T) {
 	}{
 		{"GET /users", "GET", "/users"},
 		{"POST /api/v1/users", "POST", "/api/v1/users"},
-		{"/users", "", "/users"},
+		{"/users", "GET", "/users"},
 		{"DELETE /items/{id}", "DELETE", "/items/{id}"},
 	}
 
@@ -251,8 +223,8 @@ func TestSplitMethodPath(t *testing.T) {
 func BenchmarkGroup(b *testing.B) {
 	r := New(":0")
 	api := r.Group("/api")
-	users := api.SubGroup("/users")
-	users.Handle("GET /list", func(c *Context) {
+	users := api.Group("/users")
+	users.Handle("GET /list", func(c *Ctx) {
 		c.String(200, "ok")
 	})
 

@@ -62,7 +62,7 @@ func buildBindMeta(rt reflect.Type) *bindMeta {
 //	    c.Error(http.StatusBadRequest, err.Error())
 //	    return
 //	}
-func (c *Context) BindBody(dest any) error {
+func (c *Ctx) BindBody(dest any) error {
 	ct := c.Request.Header.Get("Content-Type")
 	if ct == "" {
 		return nil // No body to bind (e.g., GET with query params only)
@@ -103,7 +103,7 @@ func (c *Context) BindBody(dest any) error {
 //	    c.Error(http.StatusBadRequest, err.Error())
 //	    return
 //	}
-func (c *Context) Bind(dest any) error {
+func (c *Ctx) Bind(dest any) error {
 	// Bind path parameters
 	if err := c.BindPathParams(dest); err != nil {
 		return err
@@ -137,7 +137,7 @@ func (c *Context) Bind(dest any) error {
 //	    c.Error(http.StatusBadRequest, err.Error())
 //	    return
 //	}
-func (c *Context) BindPathParams(dest any) error {
+func (c *Ctx) BindPathParams(dest any) error {
 	rv := reflect.ValueOf(dest)
 	if rv.Kind() != reflect.Pointer || rv.Elem().Kind() != reflect.Struct {
 		return nil // nothing to bind
@@ -173,7 +173,7 @@ func (c *Context) BindPathParams(dest any) error {
 //	    c.Error(http.StatusBadRequest, err.Error())
 //	    return
 //	}
-func (c *Context) BindQueryParams(dest any) error {
+func (c *Ctx) BindQueryParams(dest any) error {
 	rv := reflect.ValueOf(dest)
 	if rv.Kind() != reflect.Pointer || rv.Elem().Kind() != reflect.Struct {
 		return nil // nothing to bind

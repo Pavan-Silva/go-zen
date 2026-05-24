@@ -28,7 +28,7 @@ import (
 //	    c.Error(http.StatusBadRequest, "invalid headers")
 //	    return
 //	}
-func (c *Context) BindHeader(dest any) error {
+func (c *Ctx) BindHeader(dest any) error {
 	v := reflect.ValueOf(dest)
 	if v.Kind() != reflect.Pointer || v.Elem().Kind() != reflect.Struct {
 		return fmt.Errorf("header: dest must be a pointer to struct")

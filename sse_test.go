@@ -74,7 +74,7 @@ func TestEncodeSSEData_CRLFNormalization(t *testing.T) {
 
 func TestSSEvent_FullHTTP(t *testing.T) {
 	r := New(":0")
-	r.Handle("GET /events", func(c *Context) {
+	r.Handle("GET /events", func(c *Ctx) {
 		c.Response.Header().Set("Content-Type", "text/event-stream")
 		if err := c.SSEvent("update", "hello"); err != nil {
 			t.Errorf("SSEvent error: %v", err)
@@ -99,7 +99,7 @@ func TestSSEvent_FullHTTP(t *testing.T) {
 
 func TestSSEvent_JSON(t *testing.T) {
 	r := New(":0")
-	r.Handle("GET /events", func(c *Context) {
+	r.Handle("GET /events", func(c *Ctx) {
 		c.Response.Header().Set("Content-Type", "text/event-stream")
 		if err := c.SSEvent("", map[string]string{"msg": "hello"}); err != nil {
 			t.Errorf("SSEvent error: %v", err)
@@ -121,7 +121,7 @@ func TestSSEvent_JSON(t *testing.T) {
 
 func TestSSEvent_Headers(t *testing.T) {
 	r := New(":0")
-	r.Handle("GET /events", func(c *Context) {
+	r.Handle("GET /events", func(c *Ctx) {
 		if err := c.SSEvent("msg", "hello"); err != nil {
 			t.Errorf("SSEvent error: %v", err)
 		}
@@ -147,7 +147,7 @@ func TestSSEvent_Headers(t *testing.T) {
 }
 
 func TestSSEvent_ErrFlusherUnsupported(t *testing.T) {
-	c := &Context{Response: &noFlushWriter{}}
+	c := &Ctx{Response: &noFlushWriter{}}
 	err := c.SSEvent("msg", "data")
 	if err != ErrFlusherUnsupported {
 		t.Fatalf("error = %v, want %v", err, ErrFlusherUnsupported)
@@ -161,7 +161,7 @@ func (w *noFlushWriter) Write(b []byte) (int, error) { return len(b), nil }
 func (w *noFlushWriter) WriteHeader(int)             {}
 
 func TestSSEvent_WriteError(t *testing.T) {
-	c := &Context{Response: &errWriter{}}
+	c := &Ctx{Response: &errWriter{}}
 	err := c.SSEvent("msg", "data")
 	if err == nil {
 		t.Fatal("expected write error")

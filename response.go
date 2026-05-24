@@ -11,7 +11,7 @@ import (
 
 // writeResponse sets content type, status, writes body, and logs errors.
 // Consolidates the repeated response writing pattern across methods.
-func writeResponse(c *Context, status int, contentType string, body []byte) {
+func writeResponse(c *Ctx, status int, contentType string, body []byte) {
 	c.Response.Header().Set("Content-Type", contentType)
 	c.Response.WriteHeader(status)
 	if _, err := c.Response.Write(body); err != nil {
@@ -37,7 +37,7 @@ func writeResponse(c *Context, status int, contentType string, body []byte) {
 //	    <body><h1>Welcome</h1></body>
 //	    </html>
 //	`)
-func (c *Context) HTML(status int, html string) {
+func (c *Ctx) HTML(status int, html string) {
 	c.Response.Header().Set("Content-Type", "text/html; charset=utf-8")
 	c.Response.WriteHeader(status)
 	if _, err := io.WriteString(c.Response, html); err != nil {
@@ -58,7 +58,7 @@ func (c *Context) HTML(status int, html string) {
 //	c.String(http.StatusOK, "your-api-key-here")
 //
 //	c.String(http.StatusUnauthorized, "Invalid credentials")
-func (c *Context) String(status int, text string) {
+func (c *Ctx) String(status int, text string) {
 	c.Response.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	c.Response.WriteHeader(status)
 	if _, err := io.WriteString(c.Response, text); err != nil {
@@ -72,7 +72,7 @@ func (c *Context) String(status int, text string) {
 // Example:
 //
 //	c.Status(http.StatusNoContent)
-func (c *Context) Status(status int) {
+func (c *Ctx) Status(status int) {
 	c.Response.WriteHeader(status)
 }
 
@@ -82,7 +82,7 @@ func (c *Context) Status(status int) {
 // Example:
 //
 //	c.Redirect(http.StatusMovedPermanently, "https://example.com/new")
-func (c *Context) Redirect(status int, location string) {
+func (c *Ctx) Redirect(status int, location string) {
 	http.Redirect(c.Response, c.Request, location, status)
 }
 
@@ -92,7 +92,7 @@ func (c *Context) Redirect(status int, location string) {
 // Example:
 //
 //	c.File("/tmp/report.pdf")
-func (c *Context) File(filePath string) {
+func (c *Ctx) File(filePath string) {
 	http.ServeFile(c.Response, c.Request, filePath)
 }
 
@@ -103,7 +103,7 @@ func (c *Context) File(filePath string) {
 // Example:
 //
 //	c.Attachment("/tmp/report.pdf", "monthly-report.pdf")
-func (c *Context) Attachment(filePath, attachmentName string) {
+func (c *Ctx) Attachment(filePath, attachmentName string) {
 	if attachmentName == "" {
 		attachmentName = filepath.Base(filePath)
 	}
@@ -117,7 +117,7 @@ func (c *Context) Attachment(filePath, attachmentName string) {
 // Example:
 //
 //	c.Inline("/tmp/image.png")
-func (c *Context) Inline(filePath string) {
+func (c *Ctx) Inline(filePath string) {
 	c.Response.Header().Set("Content-Disposition", "inline")
 	http.ServeFile(c.Response, c.Request, filePath)
 }
@@ -130,7 +130,7 @@ func (c *Context) Inline(filePath string) {
 //
 //	data := []byte("id,name\n1,John Doe")
 //	c.Blob(http.StatusOK, "text/csv", data)
-func (c *Context) Blob(status int, contentType string, data []byte) error {
+func (c *Ctx) Blob(status int, contentType string, data []byte) error {
 	writeResponse(c, status, contentType, data)
 	return nil
 }
@@ -146,7 +146,7 @@ func (c *Context) Blob(status int, contentType string, data []byte) error {
 //	}
 //	defer f.Close()
 //	return c.Stream(http.StatusOK, "image/png", f)
-func (c *Context) Stream(status int, contentType string, body io.Reader) error {
+func (c *Ctx) Stream(status int, contentType string, body io.Reader) error {
 	c.Response.Header().Set("Content-Type", contentType)
 	c.Response.WriteHeader(status)
 	if _, err := io.Copy(c.Response, body); err != nil {
@@ -169,6 +169,6 @@ func (c *Context) Stream(status int, contentType string, body io.Reader) error {
 //	c.Error(http.StatusBadRequest, "invalid email format")
 //	c.Error(http.StatusUnauthorized, "authentication required")
 //	c.Error(http.StatusInternalServerError, "database connection failed")
-func (c *Context) Error(status int, message string) {
+func (c *Ctx) Error(status int, message string) {
 	http.Error(c.Response, message, status)
 }

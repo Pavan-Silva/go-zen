@@ -21,14 +21,14 @@ var rwPool = sync.Pool{
 //
 //	r := zen.New(":8080")
 //	r.Use(middleware.Logger)
-func Logger(c *zen.Context, next zen.NextFunc) {
+func Logger(c *zen.Ctx) {
 	start := time.Now()
 	rw := rwPool.Get().(*responseWriter)
 	rw.ResponseWriter = c.Response
 	rw.status = 0
 	rw.written = 0
 	c.Response = rw
-	next(c)
+	c.Next()
 
 	duration := time.Since(start)
 	logger.Info(

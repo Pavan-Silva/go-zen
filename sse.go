@@ -13,7 +13,7 @@ var ErrFlusherUnsupported = errors.New("sse: SSE requires http.Flusher")
 
 // SSEvent writes a Server-Sent Event to the client.
 // It sets required SSE headers and flushes the response.
-func (c *Context) SSEvent(event string, data any) error {
+func (c *Ctx) SSEvent(event string, data any) error {
 	flusher, ok := c.Response.(http.Flusher)
 	if !ok {
 		return ErrFlusherUnsupported

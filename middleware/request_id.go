@@ -28,7 +28,7 @@ func DefaultRequestIDConfig() RequestIDConfig {
 }
 
 // RequestID returns middleware that injects a unique request ID into each request.
-// The ID is stored in the Context via c.Set("request_id") and set as a response header.
+// The ID is stored in the Ctx via c.Set("request_id") and set as a response header.
 // If the incoming request already has a request ID header, it is reused.
 //
 // Example:
@@ -40,18 +40,18 @@ func DefaultRequestIDConfig() RequestIDConfig {
 //	config := middleware.DefaultRequestIDConfig()
 //	config.Header = "X-Trace-ID"
 //	r.Use(middleware.RequestIDWithConfig(config))
-func RequestID() zen.MiddlewareFunc {
+func RequestID() zen.HandlerFunc {
 	return RequestIDWithConfig(DefaultRequestIDConfig())
 }
 
 // RequestIDWithConfig returns RequestID middleware with the given configuration.
-func RequestIDWithConfig(config RequestIDConfig) zen.MiddlewareFunc {
+func RequestIDWithConfig(config RequestIDConfig) zen.HandlerFunc {
 	if config.Header == "" {
 		config.Header = "X-Request-ID"
 	}
-	return func(c *zen.Context, next zen.NextFunc) {
+	return func(c *zen.Ctx) {
 		if config.Skipper != nil && config.Skipper(c.Request) {
-			next(c)
+			c.Next()
 			return
 		}
 
@@ -67,7 +67,7 @@ func RequestIDWithConfig(config RequestIDConfig) zen.MiddlewareFunc {
 		c.Set("request_id", requestID)
 		c.Response.Header().Set(config.Header, requestID)
 
-		next(c)
+		c.Next()
 	}
 }
 

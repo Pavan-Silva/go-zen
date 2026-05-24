@@ -16,7 +16,7 @@ type testJSONUser struct {
 func TestBindJSON_Valid(t *testing.T) {
 	r := New(":0")
 	var captured testJSONUser
-	r.Handle("POST /user", func(c *Context) {
+	r.Handle("POST /user", func(c *Ctx) {
 		if err := c.BindJSON(&captured); err != nil {
 			c.Error(400, err.Error())
 			return
@@ -40,7 +40,7 @@ func TestBindJSON_Valid(t *testing.T) {
 func TestBindJSON_Malformed(t *testing.T) {
 	r := New(":0")
 	var captured testJSONUser
-	r.Handle("POST /user", func(c *Context) {
+	r.Handle("POST /user", func(c *Ctx) {
 		if err := c.BindJSON(&captured); err != nil {
 			c.Error(400, err.Error())
 			return
@@ -61,7 +61,7 @@ func TestBindJSON_Malformed(t *testing.T) {
 func TestBindJSON_TrailingData(t *testing.T) {
 	r := New(":0")
 	var captured testJSONUser
-	r.Handle("POST /user", func(c *Context) {
+	r.Handle("POST /user", func(c *Ctx) {
 		if err := c.BindJSON(&captured); err != nil {
 			c.Error(400, err.Error())
 			return
@@ -82,7 +82,7 @@ func TestBindJSON_TrailingData(t *testing.T) {
 func TestBindJSON_Validation(t *testing.T) {
 	r := New(":0")
 	var captured testJSONUser
-	r.Handle("POST /user", func(c *Context) {
+	r.Handle("POST /user", func(c *Ctx) {
 		if err := c.BindJSON(&captured); err != nil {
 			c.Error(400, err.Error())
 			return
@@ -107,7 +107,7 @@ func TestBindJSON_Validation(t *testing.T) {
 func TestBindJSON_NonStruct(t *testing.T) {
 	r := New(":0")
 	var captured map[string]any
-	r.Handle("POST /map", func(c *Context) {
+	r.Handle("POST /map", func(c *Ctx) {
 		if err := c.BindJSON(&captured); err != nil {
 			c.Error(400, err.Error())
 			return
@@ -130,7 +130,7 @@ func TestBindJSON_NonStruct(t *testing.T) {
 
 func TestJSON_Response(t *testing.T) {
 	r := New(":0")
-	r.Handle("GET /json", func(c *Context) {
+	r.Handle("GET /json", func(c *Ctx) {
 		c.JSON(201, map[string]any{"id": 1, "name": "test"})
 	})
 
@@ -156,7 +156,7 @@ func TestJSON_Response(t *testing.T) {
 
 func TestJSON_EncodeError(t *testing.T) {
 	r := New(":0")
-	r.Handle("GET /bad", func(c *Context) {
+	r.Handle("GET /bad", func(c *Ctx) {
 		c.JSON(200, make(chan int))
 	})
 
@@ -174,7 +174,7 @@ func TestJSON_EncodeError(t *testing.T) {
 func BenchmarkBindJSON(b *testing.B) {
 	r := New(":0")
 	var captured testJSONUser
-	r.Handle("POST /user", func(c *Context) {
+	r.Handle("POST /user", func(c *Ctx) {
 		_ = c.BindJSON(&captured)
 		c.String(200, "ok")
 	})
@@ -192,7 +192,7 @@ func BenchmarkBindJSON(b *testing.B) {
 
 func BenchmarkJSON(b *testing.B) {
 	r := New(":0")
-	r.Handle("GET /json", func(c *Context) {
+	r.Handle("GET /json", func(c *Ctx) {
 		c.JSON(200, map[string]any{"id": 1, "name": "benchmark", "active": true})
 	})
 

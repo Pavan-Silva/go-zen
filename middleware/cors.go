@@ -97,7 +97,7 @@ func buildOriginsMap(origins []string) map[string]bool {
 //	}
 //	config.AllowCredentials = true
 //	r.Use(middleware.CORS(config))
-func CORS(config CORSConfig) zen.MiddlewareFunc {
+func CORS(config CORSConfig) zen.HandlerFunc {
 	// Pre-compute all header strings at setup time — never changes per request.
 	config.allowedOriginsMap = buildOriginsMap(config.AllowedOrigins)
 	config.allowedMethodsStr = strings.Join(config.AllowedMethods, ", ")
@@ -106,17 +106,17 @@ func CORS(config CORSConfig) zen.MiddlewareFunc {
 	config.maxAgeStr = strconv.Itoa(config.MaxAge)
 	allowAll := len(config.AllowedOrigins) == 1 && config.AllowedOrigins[0] == "*"
 
-	return func(c *zen.Context, next zen.NextFunc) {
+	return func(c *zen.Ctx) {
 		origin := c.Request.Header.Get("Origin")
 
 		if origin != "" {
 			allowed := allowAll || config.allowedOriginsMap[origin]
 			if !allowed {
-				next(c)
+				c.Next()
 				return
 			}
 		} else if !allowAll && len(config.allowedOriginsMap) > 0 {
-			next(c)
+			c.Next()
 			return
 		}
 
@@ -140,6 +140,6 @@ func CORS(config CORSConfig) zen.MiddlewareFunc {
 			return
 		}
 
-		next(c)
+		c.Next()
 	}
 }

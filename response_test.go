@@ -15,7 +15,7 @@ func TestFormFile_SingleFile(t *testing.T) {
 	r := New(":0")
 	var capturedHeader *multipart.FileHeader
 	var capturedContent []byte
-	r.Handle("POST /upload", func(c *Context) {
+	r.Handle("POST /upload", func(c *Ctx) {
 		h, content, err := c.ReadFile("file")
 		if err != nil {
 			c.Error(400, err.Error())
@@ -50,7 +50,7 @@ func TestFormFile_SingleFile(t *testing.T) {
 
 func TestFormFile_MissingField(t *testing.T) {
 	r := New(":0")
-	r.Handle("POST /upload", func(c *Context) {
+	r.Handle("POST /upload", func(c *Ctx) {
 		_, _, err := c.FormFile("nonexistent")
 		if err != nil {
 			c.Error(400, err.Error())
@@ -76,7 +76,7 @@ func TestFormFile_MissingField(t *testing.T) {
 func TestFormFiles_MultipleFiles(t *testing.T) {
 	r := New(":0")
 	var capturedContent [][]byte
-	r.Handle("POST /uploads", func(c *Context) {
+	r.Handle("POST /uploads", func(c *Ctx) {
 		headers, err := c.FormFiles("files")
 		if err != nil {
 			c.Error(400, err.Error())
@@ -121,7 +121,7 @@ func TestFormFiles_MultipleFiles(t *testing.T) {
 
 func TestFormFiles_NoFiles(t *testing.T) {
 	r := New(":0")
-	r.Handle("POST /uploads", func(c *Context) {
+	r.Handle("POST /uploads", func(c *Ctx) {
 		_, err := c.FormFiles("files")
 		if err != nil {
 			c.Error(400, err.Error())
@@ -146,7 +146,7 @@ func TestFormFiles_NoFiles(t *testing.T) {
 
 func TestContext_HTML(t *testing.T) {
 	r := New(":0")
-	r.Handle("GET /html", func(c *Context) {
+	r.Handle("GET /html", func(c *Ctx) {
 		c.HTML(200, "<h1>Hello</h1>")
 	})
 
@@ -167,7 +167,7 @@ func TestContext_HTML(t *testing.T) {
 
 func TestContext_String(t *testing.T) {
 	r := New(":0")
-	r.Handle("GET /text", func(c *Context) {
+	r.Handle("GET /text", func(c *Ctx) {
 		c.String(200, "hello world")
 	})
 
@@ -188,7 +188,7 @@ func TestContext_String(t *testing.T) {
 
 func TestContext_Status(t *testing.T) {
 	r := New(":0")
-	r.Handle("DELETE /item", func(c *Context) {
+	r.Handle("DELETE /item", func(c *Ctx) {
 		c.Status(204)
 	})
 
@@ -206,7 +206,7 @@ func TestContext_Status(t *testing.T) {
 
 func TestContext_Redirect(t *testing.T) {
 	r := New(":0")
-	r.Handle("GET /old", func(c *Context) {
+	r.Handle("GET /old", func(c *Ctx) {
 		c.Redirect(301, "/new")
 	})
 
@@ -224,7 +224,7 @@ func TestContext_Redirect(t *testing.T) {
 
 func TestContext_Blob(t *testing.T) {
 	r := New(":0")
-	r.Handle("GET /blob", func(c *Context) {
+	r.Handle("GET /blob", func(c *Ctx) {
 		_ = c.Blob(200, "text/csv", []byte("id,name\n1,John"))
 	})
 
@@ -245,7 +245,7 @@ func TestContext_Blob(t *testing.T) {
 
 func TestContext_Stream(t *testing.T) {
 	r := New(":0")
-	r.Handle("GET /stream", func(c *Context) {
+	r.Handle("GET /stream", func(c *Ctx) {
 		reader := bytes.NewReader([]byte("streamed data"))
 		_ = c.Stream(200, "text/plain", reader)
 	})
@@ -267,7 +267,7 @@ func TestContext_Stream(t *testing.T) {
 
 func TestContext_Error(t *testing.T) {
 	r := New(":0")
-	r.Handle("GET /err", func(c *Context) {
+	r.Handle("GET /err", func(c *Ctx) {
 		c.Error(400, "bad request")
 	})
 
@@ -289,7 +289,7 @@ func TestContext_File(t *testing.T) {
 	_ = os.WriteFile(path, []byte("file content"), 0644)
 
 	r := New(":0")
-	r.Handle("GET /file", func(c *Context) {
+	r.Handle("GET /file", func(c *Ctx) {
 		c.File(path)
 	})
 
@@ -311,7 +311,7 @@ func TestContext_Attachment(t *testing.T) {
 	_ = os.WriteFile(path, []byte("file content"), 0644)
 
 	r := New(":0")
-	r.Handle("GET /attach", func(c *Context) {
+	r.Handle("GET /attach", func(c *Ctx) {
 		c.Attachment(path, "custom-name.txt")
 	})
 
@@ -333,7 +333,7 @@ func TestContext_Attachment_DefaultName(t *testing.T) {
 	_ = os.WriteFile(path, []byte("file content"), 0644)
 
 	r := New(":0")
-	r.Handle("GET /attach", func(c *Context) {
+	r.Handle("GET /attach", func(c *Ctx) {
 		c.Attachment(path, "")
 	})
 
@@ -355,7 +355,7 @@ func TestContext_Inline(t *testing.T) {
 	_ = os.WriteFile(path, []byte("png data"), 0644)
 
 	r := New(":0")
-	r.Handle("GET /inline", func(c *Context) {
+	r.Handle("GET /inline", func(c *Ctx) {
 		c.Inline(path)
 	})
 
@@ -373,7 +373,7 @@ func TestContext_Inline(t *testing.T) {
 
 func TestContext_Body(t *testing.T) {
 	r := New(":0")
-	r.Handle("POST /body", func(c *Context) {
+	r.Handle("POST /body", func(c *Ctx) {
 		data, err := c.Body()
 		if err != nil {
 			c.Error(500, err.Error())
@@ -397,7 +397,7 @@ func TestContext_Body(t *testing.T) {
 func TestQueryParam(t *testing.T) {
 	r := New(":0")
 	var captured string
-	r.Handle("GET /search", func(c *Context) {
+	r.Handle("GET /search", func(c *Ctx) {
 		captured = c.QueryParam("q")
 		c.String(200, captured)
 	})
@@ -414,7 +414,7 @@ func TestQueryParam(t *testing.T) {
 func TestQueryParam_Missing(t *testing.T) {
 	r := New(":0")
 	var captured string
-	r.Handle("GET /search", func(c *Context) {
+	r.Handle("GET /search", func(c *Ctx) {
 		captured = c.QueryParam("missing")
 		c.String(200, captured)
 	})
@@ -431,7 +431,7 @@ func TestQueryParam_Missing(t *testing.T) {
 func TestQueryParam_FirstValue(t *testing.T) {
 	r := New(":0")
 	var captured string
-	r.Handle("GET /multi", func(c *Context) {
+	r.Handle("GET /multi", func(c *Ctx) {
 		captured = c.QueryParam("item")
 		c.String(200, captured)
 	})
@@ -448,7 +448,7 @@ func TestQueryParam_FirstValue(t *testing.T) {
 func TestParam(t *testing.T) {
 	r := New(":0")
 	var captured string
-	r.Handle("GET /users/{id}", func(c *Context) {
+	r.Handle("GET /users/{id}", func(c *Ctx) {
 		captured = c.Param("id")
 		c.String(200, captured)
 	})
@@ -465,7 +465,7 @@ func TestParam(t *testing.T) {
 func TestParam_Missing(t *testing.T) {
 	r := New(":0")
 	var captured string
-	r.Handle("GET /test", func(c *Context) {
+	r.Handle("GET /test", func(c *Ctx) {
 		captured = c.Param("id")
 		c.String(200, captured)
 	})
