@@ -29,13 +29,15 @@ type Config struct {
 }
 
 // DefaultConfig returns a Config with standard timeout and buffer values.
+// Timeouts and MaxHeaderBytes default to 0 to bypass the Go standard library's
+// tracking loops, matching raw net/http performance baselines.
 func DefaultConfig() Config {
 	return Config{
-		ReadTimeout:       5 * time.Second,
-		WriteTimeout:      10 * time.Second,
-		IdleTimeout:       120 * time.Second,
-		ReadHeaderTimeout: 2 * time.Second,
-		MaxHeaderBytes:    1 << 20,
+		ReadTimeout:       0,
+		WriteTimeout:      0,
+		IdleTimeout:       0,
+		ReadHeaderTimeout: 0,
+		MaxHeaderBytes:    0, // 0 means use net/http default baseline paths
 		ShutdownTimeout:   5 * time.Second,
 	}
 }
@@ -55,9 +57,13 @@ func (g *RouterGroup) Use(middleware ...HandlerFunc) {
 
 // Group creates a child group with an additional path prefix and optional middleware.
 // The child group inherits all parent middleware and appends the new middleware after it.
+// Uses a single upfront allocation to prevent double-allocation slice resizes.
 func (g *RouterGroup) Group(prefix string, middleware ...HandlerFunc) *RouterGroup {
-	combined := append([]HandlerFunc(nil), g.middleware...)
-	combined = append(combined, middleware...)
+	totalLen := len(g.middleware) + len(middleware)
+	combined := make([]HandlerFunc, totalLen)
+	copy(combined, g.middleware)
+	copy(combined[len(g.middleware):], middleware)
+
 	return &RouterGroup{
 		prefix:     g.prefix + ensureLeadingSlash(prefix),
 		engine:     g.engine,
@@ -88,7 +94,7 @@ func (g *RouterGroup) HandleWith(pattern string, handler HandlerFunc, middleware
 }
 
 // HandleRaw registers a raw http.Handler directly on the underlying ServeMux,
-// bypassing the zen middleware chain.
+// bypassing the zen middleware chain for native performance.
 func (g *RouterGroup) HandleRaw(pattern string, handler http.Handler) {
 	method, path := splitMethodPath(pattern)
 	g.engine.Mux.Handle(method+" "+g.prefix+path, handler)
@@ -97,34 +103,31 @@ func (g *RouterGroup) HandleRaw(pattern string, handler http.Handler) {
 // Prefix returns the full path prefix of this group.
 func (g *RouterGroup) Prefix() string { return g.prefix }
 
-// Core single point of entry for adding routes with group middleware
+// Core single point of entry for adding routes with group middleware.
 func (g *RouterGroup) handle(method, pattern string, handler HandlerFunc) {
 	g.registerRoute(method, g.prefix+pattern, handler, nil)
 }
 
-// Unified route compiler and executor block
+// Unified route compiler and executor block.
+// Compiles the entire handler and middleware chain backwards at startup into a
+// single, nested closure link. This completely eliminates slice tracking or
+// index mutations within the hot request path.
 func (g *RouterGroup) registerRoute(method, fullPath string, handler HandlerFunc, routeMiddleware []HandlerFunc) {
 	fullPattern := method + " " + fullPath
 
-	// 1. Build the full array of handlers for this route at startup
 	totalLen := len(g.middleware) + len(routeMiddleware) + 1
 	chain := make([]HandlerFunc, totalLen)
 	copy(chain, g.middleware)
 	copy(chain[len(g.middleware):], routeMiddleware)
 	chain[totalLen-1] = handler
 
-	// 2. COMPILE the chain backwards into a single, nested execution link
-	// This removes the need for c.handlers and c.Next() slice tracking!
 	var finalHandler HandlerFunc = chain[len(chain)-1]
 
 	for i := len(chain) - 2; i >= 0; i-- {
 		nextHandler := finalHandler
 		currentMiddleware := chain[i]
 
-		// Nest them so executing 'current' automatically triggers the pointer to 'next'
 		finalHandler = func(c *Ctx) {
-			// We temporarily override an explicit 'next' function pointer pointer on the context
-			// allowing the middleware to invoke the next link cleanly.
 			c.next = nextHandler
 			currentMiddleware(c)
 		}
@@ -134,12 +137,8 @@ func (g *RouterGroup) registerRoute(method, fullPath string, handler HandlerFunc
 		c := g.engine.pool.Get().(*Ctx)
 		c.reset(w, r)
 
-		// Execute the pre-compiled chain directly
 		finalHandler(c)
 
-		c.Response = nil
-		c.Request = nil
-		c.next = nil
 		g.engine.pool.Put(c)
 	})
 }
@@ -155,7 +154,7 @@ type Engine struct {
 }
 
 // New creates an Engine with the given listen address and optional custom Config.
-// The server's Handler is set to the Mux directly rather than going through Engine.ServeHTTP.
+// The server's Handler is mapped directly to the ServeMux to eliminate structural router wrappers.
 func New(addr string, config ...Config) *Engine {
 	var cfg Config
 	if len(config) > 0 {
@@ -177,7 +176,7 @@ func New(addr string, config ...Config) *Engine {
 
 	e.server = &http.Server{
 		Addr:              addr,
-		Handler:           e.Mux, // Direct mapping matches net/http native efficiency
+		Handler:           e.Mux,
 		ReadTimeout:       cfg.ReadTimeout,
 		WriteTimeout:      cfg.WriteTimeout,
 		IdleTimeout:       cfg.IdleTimeout,
@@ -188,8 +187,8 @@ func New(addr string, config ...Config) *Engine {
 	return e
 }
 
-// ServeHTTP delegates to the underlying ServeMux.
-// This exists primarily so tests using httptest can call r.ServeHTTP(w, req);
+// ServeHTTP delegates directly to the underlying ServeMux.
+// This supports test-suite routing when using standard engines like httptest.
 func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	e.Mux.ServeHTTP(w, r)
 }
@@ -211,7 +210,7 @@ func (e *Engine) StaticFS(prefix string, filesystem fs.FS) {
 	e.staticFS(prefix, http.FS(filesystem))
 }
 
-// Internal unified handler for asset serving mapping
+// Internal unified handler for asset serving mapping.
 func (e *Engine) staticFS(prefix string, filesystem http.FileSystem) {
 	prefix = strings.TrimSuffix(prefix, "/")
 	if prefix == "" {
@@ -220,7 +219,6 @@ func (e *Engine) staticFS(prefix string, filesystem http.FileSystem) {
 
 	fsHandler := http.StripPrefix(prefix, http.FileServer(filesystem))
 
-	// Utilizes Go 1.22 routing: {any...} matches sub-tree file listings securely
 	if prefix == "/" {
 		e.HandleRaw("GET /{any...}", fsHandler)
 		e.HandleRaw("HEAD /{any...}", fsHandler)
@@ -245,6 +243,7 @@ func (e *Engine) RunTLS(certFile, keyFile string) {
 	})
 }
 
+// Internal execution runner for handling system interrupts and process execution loops.
 func (e *Engine) runServer(listen func() error) {
 	fmt.Print(system.Banner(e.server.Addr))
 
@@ -258,6 +257,7 @@ func (e *Engine) runServer(listen func() error) {
 	e.gracefulShutdown()
 }
 
+// Tracks kernel termination signals to gracefully clean up underlying network sockets.
 func (e *Engine) gracefulShutdown() {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
@@ -271,7 +271,7 @@ func (e *Engine) gracefulShutdown() {
 	}
 }
 
-// --- Internal String Optimization Helpers ---
+// ensureLeadingSlash sanitizes strings to guarantee an HTTP path compliance scheme.
 func ensureLeadingSlash(prefix string) string {
 	if prefix == "" {
 		return "/"
@@ -282,6 +282,7 @@ func ensureLeadingSlash(prefix string) string {
 	return prefix
 }
 
+// splitMethodPath cuts method headers away from raw registration keys efficiently.
 func splitMethodPath(pattern string) (method, path string) {
 	pattern = strings.TrimSpace(pattern)
 	spaceIdx := strings.IndexByte(pattern, ' ')
