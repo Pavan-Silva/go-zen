@@ -13,7 +13,7 @@ import (
 func TestCORS_Default(t *testing.T) {
 	r := zen.New(":0")
 	r.Use(CORS(DefaultCORSConfig()))
-	r.Handle("GET /api", func(c *zen.Ctx) {
+	r.GET("/api", func(c *zen.Ctx) {
 		c.String(200, "ok")
 	})
 
@@ -38,7 +38,7 @@ func TestCORS_SpecificOrigin(t *testing.T) {
 
 	r := zen.New(":0")
 	r.Use(CORS(cfg))
-	r.Handle("GET /api", func(c *zen.Ctx) {
+	r.GET("/api", func(c *zen.Ctx) {
 		c.String(200, "ok")
 	})
 
@@ -58,7 +58,7 @@ func TestCORS_OriginNotAllowed(t *testing.T) {
 
 	r := zen.New(":0")
 	r.Use(CORS(cfg))
-	r.Handle("GET /api", func(c *zen.Ctx) {
+	r.GET("/api", func(c *zen.Ctx) {
 		c.String(200, "ok")
 	})
 
@@ -75,13 +75,13 @@ func TestCORS_OriginNotAllowed(t *testing.T) {
 func TestCORS_Preflight(t *testing.T) {
 	cfg := DefaultCORSConfig()
 	cfg.AllowedOrigins = []string{"https://example.com"}
-	
+
 	r := zen.New(":0")
 	r.Use(CORS(cfg))
-	r.Handle("GET /api", func(c *zen.Ctx) {
+	r.GET("/api", func(c *zen.Ctx) {
 		c.String(200, "ok")
 	})
-	r.Handle("OPTIONS /api", func(c *zen.Ctx) {
+	r.OPTIONS("/api", func(c *zen.Ctx) {
 		c.Status(http.StatusNoContent)
 	})
 
@@ -102,7 +102,7 @@ func TestCORS_AllowCredentials(t *testing.T) {
 
 	r := zen.New(":0")
 	r.Use(CORS(cfg))
-	r.Handle("GET /api", func(c *zen.Ctx) {
+	r.GET("/api", func(c *zen.Ctx) {
 		c.String(200, "ok")
 	})
 
@@ -126,7 +126,7 @@ func TestCORS_NoCredentials_UsesWildcard(t *testing.T) {
 
 	r := zen.New(":0")
 	r.Use(CORS(cfg))
-	r.Handle("GET /api", func(c *zen.Ctx) {
+	r.GET("/api", func(c *zen.Ctx) {
 		c.String(200, "ok")
 	})
 
@@ -143,7 +143,7 @@ func TestCORS_NoCredentials_UsesWildcard(t *testing.T) {
 func TestBodyLimit_String(t *testing.T) {
 	r := zen.New(":0")
 	r.Use(BodyLimit("1K"))
-	r.Handle("POST /upload", func(c *zen.Ctx) {
+	r.POST("/upload", func(c *zen.Ctx) {
 		c.String(200, "ok")
 	})
 
@@ -160,7 +160,7 @@ func TestBodyLimit_String(t *testing.T) {
 func TestBodyLimit_Int64(t *testing.T) {
 	r := zen.New(":0")
 	r.Use(BodyLimit(int64(100)))
-	r.Handle("POST /upload", func(c *zen.Ctx) {
+	r.POST("/upload", func(c *zen.Ctx) {
 		c.String(200, "ok")
 	})
 
@@ -177,7 +177,7 @@ func TestBodyLimit_Int64(t *testing.T) {
 func TestBodyLimit_Int(t *testing.T) {
 	r := zen.New(":0")
 	r.Use(BodyLimit(100))
-	r.Handle("POST /upload", func(c *zen.Ctx) {
+	r.POST("/upload", func(c *zen.Ctx) {
 		c.String(200, "ok")
 	})
 
@@ -200,7 +200,7 @@ func TestBodyLimit_Skipper(t *testing.T) {
 
 	r := zen.New(":0")
 	r.Use(BodyLimitWithConfig(cfg))
-	r.Handle("POST /upload/large", func(c *zen.Ctx) {
+	r.POST("/upload/large", func(c *zen.Ctx) {
 		c.String(200, "ok")
 	})
 
@@ -217,7 +217,7 @@ func TestBodyLimit_Skipper(t *testing.T) {
 func TestBodyLimit_ContentLength(t *testing.T) {
 	r := zen.New(":0")
 	r.Use(BodyLimit("1K"))
-	r.Handle("POST /upload", func(c *zen.Ctx) {
+	r.POST("/upload", func(c *zen.Ctx) {
 		c.String(200, "ok")
 	})
 
@@ -234,7 +234,7 @@ func TestBodyLimit_ContentLength(t *testing.T) {
 func TestRecover(t *testing.T) {
 	r := zen.New(":0")
 	r.Use(Recover)
-	r.Handle("GET /panic", func(c *zen.Ctx) {
+	r.GET("/panic", func(c *zen.Ctx) {
 		panic("test panic")
 	})
 
@@ -250,7 +250,7 @@ func TestRecover(t *testing.T) {
 func TestLogger(t *testing.T) {
 	r := zen.New(":0")
 	r.Use(Logger)
-	r.Handle("GET /log", func(c *zen.Ctx) {
+	r.GET("/log", func(c *zen.Ctx) {
 		c.String(200, "ok")
 	})
 
@@ -323,7 +323,7 @@ func TestParseLimit(t *testing.T) {
 func TestCompress_GzipResponse(t *testing.T) {
 	r := zen.New(":0")
 	r.Use(Compress())
-	r.Handle("GET /api", func(c *zen.Ctx) {
+	r.GET("/api", func(c *zen.Ctx) {
 		c.String(200, "hello world")
 	})
 
@@ -343,7 +343,7 @@ func TestCompress_GzipResponse(t *testing.T) {
 func TestCompress_NoGzip_Skip(t *testing.T) {
 	r := zen.New(":0")
 	r.Use(Compress())
-	r.Handle("GET /api", func(c *zen.Ctx) {
+	r.GET("/api", func(c *zen.Ctx) {
 		c.String(200, "hello world")
 	})
 
@@ -364,7 +364,7 @@ func TestCompress_Skipper(t *testing.T) {
 	r.Use(CompressWithSkipper(func(r *http.Request) bool {
 		return r.URL.Path == "/no-compress"
 	}))
-	r.Handle("GET /no-compress", func(c *zen.Ctx) {
+	r.GET("/no-compress", func(c *zen.Ctx) {
 		c.String(200, "hello")
 	})
 
@@ -382,7 +382,7 @@ func TestCompress_Skipper(t *testing.T) {
 func TestRequestID_Default(t *testing.T) {
 	r := zen.New(":0")
 	r.Use(RequestID())
-	r.Handle("GET /api", func(c *zen.Ctx) {
+	r.GET("/api", func(c *zen.Ctx) {
 		if val, ok := c.Get("request_id"); ok {
 			c.String(200, val.(string))
 		}
@@ -406,7 +406,7 @@ func TestRequestID_Default(t *testing.T) {
 func TestRequestID_ReuseExisting(t *testing.T) {
 	r := zen.New(":0")
 	r.Use(RequestID())
-	r.Handle("GET /api", func(c *zen.Ctx) {
+	r.GET("/api", func(c *zen.Ctx) {
 		if val, ok := c.Get("request_id"); ok {
 			c.String(200, val.(string))
 		}
@@ -427,7 +427,7 @@ func TestRequestID_CustomHeader(t *testing.T) {
 	cfg.Header = "X-Trace-ID"
 	r := zen.New(":0")
 	r.Use(RequestIDWithConfig(cfg))
-	r.Handle("GET /api", func(c *zen.Ctx) {
+	r.GET("/api", func(c *zen.Ctx) {
 		c.String(200, "ok")
 	})
 
@@ -444,7 +444,7 @@ func TestRequestID_CustomHeader(t *testing.T) {
 func TestRateLimiter_Allow(t *testing.T) {
 	r := zen.New(":0")
 	r.Use(RateLimiter())
-	r.Handle("GET /api", func(c *zen.Ctx) {
+	r.GET("/api", func(c *zen.Ctx) {
 		c.String(200, "ok")
 	})
 
@@ -465,7 +465,7 @@ func TestRateLimiter_Exceed(t *testing.T) {
 
 	r := zen.New(":0")
 	r.Use(RateLimiterWithConfig(cfg))
-	r.Handle("GET /api", func(c *zen.Ctx) {
+	r.GET("/api", func(c *zen.Ctx) {
 		c.String(200, "ok")
 	})
 
@@ -498,7 +498,7 @@ func TestRateLimiter_CustomKeyFunc(t *testing.T) {
 
 	r := zen.New(":0")
 	r.Use(RateLimiterWithConfig(cfg))
-	r.Handle("GET /api", func(c *zen.Ctx) {
+	r.GET("/api", func(c *zen.Ctx) {
 		c.String(200, "ok")
 	})
 
@@ -540,11 +540,11 @@ func TestRateLimiter_Skipper(t *testing.T) {
 	r := zen.New(":0")
 	r.Use(RateLimiterWithConfig(cfg))
 	var callCount int
-	r.Handle("GET /public", func(c *zen.Ctx) {
+	r.GET("/public", func(c *zen.Ctx) {
 		callCount++
 		c.String(200, "ok")
 	})
-	r.Handle("GET /private", func(c *zen.Ctx) {
+	r.GET("/private", func(c *zen.Ctx) {
 		callCount++
 		c.String(200, "ok")
 	})
@@ -582,7 +582,7 @@ func TestRateLimiter_Headers(t *testing.T) {
 
 	r := zen.New(":0")
 	r.Use(RateLimiterWithConfig(cfg))
-	r.Handle("GET /api", func(c *zen.Ctx) {
+	r.GET("/api", func(c *zen.Ctx) {
 		c.String(200, "ok")
 	})
 

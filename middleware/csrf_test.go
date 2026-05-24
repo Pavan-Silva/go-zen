@@ -9,11 +9,21 @@ import (
 )
 
 func TestCrossOriginProtection_SafeMethods(t *testing.T) {
+	register := func(r *zen.Engine, method, path string, handler zen.HandlerFunc) {
+		switch method {
+		case "GET":
+			r.GET(path, handler)
+		case "HEAD":
+			r.HEAD(path, handler)
+		case "OPTIONS":
+			r.OPTIONS(path, handler)
+		}
+	}
 	methods := []string{"GET", "HEAD", "OPTIONS"}
 	for _, method := range methods {
 		r := zen.New(":0")
 		r.Use(CrossOriginProtection())
-		r.Handle(method+" /api", func(c *zen.Ctx) { c.String(200, "ok") })
+		register(r, method, "/api", func(c *zen.Ctx) { c.String(200, "ok") })
 
 		req := httptest.NewRequest(method, "/api", nil)
 		w := httptest.NewRecorder()
@@ -26,11 +36,23 @@ func TestCrossOriginProtection_SafeMethods(t *testing.T) {
 }
 
 func TestCrossOriginProtection_UnsafeMethodsNoHeaders(t *testing.T) {
+	register := func(r *zen.Engine, method, path string, handler zen.HandlerFunc) {
+		switch method {
+		case "POST":
+			r.POST(path, handler)
+		case "PUT":
+			r.PUT(path, handler)
+		case "DELETE":
+			r.DELETE(path, handler)
+		case "PATCH":
+			r.PATCH(path, handler)
+		}
+	}
 	methods := []string{"POST", "PUT", "DELETE", "PATCH"}
 	for _, method := range methods {
 		r := zen.New(":0")
 		r.Use(CrossOriginProtection())
-		r.Handle(method+" /api", func(c *zen.Ctx) { c.String(200, "ok") })
+		register(r, method, "/api", func(c *zen.Ctx) { c.String(200, "ok") })
 
 		req := httptest.NewRequest(method, "/api", nil)
 		w := httptest.NewRecorder()
@@ -46,7 +68,7 @@ func TestCrossOriginProtection_UnsafeMethodsNoHeaders(t *testing.T) {
 func TestCrossOriginProtection_SecFetchSiteSameOrigin(t *testing.T) {
 	r := zen.New(":0")
 	r.Use(CrossOriginProtection())
-	r.Handle("POST /api", func(c *zen.Ctx) { c.String(200, "ok") })
+	r.POST("/api", func(c *zen.Ctx) { c.String(200, "ok") })
 
 	req := httptest.NewRequest("POST", "/api", nil)
 	req.Header.Set("Sec-Fetch-Site", "same-origin")
@@ -61,7 +83,7 @@ func TestCrossOriginProtection_SecFetchSiteSameOrigin(t *testing.T) {
 func TestCrossOriginProtection_SecFetchSiteNone(t *testing.T) {
 	r := zen.New(":0")
 	r.Use(CrossOriginProtection())
-	r.Handle("POST /api", func(c *zen.Ctx) { c.String(200, "ok") })
+	r.POST("/api", func(c *zen.Ctx) { c.String(200, "ok") })
 
 	req := httptest.NewRequest("POST", "/api", nil)
 	req.Header.Set("Sec-Fetch-Site", "none")
@@ -76,7 +98,7 @@ func TestCrossOriginProtection_SecFetchSiteNone(t *testing.T) {
 func TestCrossOriginProtection_SecFetchSiteCrossSite(t *testing.T) {
 	r := zen.New(":0")
 	r.Use(CrossOriginProtection())
-	r.Handle("POST /api", func(c *zen.Ctx) { c.String(200, "ok") })
+	r.POST("/api", func(c *zen.Ctx) { c.String(200, "ok") })
 
 	req := httptest.NewRequest("POST", "/api", nil)
 	req.Header.Set("Sec-Fetch-Site", "cross-site")
@@ -91,7 +113,7 @@ func TestCrossOriginProtection_SecFetchSiteCrossSite(t *testing.T) {
 func TestCrossOriginProtection_SecFetchSiteSameSite(t *testing.T) {
 	r := zen.New(":0")
 	r.Use(CrossOriginProtection())
-	r.Handle("POST /api", func(c *zen.Ctx) { c.String(200, "ok") })
+	r.POST("/api", func(c *zen.Ctx) { c.String(200, "ok") })
 
 	req := httptest.NewRequest("POST", "/api", nil)
 	req.Header.Set("Sec-Fetch-Site", "same-site")
@@ -106,7 +128,7 @@ func TestCrossOriginProtection_SecFetchSiteSameSite(t *testing.T) {
 func TestCrossOriginProtection_OriginMatch(t *testing.T) {
 	r := zen.New(":0")
 	r.Use(CrossOriginProtection())
-	r.Handle("POST /api", func(c *zen.Ctx) { c.String(200, "ok") })
+	r.POST("/api", func(c *zen.Ctx) { c.String(200, "ok") })
 
 	req := httptest.NewRequest("POST", "/api", nil)
 	req.Host = "example.com"
@@ -122,7 +144,7 @@ func TestCrossOriginProtection_OriginMatch(t *testing.T) {
 func TestCrossOriginProtection_OriginMismatch(t *testing.T) {
 	r := zen.New(":0")
 	r.Use(CrossOriginProtection())
-	r.Handle("POST /api", func(c *zen.Ctx) { c.String(200, "ok") })
+	r.POST("/api", func(c *zen.Ctx) { c.String(200, "ok") })
 
 	req := httptest.NewRequest("POST", "/api", nil)
 	req.Host = "example.com"
@@ -140,7 +162,7 @@ func TestCrossOriginProtection_TrustedOrigin(t *testing.T) {
 	cfg.TrustedOrigins = []string{"https://trusted.example.com"}
 	r := zen.New(":0")
 	r.Use(CrossOriginProtectionWithConfig(cfg))
-	r.Handle("POST /api", func(c *zen.Ctx) { c.String(200, "ok") })
+	r.POST("/api", func(c *zen.Ctx) { c.String(200, "ok") })
 
 	req := httptest.NewRequest("POST", "/api", nil)
 	req.Host = "app.example.com"
@@ -159,7 +181,7 @@ func TestCrossOriginProtection_BypassPattern(t *testing.T) {
 	cfg.InsecureBypassPatterns = []string{"POST /api"}
 	r := zen.New(":0")
 	r.Use(CrossOriginProtectionWithConfig(cfg))
-	r.Handle("POST /api", func(c *zen.Ctx) { c.String(200, "ok") })
+	r.POST("/api", func(c *zen.Ctx) { c.String(200, "ok") })
 
 	req := httptest.NewRequest("POST", "/api", nil)
 	req.Header.Set("Sec-Fetch-Site", "cross-site")
@@ -178,7 +200,7 @@ func TestCrossOriginProtection_DenyHandler(t *testing.T) {
 	}
 	r := zen.New(":0")
 	r.Use(CrossOriginProtectionWithConfig(cfg))
-	r.Handle("POST /api", func(c *zen.Ctx) { c.String(200, "ok") })
+	r.POST("/api", func(c *zen.Ctx) { c.String(200, "ok") })
 
 	req := httptest.NewRequest("POST", "/api", nil)
 	req.Header.Set("Sec-Fetch-Site", "cross-site")
@@ -200,7 +222,7 @@ func TestCrossOriginProtection_Skipper(t *testing.T) {
 	}
 	r := zen.New(":0")
 	r.Use(CrossOriginProtectionWithConfig(cfg))
-	r.Handle("POST /skip", func(c *zen.Ctx) { c.String(200, "ok") })
+	r.POST("/skip", func(c *zen.Ctx) { c.String(200, "ok") })
 
 	req := httptest.NewRequest("POST", "/skip", nil)
 	req.Header.Set("Sec-Fetch-Site", "cross-site")
@@ -231,7 +253,7 @@ func TestCrossOriginProtection_DefaultConfig(t *testing.T) {
 func TestCrossOriginProtection_SafeMethodWithCrossSite(t *testing.T) {
 	r := zen.New(":0")
 	r.Use(CrossOriginProtection())
-	r.Handle("GET /api", func(c *zen.Ctx) { c.String(200, "ok") })
+	r.GET("/api", func(c *zen.Ctx) { c.String(200, "ok") })
 
 	req := httptest.NewRequest("GET", "/api", nil)
 	req.Header.Set("Sec-Fetch-Site", "cross-site")

@@ -11,7 +11,7 @@ func TestGroup_Handle(t *testing.T) {
 	api := r.Group("/api")
 
 	var captured string
-	api.Handle("GET /users/{id}", func(c *Ctx) {
+	api.GET("/users/{id}", func(c *Ctx) {
 		captured = c.Param("id")
 		c.String(200, captured)
 	})
@@ -51,7 +51,7 @@ func TestGroup_HandleRaw(t *testing.T) {
 		_, _ = w.Write([]byte("raw"))
 	}))
 
-	req := httptest.NewRequest("GET", "/api/raw", nil)
+	req := httptest.NewRequest("GET", "/raw", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -72,7 +72,7 @@ func TestGroup_Middleware(t *testing.T) {
 	})
 
 	var handlerCalled bool
-	api.Handle("GET /test", func(c *Ctx) {
+	api.GET("/test", func(c *Ctx) {
 		handlerCalled = true
 		c.String(200, "ok")
 	})
@@ -96,7 +96,7 @@ func TestGroup_Middleware_ShortCircuit(t *testing.T) {
 	})
 
 	var handlerCalled bool
-	api.Handle("GET /test", func(c *Ctx) {
+	api.GET("/test", func(c *Ctx) {
 		handlerCalled = true
 		c.String(200, "ok")
 	})
@@ -122,7 +122,7 @@ func TestGroup_Use(t *testing.T) {
 	})
 
 	var token string
-	api.Handle("GET /test", func(c *Ctx) {
+	api.GET("/test", func(c *Ctx) {
 		if val, ok := c.Get("auth"); ok {
 			token = val.(string)
 		}
@@ -148,7 +148,7 @@ func TestGroup(t *testing.T) {
 	}
 
 	var captured string
-	admin.Handle("GET /users", func(c *Ctx) {
+	admin.GET("/users", func(c *Ctx) {
 		captured = "admin"
 		c.String(200, "ok")
 	})
@@ -177,7 +177,7 @@ func TestGroup_MiddlewareInheritance(t *testing.T) {
 		c.Next()
 	})
 
-	users.Handle("GET /list", func(c *Ctx) {
+	users.GET("/list", func(c *Ctx) {
 		order = append(order, "handler")
 		c.String(200, "ok")
 	})
@@ -197,34 +197,11 @@ func TestGroup_MiddlewareInheritance(t *testing.T) {
 	}
 }
 
-func TestSplitMethodPath(t *testing.T) {
-	tests := []struct {
-		input    string
-		wantMethod string
-		wantPath  string
-	}{
-		{"GET /users", "GET", "/users"},
-		{"POST /api/v1/users", "POST", "/api/v1/users"},
-		{"/users", "GET", "/users"},
-		{"DELETE /items/{id}", "DELETE", "/items/{id}"},
-	}
-
-	for _, tt := range tests {
-		method, path := splitMethodPath(tt.input)
-		if method != tt.wantMethod {
-			t.Errorf("splitMethodPath(%q) method = %q, want %q", tt.input, method, tt.wantMethod)
-		}
-		if path != tt.wantPath {
-			t.Errorf("splitMethodPath(%q) path = %q, want %q", tt.input, path, tt.wantPath)
-		}
-	}
-}
-
 func BenchmarkGroup(b *testing.B) {
 	r := New(":0")
 	api := r.Group("/api")
 	users := api.Group("/users")
-	users.Handle("GET /list", func(c *Ctx) {
+	users.GET("/list", func(c *Ctx) {
 		c.String(200, "ok")
 	})
 

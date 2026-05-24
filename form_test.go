@@ -23,7 +23,7 @@ type testFormJSONFallback struct {
 func TestBindForm_Valid(t *testing.T) {
 	r := New(":0")
 	var captured testFormUser
-	r.Handle("POST /form", func(c *Ctx) {
+	r.POST("/form", func(c *Ctx) {
 		if err := c.BindForm(&captured); err != nil {
 			c.Error(400, err.Error())
 			return
@@ -59,7 +59,7 @@ func TestBindForm_Valid(t *testing.T) {
 func TestBindForm_JSONTagFallback(t *testing.T) {
 	r := New(":0")
 	var captured testFormJSONFallback
-	r.Handle("POST /form", func(c *Ctx) {
+	r.POST("/form", func(c *Ctx) {
 		if err := c.BindForm(&captured); err != nil {
 			c.Error(400, err.Error())
 			return
@@ -87,7 +87,7 @@ func TestBindForm_JSONTagFallback(t *testing.T) {
 func TestBindForm_InvalidType(t *testing.T) {
 	r := New(":0")
 	var captured testFormUser
-	r.Handle("POST /form", func(c *Ctx) {
+	r.POST("/form", func(c *Ctx) {
 		if err := c.BindForm(&captured); err != nil {
 			c.Error(400, err.Error())
 			return
@@ -111,7 +111,7 @@ func TestBindForm_InvalidType(t *testing.T) {
 func TestBindForm_Validation(t *testing.T) {
 	r := New(":0")
 	var captured testFormUser
-	r.Handle("POST /form", func(c *Ctx) {
+	r.POST("/form", func(c *Ctx) {
 		if err := c.BindForm(&captured); err != nil {
 			c.Error(400, err.Error())
 			return
@@ -140,7 +140,7 @@ func TestBindForm_Validation(t *testing.T) {
 func TestBindForm_InvalidTarget(t *testing.T) {
 	r := New(":0")
 	var captured map[string]string
-	r.Handle("POST /form", func(c *Ctx) {
+	r.POST("/form", func(c *Ctx) {
 		if err := c.BindForm(&captured); err != nil {
 			c.Error(400, err.Error())
 			return
@@ -170,7 +170,7 @@ func TestBindForm_BoolVariants(t *testing.T) {
 
 	r := New(":0")
 	var captured BoolForm
-	r.Handle("POST /bools", func(c *Ctx) {
+	r.POST("/bools", func(c *Ctx) {
 		if err := c.BindForm(&captured); err != nil {
 			c.Error(400, err.Error())
 			return
@@ -204,7 +204,7 @@ func TestBindForm_MissingFields(t *testing.T) {
 
 	r := New(":0")
 	var captured PartialForm
-	r.Handle("POST /form", func(c *Ctx) {
+	r.POST("/form", func(c *Ctx) {
 		if err := c.BindForm(&captured); err != nil {
 			c.Error(400, err.Error())
 			return
@@ -249,7 +249,7 @@ func TestFormError_Unwrap(t *testing.T) {
 func BenchmarkBindForm(b *testing.B) {
 	r := New(":0")
 	var captured testFormUser
-	r.Handle("POST /form", func(c *Ctx) {
+	r.POST("/form", func(c *Ctx) {
 		_ = c.BindForm(&captured)
 		c.String(200, "ok")
 	})
