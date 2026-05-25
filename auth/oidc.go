@@ -12,25 +12,25 @@ import (
 
 // OIDCUserInfo represents the user information returned by the userinfo endpoint.
 type OIDCUserInfo struct {
-	Sub               string `json:"sub"`
-	Name              string `json:"name"`
-	PreferredUsername string `json:"preferred_username"`
-	Email             string `json:"email"`
-	EmailVerified     bool   `json:"email_verified"`
-	GivenName         string `json:"given_name"`
-	FamilyName        string `json:"family_name"`
-	Picture           string `json:"picture"`
-	Locale            string `json:"locale"`
+	Sub               string `json:"sub"`                // Subject identifier (unique user ID).
+	Name              string `json:"name"`               // Full display name of the user.
+	PreferredUsername string `json:"preferred_username"` // Preferred username.
+	Email             string `json:"email"`              // Email address.
+	EmailVerified     bool   `json:"email_verified"`     // Whether the email has been verified.
+	GivenName         string `json:"given_name"`         // Given (first) name.
+	FamilyName        string `json:"family_name"`        // Family (last) name.
+	Picture           string `json:"picture"`            // URL of the user's profile picture.
+	Locale            string `json:"locale"`             // User's locale (e.g. "en-US").
 }
 
 // OIDCAuth implements OIDC authentication using access tokens.
 type OIDCAuth struct {
-	Issuer                string
-	ClientID              string
-	UserInfoEndpoint      string
-	HTTPClient            *http.Client
-	ClaimsFunc            func(claims jwt.MapClaims) *User // UPDATED: Match pointer signature contract
-	SkipTokenVerification bool
+	Issuer                string                           // OIDC issuer URL.
+	ClientID              string                           // Client ID for the application.
+	UserInfoEndpoint      string                           // URL of the userinfo endpoint (defaults to issuer + "/oauth2/v2/userinfo").
+	HTTPClient            *http.Client                     // HTTP client for userinfo requests.
+	ClaimsFunc            func(claims jwt.MapClaims) *User // Optional function to map JWT claims to a User struct.
+	SkipTokenVerification bool                             // When true, skips JWT signature verification of the access token.
 }
 
 // Authenticate validates the access token by calling the userinfo endpoint.

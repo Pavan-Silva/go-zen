@@ -12,8 +12,8 @@ import (
 // BodyLimitConfig holds configuration parameters for the request volume firewall.
 type BodyLimitConfig struct {
 	// Limit can be a raw byte integer value (int/int64) or a string metric suffix like "2M", "250K", "1G".
-	Limit   any
-	Skipper zen.SkipFunc
+	Limit   any          // Maximum request body size.
+	Skipper zen.SkipFunc // Optional function to skip body limiting for certain requests.
 }
 
 // DefaultBodyLimitConfig returns a standard configuration template (Default: 2 Megabytes).

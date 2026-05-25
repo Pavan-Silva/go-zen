@@ -144,11 +144,26 @@ func (l *Logger) Fatal(message string, args ...any) { l.log(FATAL, message, args
 
 var defaultLogger = Default()
 
-func SetDefault(l *Logger)          { defaultLogger = l }
-func SetLevel(level Level)          { defaultLogger.SetLevel(level) }
+// SetDefault sets the global default logger.
+func SetDefault(l *Logger) { defaultLogger = l }
+
+// SetLevel changes the minimum log level on the global logger.
+func SetLevel(level Level) { defaultLogger.SetLevel(level) }
+
+// Trace logs at TRACE level via the global logger.
 func Trace(msg string, args ...any) { defaultLogger.log(TRACE, msg, args...) }
+
+// Debug logs at DEBUG level via the global logger.
 func Debug(msg string, args ...any) { defaultLogger.log(DEBUG, msg, args...) }
-func Info(msg string, args ...any)  { defaultLogger.log(INFO, msg, args...) }
-func Warn(msg string, args ...any)  { defaultLogger.log(WARN, msg, args...) }
+
+// Info logs at INFO level via the global logger.
+func Info(msg string, args ...any) { defaultLogger.log(INFO, msg, args...) }
+
+// Warn logs at WARN level via the global logger.
+func Warn(msg string, args ...any) { defaultLogger.log(WARN, msg, args...) }
+
+// Error logs at ERROR level via the global logger.
 func Error(msg string, args ...any) { defaultLogger.log(ERROR, msg, args...) }
+
+// Fatal logs at FATAL level and calls os.Exit(1) via the global logger.
 func Fatal(msg string, args ...any) { defaultLogger.log(FATAL, msg, args...) }

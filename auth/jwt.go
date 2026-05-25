@@ -12,9 +12,9 @@ import (
 
 // JWTAuth implements JWT token authentication.
 type JWTAuth struct {
-	Secret        []byte
-	SigningMethod jwt.SigningMethod
-	ClaimsFunc    func(claims jwt.MapClaims) *User // UPDATED: Explicit pointer handler signature
+	Secret        []byte                           // Secret key used to verify token signatures.
+	SigningMethod jwt.SigningMethod                // Expected signing method (e.g. jwt.SigningMethodHS256).
+	ClaimsFunc    func(claims jwt.MapClaims) *User // Optional function to map JWT claims to a User pointer.
 }
 
 // Authenticate now satisfies the optimized pointer-based interface contract

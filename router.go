@@ -46,7 +46,7 @@ func DefaultConfig() Config {
 // and owns the http.Server and the Go 1.22+ ServeMux.
 type Engine struct {
 	RouterGroup
-	Mux             *http.ServeMux
+	Mux             *http.ServeMux // Mux is the underlying HTTP request multiplexer.
 	pool            sync.Pool
 	server          *http.Server
 	shutdownTimeout time.Duration

@@ -8,8 +8,8 @@ import (
 
 // BasicAuth implements HTTP Basic Authentication.
 type BasicAuth struct {
-	Realm    string
-	Validate func(username, password string) (*User, error) // UPDATED: Pointer signature contract
+	Realm    string                                         // Optional realm sent in the WWW-Authenticate header.
+	Validate func(username, password string) (*User, error) // Function to validate credentials and return a User.
 }
 
 // Authenticate validates HTTP Basic Credentials.
@@ -38,9 +38,9 @@ func (b *BasicAuth) Challenge(w http.ResponseWriter) {
 
 // APIKeyAuth implements API key authentication via header or query param.
 type APIKeyAuth struct {
-	HeaderName string                          // e.g., "X-API-Key"
-	QueryParam string                          // e.g., "api_key"
-	Validate   func(key string) (*User, error) // UPDATED: Pointer signature contract
+	HeaderName string                          // HTTP header name for the API key (e.g. "X-API-Key").
+	QueryParam string                          // Query parameter name for the API key (e.g. "api_key").
+	Validate   func(key string) (*User, error) // Function to validate the API key and return a User.
 }
 
 // Authenticate validates the incoming token/key parameter.

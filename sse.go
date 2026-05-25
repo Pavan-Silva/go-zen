@@ -9,6 +9,7 @@ import (
 
 const sseContentType = "text/event-stream; charset=utf-8"
 
+// ErrFlusherUnsupported is returned by SSEvent when the ResponseWriter does not implement http.Flusher.
 var ErrFlusherUnsupported = errors.New("sse: SSE requires http.Flusher")
 
 // Pre-allocated static byte slices to completely eliminate runtime string-to-byte allocations.
