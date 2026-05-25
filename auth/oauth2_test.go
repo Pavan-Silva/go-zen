@@ -135,8 +135,8 @@ func TestOAuth2Auth_CustomClaimsFunc(t *testing.T) {
 
 	auth := &OAuth2Auth{
 		TokenIntrospectionEndpoint: introspectServer.URL,
-		ClaimsFunc: func(claims jwt.MapClaims) User {
-			return User{
+		ClaimsFunc: func(claims jwt.MapClaims) *User {
+			return &User{
 				ID:       "custom-" + claims["sub"].(string),
 				Username: "custom-" + claims["username"].(string),
 			}

@@ -9,17 +9,18 @@ import (
 // BasicAuth implements HTTP Basic Authentication.
 type BasicAuth struct {
 	Realm    string
-	Validate func(username, password string) (User, error)
+	Validate func(username, password string) (*User, error) // UPDATED: Pointer signature contract
 }
 
-func (b *BasicAuth) Authenticate(r *http.Request) (User, error) {
+// Authenticate validates HTTP Basic Credentials.
+func (b *BasicAuth) Authenticate(r *http.Request) (*User, error) {
 	if b == nil || b.Validate == nil {
-		return User{}, errors.New("basic auth validator is not configured")
+		return nil, errors.New("basic auth validator is not configured")
 	}
 
 	username, password, ok := r.BasicAuth()
 	if !ok {
-		return User{}, errors.New("missing basic auth")
+		return nil, errors.New("missing basic auth")
 	}
 
 	return b.Validate(username, password)
@@ -37,14 +38,15 @@ func (b *BasicAuth) Challenge(w http.ResponseWriter) {
 
 // APIKeyAuth implements API key authentication via header or query param.
 type APIKeyAuth struct {
-	HeaderName string // e.g., "X-API-Key"
-	QueryParam string // e.g., "api_key"
-	Validate   func(key string) (User, error)
+	HeaderName string                          // e.g., "X-API-Key"
+	QueryParam string                          // e.g., "api_key"
+	Validate   func(key string) (*User, error) // UPDATED: Pointer signature contract
 }
 
-func (a *APIKeyAuth) Authenticate(r *http.Request) (User, error) {
+// Authenticate validates the incoming token/key parameter.
+func (a *APIKeyAuth) Authenticate(r *http.Request) (*User, error) {
 	if a == nil || a.Validate == nil {
-		return User{}, errors.New("api key validator is not configured")
+		return nil, errors.New("api key validator is not configured")
 	}
 
 	var key string
@@ -58,7 +60,7 @@ func (a *APIKeyAuth) Authenticate(r *http.Request) (User, error) {
 	}
 
 	if key == "" {
-		return User{}, errors.New("missing API key")
+		return nil, errors.New("missing API key")
 	}
 
 	return a.Validate(key)

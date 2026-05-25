@@ -11,18 +11,18 @@ import (
 )
 
 type testAuth struct {
-	user User
+	user *User
 	err  error
 }
 
-func (a *testAuth) Authenticate(r *http.Request) (User, error) {
+func (a *testAuth) Authenticate(r *http.Request) (*User, error) {
 	return a.user, a.err
 }
 
 func TestRequireAuth_Success(t *testing.T) {
 	r := zen.New(":0")
 	r.Use(RequireAuth(&testAuth{
-		user: User{ID: "1", Username: "john", Roles: []string{"admin"}},
+		user: &User{ID: "1", Username: "john", Roles: []string{"admin"}},
 	}))
 
 	var captured *User
@@ -98,7 +98,7 @@ func TestRequireAuth_Skip(t *testing.T) {
 func TestRequireRole(t *testing.T) {
 	r := zen.New(":0")
 	r.Use(RequireAuth(&testAuth{
-		user: User{ID: "1", Username: "john", Roles: []string{"admin"}},
+		user: &User{ID: "1", Username: "john", Roles: []string{"admin"}},
 	}))
 	r.Use(RequireRole("admin", nil))
 
@@ -120,7 +120,7 @@ func TestRequireRole(t *testing.T) {
 func TestRequireRole_Failure(t *testing.T) {
 	r := zen.New(":0")
 	r.Use(RequireAuth(&testAuth{
-		user: User{ID: "1", Username: "john", Roles: []string{"user"}},
+		user: &User{ID: "1", Username: "john", Roles: []string{"user"}},
 	}))
 	r.Use(RequireRole("admin", nil))
 
@@ -366,11 +366,11 @@ func TestJWTAuth_Nil(t *testing.T) {
 
 func TestBasicAuth_Authenticate(t *testing.T) {
 	auth := &BasicAuth{
-		Validate: func(username, password string) (User, error) {
+		Validate: func(username, password string) (*User, error) {
 			if username == "john" && password == "secret" {
-				return User{ID: "1", Username: username}, nil
+				return &User{ID: "1", Username: username}, nil
 			}
-			return User{}, &testError{"invalid credentials"}
+			return nil, &testError{"invalid credentials"}
 		},
 	}
 
@@ -388,8 +388,8 @@ func TestBasicAuth_Authenticate(t *testing.T) {
 
 func TestBasicAuth_Invalid(t *testing.T) {
 	auth := &BasicAuth{
-		Validate: func(username, password string) (User, error) {
-			return User{}, &testError{"invalid"}
+		Validate: func(username, password string) (*User, error) {
+			return nil, &testError{"invalid"}
 		},
 	}
 
@@ -404,8 +404,8 @@ func TestBasicAuth_Invalid(t *testing.T) {
 
 func TestBasicAuth_Missing(t *testing.T) {
 	auth := &BasicAuth{
-		Validate: func(username, password string) (User, error) {
-			return User{ID: "1"}, nil
+		Validate: func(username, password string) (*User, error) {
+			return &User{ID: "1"}, nil
 		},
 	}
 
@@ -441,11 +441,11 @@ func TestBasicAuth_Challenge_DefaultRealm(t *testing.T) {
 func TestAPIKeyAuth_Header(t *testing.T) {
 	auth := &APIKeyAuth{
 		HeaderName: "X-API-Key",
-		Validate: func(key string) (User, error) {
+		Validate: func(key string) (*User, error) {
 			if key == "valid-key" {
-				return User{ID: "1"}, nil
+				return &User{ID: "1"}, nil
 			}
-			return User{}, &testError{"invalid key"}
+			return nil, &testError{"invalid key"}
 		},
 	}
 
@@ -464,11 +464,11 @@ func TestAPIKeyAuth_Header(t *testing.T) {
 func TestAPIKeyAuth_QueryParam(t *testing.T) {
 	auth := &APIKeyAuth{
 		QueryParam: "api_key",
-		Validate: func(key string) (User, error) {
+		Validate: func(key string) (*User, error) {
 			if key == "valid-key" {
-				return User{ID: "1"}, nil
+				return &User{ID: "1"}, nil
 			}
-			return User{}, &testError{"invalid key"}
+			return nil, &testError{"invalid key"}
 		},
 	}
 
@@ -486,8 +486,8 @@ func TestAPIKeyAuth_QueryParam(t *testing.T) {
 func TestAPIKeyAuth_Missing(t *testing.T) {
 	auth := &APIKeyAuth{
 		HeaderName: "X-API-Key",
-		Validate: func(key string) (User, error) {
-			return User{ID: "1"}, nil
+		Validate: func(key string) (*User, error) {
+			return &User{ID: "1"}, nil
 		},
 	}
 
@@ -509,7 +509,7 @@ func TestAPIKeyAuth_Nil(t *testing.T) {
 
 func TestSessionAuth(t *testing.T) {
 	store := NewInMemorySessionStore(0) // no expiration
-	store.Set("session123", User{ID: "1", Username: "john"})
+	store.Set("session123", &User{ID: "1", Username: "john"})
 
 	auth := &SessionAuth{
 		CookieName: "session_id",
@@ -560,7 +560,7 @@ func TestSessionAuth_InvalidSession(t *testing.T) {
 
 func TestInMemorySessionStore(t *testing.T) {
 	store := NewInMemorySessionStore(0) // no expiration
-	user := User{ID: "1", Username: "john"}
+	user := &User{ID: "1", Username: "john"}
 
 	store.Set("sess1", user)
 
@@ -580,7 +580,7 @@ func TestInMemorySessionStore(t *testing.T) {
 
 func TestInMemorySessionStore_Expiration(t *testing.T) {
 	store := NewInMemorySessionStore(50 * time.Millisecond)
-	user := User{ID: "1", Username: "john"}
+	user := &User{ID: "1", Username: "john"}
 
 	store.Set("sess1", user)
 
@@ -603,8 +603,8 @@ func TestInMemorySessionStore_Expiration(t *testing.T) {
 func TestInMemorySessionStore_CleanupExpired(t *testing.T) {
 	store := NewInMemorySessionStore(50 * time.Millisecond)
 
-	store.Set("sess1", User{ID: "1"})
-	store.Set("sess2", User{ID: "2"})
+	store.Set("sess1", &User{ID: "1"})
+	store.Set("sess2", &User{ID: "2"})
 
 	// Wait for expiration
 	time.Sleep(100 * time.Millisecond)
@@ -628,7 +628,9 @@ func TestDefaultUserMapper(t *testing.T) {
 	}
 
 	user := DefaultUserMapper(claims)
-
+	if user == nil {
+		t.Fatal("user should not be nil")
+	}
 	if user.ID != "123" {
 		t.Fatalf("id = %q, want %q", user.ID, "123")
 	}
@@ -647,7 +649,9 @@ func TestDefaultUserMapper_NameFallback(t *testing.T) {
 	}
 
 	user := DefaultUserMapper(claims)
-
+	if user == nil {
+		t.Fatal("user should not be nil")
+	}
 	if user.Username != "Jane" {
 		t.Fatalf("username = %q, want %q", user.Username, "Jane")
 	}
@@ -660,7 +664,9 @@ func TestDefaultUserMapper_ScopeRoles(t *testing.T) {
 	}
 
 	user := DefaultUserMapper(claims)
-
+	if user == nil {
+		t.Fatal("user should not be nil")
+	}
 	if len(user.Roles) != 3 {
 		t.Fatalf("roles len = %d, want 3", len(user.Roles))
 	}
@@ -673,7 +679,9 @@ func TestDefaultUserMapper_AuthoritiesRoles(t *testing.T) {
 	}
 
 	user := DefaultUserMapper(claims)
-
+	if user == nil {
+		t.Fatal("user should not be nil")
+	}
 	if len(user.Roles) != 2 {
 		t.Fatalf("roles len = %d, want 2", len(user.Roles))
 	}
@@ -683,7 +691,7 @@ func TestDefaultUserMapper_AuthoritiesRoles(t *testing.T) {
 }
 
 func TestWithAuth(t *testing.T) {
-	auth := &testAuth{user: User{ID: "1"}}
+	auth := &testAuth{user: &User{ID: "1"}}
 
 	var handlerCalled bool
 	handler := WithAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -723,10 +731,10 @@ func TestWithAuth_Failure(t *testing.T) {
 }
 
 func TestWithAuthFunc(t *testing.T) {
-	auth := &testAuth{user: User{ID: "1", Username: "john"}}
+	auth := &testAuth{user: &User{ID: "1", Username: "john"}}
 
-	var capturedUser User
-	handler := WithAuthFunc(func(w http.ResponseWriter, r *http.Request, user User) {
+	var capturedUser *User
+	handler := WithAuthFunc(func(w http.ResponseWriter, r *http.Request, user *User) {
 		capturedUser = user
 	}, auth)
 
@@ -742,7 +750,7 @@ func TestWithAuthFunc(t *testing.T) {
 func TestMiddleware_Deprecated(t *testing.T) {
 	r := zen.New(":0")
 	r.Use(Middleware(&testAuth{
-		user: User{ID: "1"},
+		user: &User{ID: "1"},
 	}, nil))
 
 	r.GET("/test", func(c *zen.Ctx) {
