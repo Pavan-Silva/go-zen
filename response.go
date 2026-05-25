@@ -10,8 +10,13 @@ import (
 
 // setContentType sets the Content-Type header using direct map access,
 // bypassing the canonicalization overhead of http.Header.Set.
+// Only writes when the header is absent, avoiding a heap-allocated
+// []string{ct} on every call when the value is already present.
 func (c *Ctx) setContentType(ct string) {
-	c.Response.Header()["Content-Type"] = []string{ct}
+	h := c.Response.Header()
+	if _, exists := h["Content-Type"]; !exists {
+		h["Content-Type"] = []string{ct}
+	}
 }
 
 // HTML writes an HTML string directly to the response with the given HTTP status.
