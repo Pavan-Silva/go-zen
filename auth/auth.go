@@ -22,10 +22,10 @@ type Authenticator interface {
 
 // User represents authenticated user information.
 type User struct {
-	ID       string
-	Username string
-	Roles    []string
-	Claims   map[string]any
+	ID       string         // Unique identifier for the user.
+	Username string         // Display or login name of the user.
+	Roles    []string       // Roles assigned to the user for authorization.
+	Claims   map[string]any // Arbitrary claims associated with the user.
 }
 
 // HasRole checks if the user has a specific role.

@@ -9,8 +9,8 @@ import (
 
 // SessionAuth implements session-based authentication using cookies.
 type SessionAuth struct {
-	CookieName string
-	Store      SessionStore
+	CookieName string       // Name of the cookie that holds the session ID.
+	Store      SessionStore // Backing store used to look up sessions.
 }
 
 // SessionStore defines the contract using optimized direct pointers

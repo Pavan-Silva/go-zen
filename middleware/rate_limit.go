@@ -13,10 +13,10 @@ import (
 
 // RateLimiterConfig holds configuration for rate limiting middleware.
 type RateLimiterConfig struct {
-	Limit    int
-	Duration time.Duration
-	KeyFunc  func(*http.Request) string
-	Skipper  zen.SkipFunc
+	Limit    int                        // Maximum number of requests allowed within the Duration.
+	Duration time.Duration              // Time window for the rate limit.
+	KeyFunc  func(*http.Request) string // Function to extract a unique key per client (default: client IP).
+	Skipper  zen.SkipFunc               // Optional function to skip rate limiting for certain requests.
 }
 
 // DefaultRateLimiterConfig returns a RateLimiterConfig with sensible defaults.

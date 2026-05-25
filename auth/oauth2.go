@@ -14,23 +14,23 @@ import (
 
 // OAuth2TokenInfo represents token information from introspection.
 type OAuth2TokenInfo struct {
-	Active    bool   `json:"active"`
-	ClientID  string `json:"client_id"`
-	Subject   string `json:"sub"`
-	Username  string `json:"username"`
-	Scope     string `json:"scope"`
-	TokenType string `json:"token_type"`
-	ExpiresAt int64  `json:"exp"`
-	IssuedAt  int64  `json:"iat"`
+	Active    bool   `json:"active"`     // Whether the token is currently active.
+	ClientID  string `json:"client_id"`  // Client identifier for the token.
+	Subject   string `json:"sub"`        // Subject identifier (user ID).
+	Username  string `json:"username"`   // Username associated with the token.
+	Scope     string `json:"scope"`      // Space-separated list of scopes.
+	TokenType string `json:"token_type"` // Type of token (e.g. "Bearer").
+	ExpiresAt int64  `json:"exp"`        // Expiration timestamp (Unix epoch).
+	IssuedAt  int64  `json:"iat"`        // Issuance timestamp (Unix epoch).
 }
 
 // OAuth2Auth implements OAuth2 token introspection authentication.
 type OAuth2Auth struct {
-	TokenIntrospectionEndpoint string
-	ClientID                   string
-	ClientSecret               string
-	HTTPClient                 *http.Client
-	ClaimsFunc                 func(claims jwt.MapClaims) *User // UPDATED: Match the pointer contract signature
+	TokenIntrospectionEndpoint string                           // URL of the OAuth2 token introspection endpoint.
+	ClientID                   string                           // Client ID for authenticating to the introspection endpoint.
+	ClientSecret               string                           // Client secret for authenticating to the introspection endpoint.
+	HTTPClient                 *http.Client                     // HTTP client used for introspection requests.
+	ClaimsFunc                 func(claims jwt.MapClaims) *User // Optional function to convert JWT claims to a User struct.
 }
 
 // Authenticate validates the access token using OAuth2 token introspection.

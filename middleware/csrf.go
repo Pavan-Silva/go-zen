@@ -8,10 +8,10 @@ import (
 
 // CrossOriginProtectionConfig configures the native Go Cross-Origin CSRF protection.
 type CrossOriginProtectionConfig struct {
-	Skipper                zen.SkipFunc
-	TrustedOrigins         []string
-	InsecureBypassPatterns []string
-	DenyHandler            func(c *zen.Ctx)
+	Skipper                zen.SkipFunc     // Optional function to skip CSRF checks for certain requests.
+	TrustedOrigins         []string         // Origins trusted to make cross-origin requests.
+	InsecureBypassPatterns []string         // URL patterns that bypass CSRF protection.
+	DenyHandler            func(c *zen.Ctx) // Custom handler invoked when a request is denied.
 }
 
 // DefaultCrossOriginProtectionConfig returns an empty configuration structure.

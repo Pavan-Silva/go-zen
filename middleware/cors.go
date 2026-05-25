@@ -10,12 +10,12 @@ import (
 
 // CORSConfig holds pre-computed configuration schemas for CORS middleware.
 type CORSConfig struct {
-	AllowedOrigins   []string
-	AllowedMethods   []string
-	AllowedHeaders   []string
-	ExposeHeaders    []string
-	AllowCredentials bool
-	MaxAge           int
+	AllowedOrigins   []string // Origins allowed to make cross-origin requests.
+	AllowedMethods   []string // HTTP methods allowed for CORS requests.
+	AllowedHeaders   []string // HTTP headers allowed in CORS requests.
+	ExposeHeaders    []string // Headers exposed to the client in the response.
+	AllowCredentials bool     // Whether to allow credentials (cookies, auth headers).
+	MaxAge           int      // Seconds the preflight result can be cached.
 
 	// Internal zero-allocation lookup optimization properties
 	allowedOriginsMap map[string]struct{} // Using empty struct{} saves 1 byte per key vs bool
