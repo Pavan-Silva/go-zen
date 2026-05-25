@@ -1,5 +1,3 @@
-# Go
-
 # IDE
 .idea
 .vscode
@@ -9,12 +7,5 @@
 # Build artifacts
 dist/
 
-# Excluded directories
-loadtest/
-example/
-examples/
-
-# Loadtest (legacy)
-loadtest/.build
-loadtest/*.json
-loadtest/go.sum
+# Benchmarks
+benchmarks/
