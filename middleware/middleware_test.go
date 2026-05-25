@@ -356,68 +356,6 @@ func TestCompress_Level(t *testing.T) {
 	}
 }
 
-// Test RequestID middleware
-func TestRequestID_Default(t *testing.T) {
-	r := zen.New(":0")
-	r.Use(RequestID())
-	r.GET("/api", func(c *zen.Ctx) {
-		if val, ok := c.Get("request_id"); ok {
-			c.String(200, val.(string))
-		}
-	})
-
-	req := httptest.NewRequest("GET", "/api", nil)
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != 200 {
-		t.Fatalf("status = %d, want 200", w.Code)
-	}
-	if w.Header().Get("X-Request-ID") == "" {
-		t.Fatal("X-Request-ID header should be set")
-	}
-	if w.Body.String() != w.Header().Get("X-Request-ID") {
-		t.Fatalf("context id != header id")
-	}
-}
-
-func TestRequestID_ReuseExisting(t *testing.T) {
-	r := zen.New(":0")
-	r.Use(RequestID())
-	r.GET("/api", func(c *zen.Ctx) {
-		if val, ok := c.Get("request_id"); ok {
-			c.String(200, val.(string))
-		}
-	})
-
-	req := httptest.NewRequest("GET", "/api", nil)
-	req.Header.Set("X-Request-ID", "existing-id-123")
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Body.String() != "existing-id-123" {
-		t.Fatalf("body = %q, want %q", w.Body.String(), "existing-id-123")
-	}
-}
-
-func TestRequestID_CustomHeader(t *testing.T) {
-	cfg := DefaultRequestIDConfig()
-	cfg.Header = "X-Trace-ID"
-	r := zen.New(":0")
-	r.Use(RequestIDWithConfig(cfg))
-	r.GET("/api", func(c *zen.Ctx) {
-		c.String(200, "ok")
-	})
-
-	req := httptest.NewRequest("GET", "/api", nil)
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Header().Get("X-Trace-ID") == "" {
-		t.Fatal("X-Trace-ID header should be set")
-	}
-}
-
 // Test RateLimiter middleware
 func TestRateLimiter_Allow(t *testing.T) {
 	r := zen.New(":0")

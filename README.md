@@ -151,8 +151,6 @@ app.GET("/admin", authMiddleware, auditLog, func(c *zen.Ctx) {
 - `middleware.BodyLimit` — limits request body size with support for skippers
 - `middleware.Compress()` — gzip compression for clients that accept it
 - `middleware.CompressWithLevel(level)` — gzip with custom compression level
-- `middleware.RequestID()` — injects unique request ID via `X-Request-ID` header
-- `middleware.RequestIDWithConfig(config)` — custom request ID header name
 - `middleware.RateLimiter()` — in-memory rate limiting with token bucket
 - `middleware.RateLimiterWithConfig(config)` — custom rate limit config
 - `middleware.RegisterPprof(r)` — mounts Go pprof endpoints on the router
