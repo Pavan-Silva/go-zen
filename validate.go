@@ -3,9 +3,14 @@ package zen
 import (
 	"reflect"
 	"strings"
+	"sync"
 
 	"github.com/go-playground/validator/v10"
 )
+
+// validateTagCache tracks which struct types have "validate" struct tags,
+// so we can skip the full validator pipeline for types without any rules.
+var validateTagCache sync.Map
 
 // Validator is the interface for request validation.
 // Implement this to plug in any validation library.
@@ -32,6 +37,20 @@ type defaultValidate struct {
 	inst *validator.Validate
 }
 
+// SetValidator sets a custom validator for request validation.
+// Pass nil to disable validation entirely.
+func SetValidator(v Validator) {
+	defaultValidator = v
+}
+
+// DisableAutoValidation disables automatic request validation for BindJSON,
+// BindXML, and BindForm. This is useful for performance-sensitive handlers where
+// the request payload is already trusted or validation is performed elsewhere.
+func DisableAutoValidation() {
+	SetValidator(nil)
+}
+
+// Validate implements the Validator interface for defaultValidate.
 func (v *defaultValidate) Validate(i any) error {
 	rv := reflect.ValueOf(i)
 	if rv.Kind() == reflect.Pointer {
@@ -63,17 +82,20 @@ func newValidator() *validator.Validate {
 	return inst
 }
 
-// SetValidator sets a custom validator for request validation.
-// Pass nil to disable validation entirely.
-func SetValidator(v Validator) {
-	defaultValidator = v
-}
-
-// DisableAutoValidation disables automatic request validation for BindJSON,
-// BindXML, and BindForm. This is useful for performance-sensitive handlers where
-// the request payload is already trusted or validation is performed elsewhere.
-func DisableAutoValidation() {
-	SetValidator(nil)
+// typeHasValidateTags checks whether a struct type has any "validate" struct tags.
+// Results are cached to avoid repeated reflection scans on the hot path.
+func typeHasValidateTags(t reflect.Type) bool {
+	if v, ok := validateTagCache.Load(t); ok {
+		return v.(bool)
+	}
+	for i := 0; i < t.NumField(); i++ {
+		if t.Field(i).Tag.Get("validate") != "" {
+			validateTagCache.Store(t, true)
+			return true
+		}
+	}
+	validateTagCache.Store(t, false)
+	return false
 }
 
 // Validate runs struct validation on dest using the configured Validator.
@@ -82,5 +104,18 @@ func Validate(dest any) error {
 	if defaultValidator == nil {
 		return nil
 	}
+
+	// Only skip tag-based validation for the default built-in validator.
+	// Custom validators may have logic beyond struct tags.
+	if _, ok := defaultValidator.(*defaultValidate); ok {
+		rv := reflect.ValueOf(dest)
+		if rv.Kind() == reflect.Pointer {
+			rv = rv.Elem()
+		}
+		if rv.Kind() == reflect.Struct && !typeHasValidateTags(rv.Type()) {
+			return nil
+		}
+	}
+
 	return defaultValidator.Validate(dest)
 }
