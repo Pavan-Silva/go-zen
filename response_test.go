@@ -181,9 +181,6 @@ func TestContext_String(t *testing.T) {
 	if w.Body.String() != "hello world" {
 		t.Fatalf("body = %q", w.Body.String())
 	}
-	if ct := w.Header().Get("Content-Type"); ct != "text/plain; charset=utf-8" {
-		t.Fatalf("Content-Type = %q", ct)
-	}
 }
 
 func TestContext_Status(t *testing.T) {

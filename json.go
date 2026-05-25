@@ -25,9 +25,8 @@ func (c *Ctx) BindJSON(dest any) error {
 // Sets the "Content-Type" header to "application/json" automatically.
 // Write errors are handled and logged safely via internal system loggers.
 func (c *Ctx) JSON(status int, data any) {
-	c.Response.Header().Set("Content-Type", "application/json")
+	c.setContentType("application/json")
 	c.Response.WriteHeader(status)
-
 	if err := json.NewEncoder(c.Response).Encode(data); err != nil {
 		logger.Error("HTTP: JSON encode error: %v", err)
 	}
