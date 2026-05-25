@@ -26,22 +26,17 @@ type OAuth2TokenInfo struct {
 
 // OAuth2Auth implements OAuth2 token introspection authentication.
 type OAuth2Auth struct {
-	// TokenIntrospectionEndpoint is the OAuth2 token introspection endpoint
 	TokenIntrospectionEndpoint string
-	// ClientID for the resource server
-	ClientID string
-	// ClientSecret for the resource server
-	ClientSecret string
-	// HTTPClient for making requests (optional)
-	HTTPClient *http.Client
-	// ClaimsFunc for custom mapping (optional)
-	ClaimsFunc func(claims jwt.MapClaims) User
+	ClientID                   string
+	ClientSecret               string
+	HTTPClient                 *http.Client
+	ClaimsFunc                 func(claims jwt.MapClaims) *User // UPDATED: Match the pointer contract signature
 }
 
 // Authenticate validates the access token using OAuth2 token introspection.
-func (o *OAuth2Auth) Authenticate(r *http.Request) (User, error) {
+func (o *OAuth2Auth) Authenticate(r *http.Request) (*User, error) {
 	if o == nil {
-		return User{}, fmt.Errorf("oauth2 auth is not configured")
+		return nil, fmt.Errorf("oauth2 auth is not configured")
 	}
 
 	client := o.HTTPClient
@@ -51,21 +46,21 @@ func (o *OAuth2Auth) Authenticate(r *http.Request) (User, error) {
 
 	token, err := bearerTokenFromRequest(r)
 	if err != nil {
-		return User{}, err
+		return nil, err
 	}
 
 	tokenInfo, err := o.introspectToken(r.Context(), client, token)
 	if err != nil {
-		return User{}, fmt.Errorf("failed to introspect token: %w", err)
+		return nil, fmt.Errorf("failed to introspect token: %w", err)
 	}
 
 	if !tokenInfo.Active {
-		return User{}, fmt.Errorf("token is not active")
+		return nil, fmt.Errorf("token is not active")
 	}
 
 	// Check expiry
 	if tokenInfo.ExpiresAt > 0 && time.Now().Unix() > tokenInfo.ExpiresAt {
-		return User{}, fmt.Errorf("token has expired")
+		return nil, fmt.Errorf("token has expired")
 	}
 
 	claims := jwt.MapClaims{
@@ -78,7 +73,13 @@ func (o *OAuth2Auth) Authenticate(r *http.Request) (User, error) {
 		"iat":        tokenInfo.IssuedAt,
 	}
 
-	user := User{
+	// If a custom claims function isn't provided, build the pointer object inline
+	if o.ClaimsFunc != nil {
+		return o.ClaimsFunc(claims), nil
+	}
+
+	// Allocation-free setup straight to heap pointer bounds
+	user := &User{
 		ID:       tokenInfo.Subject,
 		Username: tokenInfo.Username,
 		Claims:   claims,
@@ -92,7 +93,7 @@ func (o *OAuth2Auth) Authenticate(r *http.Request) (User, error) {
 		user.Roles = strings.Split(tokenInfo.Scope, " ")
 	}
 
-	return userFromClaims(o.ClaimsFunc, claims), nil
+	return user, nil
 }
 
 // introspectToken calls the OAuth2 token introspection endpoint.

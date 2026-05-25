@@ -2,7 +2,6 @@ package auth
 
 import (
 	"net/http"
-	"strings"
 
 	"github.com/Pavan-Silva/go-zen"
 )
@@ -23,8 +22,9 @@ func SkipPaths(paths ...string) zen.SkipFunc {
 func SkipPrefixes(prefixes ...string) zen.SkipFunc {
 	normalized := make([]string, 0, len(prefixes))
 	for _, p := range prefixes {
-		if p != "" && p != "/" {
-			p = strings.TrimSuffix(p, "/")
+		// Clean trailing slash up-front once during setup
+		for len(p) > 1 && p[len(p)-1] == '/' {
+			p = p[:len(p)-1]
 		}
 		if p != "" {
 			normalized = append(normalized, p)
@@ -33,9 +33,23 @@ func SkipPrefixes(prefixes ...string) zen.SkipFunc {
 
 	return func(r *http.Request) bool {
 		path := r.URL.Path
+		pathLen := len(path)
+
 		for _, prefix := range normalized {
-			if prefix == "/" || path == prefix || strings.HasPrefix(path, prefix+"/") {
+			if prefix == "/" {
 				return true
+			}
+
+			prefixLen := len(prefix)
+			if pathLen < prefixLen {
+				continue
+			}
+
+			// Slice boundary check: verifies match if exact match OR matched as a distinct route directory
+			if path[:prefixLen] == prefix {
+				if pathLen == prefixLen || path[prefixLen] == '/' {
+					return true
+				}
 			}
 		}
 		return false

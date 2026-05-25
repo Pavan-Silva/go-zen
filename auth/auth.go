@@ -9,7 +9,6 @@ import (
 )
 
 // defaultAuthHTTPClient is the shared HTTP client used by auth providers
-// (OAuth2, OIDC) when no custom client is configured.
 var defaultAuthHTTPClient = &http.Client{Timeout: 10 * time.Second}
 
 // Authenticator defines the interface for authentication logic.
@@ -18,7 +17,7 @@ type Authenticator interface {
 	// Authenticate validates the request and returns user info or an error.
 	// For HTTP: called in middleware with the zen.Ctx.
 	// For WS/SSE: called with the http.Request.
-	Authenticate(r *http.Request) (User, error)
+	Authenticate(r *http.Request) (*User, error)
 }
 
 // User represents authenticated user information.
@@ -30,19 +29,11 @@ type User struct {
 }
 
 // HasRole checks if the user has a specific role.
-func (u User) HasRole(role string) bool {
+func (u *User) HasRole(role string) bool {
 	return slices.Contains(u.Roles, role)
 }
 
 // RequireAuth creates authentication middleware.
-// It stores the authenticated User in the zen.Ctx under the key "user".
-// On failure, it sends a 401 response (customizable via WithOnError option).
-// Optional skip functions bypass authentication for selected routes.
-//
-// Example:
-//
-//	r.Use(auth.RequireAuth(jwtAuth))
-//	r.Use(auth.RequireAuth(jwtAuth, auth.SkipPaths("/health")))
 func RequireAuth(auth Authenticator, skip ...zen.SkipFunc) zen.HandlerFunc {
 	var skipper zen.SkipFunc
 	if len(skip) > 0 {
@@ -52,7 +43,6 @@ func RequireAuth(auth Authenticator, skip ...zen.SkipFunc) zen.HandlerFunc {
 }
 
 // Middleware creates HTTP middleware that authenticates requests using the provided Authenticator.
-// A custom error handler can be provided for unauthorized requests (nil sends 401).
 func Middleware(auth Authenticator, onError func(*zen.Ctx)) zen.HandlerFunc {
 	return MiddlewareWithSkipper(auth, onError, nil)
 }
@@ -81,7 +71,7 @@ func MiddlewareWithSkipper(auth Authenticator, onError func(*zen.Ctx), skip zen.
 			return
 		}
 
-		c.Set("user", &user)
+		c.Set("user", user)
 		c.Next()
 	}
 }
@@ -124,7 +114,6 @@ func GetUser(c *zen.Ctx) *User {
 }
 
 // WithAuth wraps an http.Handler to require authentication before serving.
-// Returns 401 if authentication fails. For use with WebSocket upgrades.
 func WithAuth(handler http.Handler, auth Authenticator) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if _, err := auth.Authenticate(r); err != nil {
@@ -136,8 +125,7 @@ func WithAuth(handler http.Handler, auth Authenticator) http.Handler {
 }
 
 // WithAuthFunc wraps an http.HandlerFunc to require authentication before serving.
-// The authenticated User is passed to the handler. For use with WebSocket upgrades.
-func WithAuthFunc(handler func(w http.ResponseWriter, r *http.Request, user User), auth Authenticator) http.Handler {
+func WithAuthFunc(handler func(w http.ResponseWriter, r *http.Request, user *User), auth Authenticator) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		user, err := auth.Authenticate(r)
 		if err != nil {

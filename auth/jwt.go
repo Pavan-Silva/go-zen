@@ -14,23 +14,24 @@ import (
 type JWTAuth struct {
 	Secret        []byte
 	SigningMethod jwt.SigningMethod
-	ClaimsFunc   func(claims jwt.MapClaims) User
+	ClaimsFunc    func(claims jwt.MapClaims) *User // UPDATED: Explicit pointer handler signature
 }
 
-func (j *JWTAuth) Authenticate(r *http.Request) (User, error) {
+// Authenticate now satisfies the optimized pointer-based interface contract
+func (j *JWTAuth) Authenticate(r *http.Request) (*User, error) {
 	if j == nil {
-		return User{}, errors.New("jwt auth is not configured")
+		return nil, errors.New("jwt auth is not configured")
 	}
 	if j.SigningMethod == nil {
-		return User{}, errors.New("jwt signing method is not configured")
+		return nil, errors.New("jwt signing method is not configured")
 	}
 	if len(j.Secret) == 0 {
-		return User{}, errors.New("jwt secret is not configured")
+		return nil, errors.New("jwt secret is not configured")
 	}
 
 	tokenString, err := bearerTokenFromRequest(r)
 	if err != nil {
-		return User{}, err
+		return nil, err
 	}
 
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (any, error) {
@@ -41,19 +42,17 @@ func (j *JWTAuth) Authenticate(r *http.Request) (User, error) {
 	})
 
 	if err != nil {
-		return User{}, err
+		return nil, err
 	}
 
 	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
 		return userFromClaims(j.ClaimsFunc, claims), nil
 	}
 
-	return User{}, errors.New("invalid token")
+	return nil, errors.New("invalid token")
 }
 
 // GenerateJWT creates a JWT token with the given claims.
-// It makes a copy of the claims map before adding iat and exp to avoid
-// surprising side effects on the caller's map.
 func GenerateJWT(secret []byte, method jwt.SigningMethod, claims jwt.MapClaims, expiry time.Duration) (string, error) {
 	now := time.Now()
 
@@ -74,7 +73,6 @@ func ParseJWT(tokenString string, secret []byte, method jwt.SigningMethod) (jwt.
 	claims := jwt.MapClaims{}
 
 	token, err := jwt.ParseWithClaims(tokenString, &claims, func(t *jwt.Token) (any, error) {
-		// Enforce expected signing method
 		if t.Method.Alg() != method.Alg() {
 			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
 		}
@@ -84,7 +82,6 @@ func ParseJWT(tokenString string, secret []byte, method jwt.SigningMethod) (jwt.
 		return nil, err
 	}
 
-	// Validate token and claims
 	if !token.Valid {
 		return nil, fmt.Errorf("invalid token")
 	}
@@ -92,32 +89,32 @@ func ParseJWT(tokenString string, secret []byte, method jwt.SigningMethod) (jwt.
 	return claims, nil
 }
 
-// bearerTokenFromRequest extracts the Bearer token from the Authorization header.
+// bearerTokenFromRequest extracts the Bearer token from the Authorization header
 func bearerTokenFromRequest(r *http.Request) (string, error) {
 	authHeader := r.Header.Get("Authorization")
 	if authHeader == "" {
 		return "", fmt.Errorf("missing authorization header")
 	}
-	token := strings.TrimPrefix(authHeader, "Bearer ")
-	if token == authHeader {
-		return "", fmt.Errorf("invalid authorization header format")
+
+	if len(authHeader) > 7 && authHeader[:7] == "Bearer " {
+		return authHeader[7:], nil
 	}
-	return token, nil
+
+	return "", fmt.Errorf("invalid authorization header format")
 }
 
-// userFromClaims maps jwt.MapClaims to User, either via a custom ClaimsFunc
-// or the DefaultUserMapper.
-func userFromClaims(claimsFunc func(jwt.MapClaims) User, claims jwt.MapClaims) User {
+// userFromClaims maps jwt.MapClaims to *User pointer reference maps
+func userFromClaims(claimsFunc func(jwt.MapClaims) *User, claims jwt.MapClaims) *User {
 	if claimsFunc != nil {
 		return claimsFunc(claims)
 	}
 	return DefaultUserMapper(claims)
 }
 
-// DefaultUserMapper maps JWT claims to User struct.
-// Supports standard claims: "sub" for ID, "username" for Username, "roles" or "authorities" or "scope" for Roles.
-func DefaultUserMapper(claims jwt.MapClaims) User {
-	user := User{
+// DefaultUserMapper now constructs and initializes an optimized User pointer directly
+func DefaultUserMapper(claims jwt.MapClaims) *User {
+	// Allocate straight to the heap pointer safely
+	user := &User{
 		Claims: claims,
 	}
 

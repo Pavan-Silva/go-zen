@@ -140,8 +140,8 @@ func TestOIDCAuth_CustomClaimsFunc(t *testing.T) {
 
 	auth := &OIDCAuth{
 		UserInfoEndpoint: userinfoServer.URL,
-		ClaimsFunc: func(claims jwt.MapClaims) User {
-			return User{
+		ClaimsFunc: func(claims jwt.MapClaims) *User {
+			return &User{
 				ID:       "oidc-" + claims["sub"].(string),
 				Username: claims["name"].(string),
 			}
