@@ -8,10 +8,14 @@ import (
 	"github.com/Pavan-Silva/go-zen/logger"
 )
 
+// setContentType sets the Content-Type header using direct map access,
+// bypassing the canonicalization overhead of http.Header.Set.
+func (c *Ctx) setContentType(ct string) {
+	c.Response.Header()["Content-Type"] = []string{ct}
+}
+
 // HTML writes an HTML string directly to the response with the given HTTP status.
 // The response Content-Type header is automatically set to "text/html; charset=utf-8".
-// This method does not perform any encoding or escaping - the HTML should be properly
-// formatted and escaped by the caller.
 //
 // Write errors are logged but not returned (they indicate connection issues).
 //
@@ -19,7 +23,7 @@ import (
 //
 //	c.HTML(http.StatusOK, "<h1>Hello World</h1>")
 func (c *Ctx) HTML(status int, html string) {
-	c.Response.Header().Set("Content-Type", "text/html; charset=utf-8")
+	c.setContentType("text/html; charset=utf-8")
 	c.Response.WriteHeader(status)
 	if _, err := io.WriteString(c.Response, html); err != nil {
 		logger.Error("HTTP: HTML response write error: %v", err)
@@ -27,8 +31,6 @@ func (c *Ctx) HTML(status int, html string) {
 }
 
 // String writes a plain text string directly to the response with the given HTTP status.
-// The response Content-Type header is automatically set to "text/plain; charset=utf-8".
-// This method is useful for returning plain text responses like API keys, tokens, or simple messages.
 //
 // Write errors are logged but not returned (they indicate connection issues).
 //
@@ -36,7 +38,6 @@ func (c *Ctx) HTML(status int, html string) {
 //
 //	c.String(http.StatusOK, "Hello World")
 func (c *Ctx) String(status int, text string) {
-	c.Response.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	c.Response.WriteHeader(status)
 	if _, err := io.WriteString(c.Response, text); err != nil {
 		logger.Error("HTTP: string response write error: %v", err)
@@ -44,7 +45,6 @@ func (c *Ctx) String(status int, text string) {
 }
 
 // Status writes a response header with no body and the given HTTP status.
-// This matches Gin's c.Status() behavior.
 //
 // Example:
 //
@@ -109,7 +109,7 @@ func (c *Ctx) Inline(filePath string) {
 //	data := []byte("id,name\n1,John Doe")
 //	c.Blob(http.StatusOK, "text/csv", data)
 func (c *Ctx) Blob(status int, contentType string, data []byte) {
-	c.Response.Header().Set("Content-Type", contentType)
+	c.setContentType(contentType)
 	c.Response.WriteHeader(status)
 	if _, err := c.Response.Write(data); err != nil {
 		logger.Error("HTTP: blob response write error: %v", err)
@@ -128,7 +128,7 @@ func (c *Ctx) Blob(status int, contentType string, data []byte) {
 //	defer f.Close()
 //	return c.Stream(http.StatusOK, "image/png", f)
 func (c *Ctx) Stream(status int, contentType string, body io.Reader) error {
-	c.Response.Header().Set("Content-Type", contentType)
+	c.setContentType(contentType)
 	c.Response.WriteHeader(status)
 	if _, err := io.Copy(c.Response, body); err != nil {
 		logger.Error("HTTP: response stream error: %v", err)
