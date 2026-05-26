@@ -49,7 +49,7 @@ func (c *Ctx) String(status int, text string) {
 	}
 }
 
-// Status writes a response header with no body and the given HTTP status.
+// Status writes a response header with no-body and the given HTTP status.
 //
 // Example:
 //

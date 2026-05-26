@@ -13,12 +13,12 @@ type SessionAuth struct {
 	Store      SessionStore // Backing store used to look up sessions.
 }
 
-// SessionStore defines the contract using optimized direct pointers
+// SessionStore looks up sessions by ID.
 type SessionStore interface {
 	Get(sessionID string) (*User, error)
 }
 
-// Authenticate validates the access token via session cookie tracking
+// Authenticate validates the session cookie and returns the user.
 func (s *SessionAuth) Authenticate(r *http.Request) (*User, error) {
 	if s == nil || s.Store == nil {
 		return nil, errors.New("session store is not configured")
@@ -35,7 +35,7 @@ func (s *SessionAuth) Authenticate(r *http.Request) (*User, error) {
 	return s.Store.Get(cookie.Value)
 }
 
-// sessionEntry holds an optimized pointer reference to the user details
+// sessionEntry holds a user session with an expiration time.
 type sessionEntry struct {
 	user      *User
 	expiresAt time.Time
@@ -73,7 +73,7 @@ func (s *InMemorySessionStore) Get(sessionID string) (*User, error) {
 	return entry.user, nil
 }
 
-// Set stores a session using a pointer reference.
+// Set stores a session for the given session ID.
 func (s *InMemorySessionStore) Set(sessionID string, user *User) {
 	s.mu.Lock()
 	var expiresAt time.Time

@@ -17,6 +17,7 @@ func (c *Ctx) BindJSON(dest any) error {
 	if err := dec.Decode(dest); err != nil {
 		return fmt.Errorf("JSON decode: %w", err)
 	}
+
 	return Validate(dest)
 }
 
@@ -27,6 +28,7 @@ func (c *Ctx) BindJSON(dest any) error {
 func (c *Ctx) JSON(status int, data any) {
 	c.setContentType("application/json")
 	c.Response.WriteHeader(status)
+
 	if err := json.NewEncoder(c.Response).Encode(data); err != nil {
 		logger.Error("HTTP: JSON encode error: %v", err)
 	}

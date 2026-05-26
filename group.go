@@ -42,39 +42,43 @@ func (g *RouterGroup) HandleRaw(pattern string, handler http.Handler) {
 // Prefix returns the full path prefix of this group.
 func (g *RouterGroup) Prefix() string { return g.prefix }
 
-// Convenience methods for common HTTP methods.
-// Uses a fully variadic handlers list matching Gin's signature design.
-// The final element in the variadic slice is treated as the main endpoint handler.
+// GET registers a handler for the GET method.
+// The final element in handlers is the main handler; preceding elements are middleware.
 func (g *RouterGroup) GET(path string, handlers ...HandlerFunc) {
 	g.registerRoute("GET", g.prefix+path, handlers)
 }
 
+// POST registers a handler for the POST method.
 func (g *RouterGroup) POST(path string, handlers ...HandlerFunc) {
 	g.registerRoute("POST", g.prefix+path, handlers)
 }
 
+// PUT registers a handler for the PUT method.
 func (g *RouterGroup) PUT(path string, handlers ...HandlerFunc) {
 	g.registerRoute("PUT", g.prefix+path, handlers)
 }
 
+// DELETE registers a handler for the DELETE method.
 func (g *RouterGroup) DELETE(path string, handlers ...HandlerFunc) {
 	g.registerRoute("DELETE", g.prefix+path, handlers)
 }
 
+// PATCH registers a handler for the PATCH method.
 func (g *RouterGroup) PATCH(path string, handlers ...HandlerFunc) {
 	g.registerRoute("PATCH", g.prefix+path, handlers)
 }
 
+// HEAD registers a handler for the HEAD method.
 func (g *RouterGroup) HEAD(path string, handlers ...HandlerFunc) {
 	g.registerRoute("HEAD", g.prefix+path, handlers)
 }
 
+// OPTIONS registers a handler for the OPTIONS method.
 func (g *RouterGroup) OPTIONS(path string, handlers ...HandlerFunc) {
 	g.registerRoute("OPTIONS", g.prefix+path, handlers)
 }
 
-// Unified route compiler and executor block.
-// Extracts the final handler from the variadic slice and appends route-specific middleware.
+// registerRoute registers a route with the given method, path, and handlers.
 func (g *RouterGroup) registerRoute(method, fullPath string, handlers []HandlerFunc) {
 	if len(handlers) == 0 {
 		panic("zen: route registered with zero handlers")
@@ -93,7 +97,7 @@ func (g *RouterGroup) registerRoute(method, fullPath string, handlers []HandlerF
 	copy(chain[len(g.middleware):], routeMiddleware)
 	chain[totalLen-1] = handler
 
-	var finalHandler HandlerFunc = chain[len(chain)-1]
+	var finalHandler = chain[len(chain)-1]
 
 	// Compile the chain backwards into a nested closure chain
 	for i := len(chain) - 2; i >= 0; i-- {
@@ -116,7 +120,7 @@ func (g *RouterGroup) registerRoute(method, fullPath string, handlers []HandlerF
 	})
 }
 
-// ensureLeadingSlash sanitizes strings to guarantee an HTTP path compliance scheme.
+// ensureLeadingSlash adds a leading slash if the prefix does not have one.
 func ensureLeadingSlash(prefix string) string {
 	if prefix == "" {
 		return "/"

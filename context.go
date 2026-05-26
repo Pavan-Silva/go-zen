@@ -20,8 +20,7 @@ type Ctx struct {
 	next     HandlerFunc
 }
 
-// reset reinitializes the Ctx properties efficiently without sacrificing memory allocations.
-// Leverages clear() to keep backing map bucket memories intact, bypassing reallocations.
+// reset reinitializes Ctx for the given request and response.
 func (c *Ctx) reset(w http.ResponseWriter, r *http.Request) {
 	c.Response = w
 	c.Request = r
@@ -32,27 +31,24 @@ func (c *Ctx) reset(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// Next advances execution to the sequential middleware link inside the pre-compiled chain.
+// Next calls the next handler in the chain.
 func (c *Ctx) Next() {
 	if c.next != nil {
 		c.next(c)
 	}
 }
 
-// Set stores a key-value value inside the metadata context.
-// Lazily allocates the internal map space on first use to prevent useless allocations on clean routes.
+// Set stores a value in the context. The internal map is allocated on first use.
 func (c *Ctx) Set(key string, val any) {
 	c.mu.Lock()
 	if c.store == nil {
-		c.store = make(map[string]any, 4) // Tiny size optimization window limits footprint
+		c.store = make(map[string]any, 4)
 	}
 	c.store[key] = val
 	c.mu.Unlock()
 }
 
-// Get retrieves a key metadata element from the internal store.
-// Fast Path: Directly returns zero values if the backing map was never initialized,
-// entirely sidestepping RLock contention overhead on hot routes.
+// Get retrieves a value from the context store.
 func (c *Ctx) Get(key string) (any, bool) {
 	if c.store == nil {
 		return nil, false
@@ -63,7 +59,7 @@ func (c *Ctx) Get(key string) (any, bool) {
 	return val, ok
 }
 
-// Keys returns a thread-safe deep copy of all key-value entries inside the metadata store.
+// Keys returns a copy of all key-value entries in the store.
 func (c *Ctx) Keys() map[string]any {
 	if len(c.store) == 0 {
 		return nil
@@ -75,8 +71,7 @@ func (c *Ctx) Keys() map[string]any {
 	return cp
 }
 
-// Copy returns a new separate Ctx with a deep copy of the active store map.
-// The clone is uniquely heap-allocated and NOT pooled—the caller takes absolute ownership.
+// Copy returns a new Ctx with a deep copy of the store.
 func (c *Ctx) Copy() *Ctx {
 	cp := &Ctx{
 		Response: c.Response,
@@ -91,13 +86,13 @@ func (c *Ctx) Copy() *Ctx {
 	return cp
 }
 
-// FromContext extracts a pooled zen Ctx container out of a standard context.Context.
+// FromContext extracts a Ctx from a context.Context.
 func FromContext(ctx context.Context) (*Ctx, bool) {
 	c, ok := ctx.Value(zenCtxKey{}).(*Ctx)
 	return c, ok
 }
 
-// FromRequest extracts a pooled zen Ctx container out of an incoming http.Request reference.
+// FromRequest extracts a Ctx from an http.Request.
 func FromRequest(r *http.Request) (*Ctx, bool) {
 	return FromContext(r.Context())
 }

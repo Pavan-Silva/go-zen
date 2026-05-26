@@ -17,7 +17,7 @@ type JWTAuth struct {
 	ClaimsFunc    func(claims jwt.MapClaims) *User // Optional function to map JWT claims to a User pointer.
 }
 
-// Authenticate now satisfies the optimized pointer-based interface contract
+// Authenticate extracts and validates a JWT token from the request.
 func (j *JWTAuth) Authenticate(r *http.Request) (*User, error) {
 	if j == nil {
 		return nil, errors.New("jwt auth is not configured")
@@ -103,7 +103,7 @@ func bearerTokenFromRequest(r *http.Request) (string, error) {
 	return "", fmt.Errorf("invalid authorization header format")
 }
 
-// userFromClaims maps jwt.MapClaims to *User pointer reference maps
+// userFromClaims maps JWT claims to a User using the optional claims function.
 func userFromClaims(claimsFunc func(jwt.MapClaims) *User, claims jwt.MapClaims) *User {
 	if claimsFunc != nil {
 		return claimsFunc(claims)
@@ -111,9 +111,8 @@ func userFromClaims(claimsFunc func(jwt.MapClaims) *User, claims jwt.MapClaims) 
 	return DefaultUserMapper(claims)
 }
 
-// DefaultUserMapper now constructs and initializes an optimized User pointer directly
+// DefaultUserMapper constructs a User from JWT claims.
 func DefaultUserMapper(claims jwt.MapClaims) *User {
-	// Allocate straight to the heap pointer safely
 	user := &User{
 		Claims: claims,
 	}
