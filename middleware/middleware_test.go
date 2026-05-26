@@ -11,6 +11,16 @@ import (
 	"github.com/Pavan-Silva/go-zen"
 )
 
+func TestDefaultBodyLimitConfig(t *testing.T) {
+	cfg := DefaultBodyLimitConfig()
+	if cfg.Limit != "2M" {
+		t.Fatalf("Limit = %v, want %q", cfg.Limit, "2M")
+	}
+	if cfg.Skipper != nil {
+		t.Fatal("Skipper should be nil by default")
+	}
+}
+
 func TestCORS_Default(t *testing.T) {
 	r := zen.New(":0")
 	r.Use(CORS(DefaultCORSConfig()))
