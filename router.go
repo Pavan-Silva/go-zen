@@ -169,4 +169,6 @@ func (e *Engine) gracefulShutdown() {
 	if err := e.server.Shutdown(ctx); err != nil {
 		logger.Error("Server shutdown error: %v", err)
 	}
+
+	signal.Stop(quit)
 }
