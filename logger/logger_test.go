@@ -2,6 +2,8 @@ package logger
 
 import (
 	"bytes"
+	"os"
+	"os/exec"
 	"strings"
 	"testing"
 )
@@ -82,7 +84,60 @@ func TestLevelString(t *testing.T) {
 }
 
 func TestSetLevel(t *testing.T) {
-	t.Skip("slog doesn't support dynamic level changes")
+	buf := &bytes.Buffer{}
+	l := New(INFO, buf)
+
+	l.Info("visible")
+	if !strings.Contains(buf.String(), "visible") {
+		t.Fatal("info message should be visible")
+	}
+
+	buf.Reset()
+	l.Debug("hidden")
+	if strings.Contains(buf.String(), "hidden") {
+		t.Fatal("debug should be hidden at INFO level")
+	}
+
+	l.SetLevel(DEBUG)
+	buf.Reset()
+	l.Debug("now visible")
+	if !strings.Contains(buf.String(), "now visible") {
+		t.Fatal("debug should be visible after SetLevel(DEBUG)")
+	}
+}
+
+func TestEnabled(t *testing.T) {
+	l := New(INFO, &bytes.Buffer{})
+
+	if l.Enabled(TRACE) {
+		t.Fatal("TRACE should not be enabled at INFO level")
+	}
+	if l.Enabled(DEBUG) {
+		t.Fatal("DEBUG should not be enabled at INFO level")
+	}
+	if !l.Enabled(INFO) {
+		t.Fatal("INFO should be enabled at INFO level")
+	}
+	if !l.Enabled(WARN) {
+		t.Fatal("WARN should be enabled at INFO level")
+	}
+	if !l.Enabled(ERROR) {
+		t.Fatal("ERROR should be enabled at INFO level")
+	}
+	if !l.Enabled(FATAL) {
+		t.Fatal("FATAL should be enabled at INFO level")
+	}
+
+	l.SetLevel(TRACE)
+	if !l.Enabled(TRACE) {
+		t.Fatal("TRACE should be enabled at TRACE level")
+	}
+}
+
+func TestEnabled_DefaultLogger(t *testing.T) {
+	if !Default().Enabled(INFO) {
+		t.Fatal("default logger should have INFO enabled")
+	}
 }
 
 func TestGlobalFunctions(t *testing.T) {
@@ -100,6 +155,34 @@ func TestGlobalFunctions(t *testing.T) {
 	}
 }
 
+func TestGlobalTraceDebug(t *testing.T) {
+	buf := &bytes.Buffer{}
+	testLogger := New(TRACE, buf)
+	SetDefault(testLogger)
+
+	Trace("global trace")
+	Debug("global debug")
+
+	output := buf.String()
+	if !strings.Contains(output, "global trace") {
+		t.Fatal("global Trace not working")
+	}
+	if !strings.Contains(output, "global debug") {
+		t.Fatal("global Debug not working")
+	}
+}
+
+func TestSetLevel_Global(t *testing.T) {
+	buf := &bytes.Buffer{}
+	l := New(INFO, buf)
+	SetDefault(l)
+
+	SetLevel(TRACE)
+	if !l.Enabled(TRACE) {
+		t.Fatal("global SetLevel should enable TRACE")
+	}
+}
+
 func TestSetDefault(t *testing.T) {
 	buf := &bytes.Buffer{}
 	newLogger := New(TRACE, buf)
@@ -111,8 +194,28 @@ func TestSetDefault(t *testing.T) {
 	}
 }
 
-func TestFatal_Exit(t *testing.T) {
-	t.Skip("Fatal calls os.Exit, skipping")
+func TestFatal_LogsBeforeExit(t *testing.T) {
+	if os.Getenv("TEST_FATAL_EXIT") == "1" {
+		l := New(FATAL, os.Stdout)
+		l.Fatal("fatal message", "key", "val")
+		return
+	}
+
+	cmd := exec.Command(os.Args[0], "-test.run="+t.Name())
+	cmd.Env = append(os.Environ(), "TEST_FATAL_EXIT=1")
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatal("Fatal should exit with code 1")
+	}
+	if !strings.Contains(string(out), "fatal message") {
+		t.Fatal("Fatal should log message before exit")
+	}
+	if !strings.Contains(string(out), "FATAL") {
+		t.Fatal("FATAL level should appear in output")
+	}
+	if !strings.Contains(string(out), "key") || !strings.Contains(string(out), "val") {
+		t.Fatal("Fatal should include args")
+	}
 }
 
 func TestFmtArguments(t *testing.T) {

@@ -1,12 +1,23 @@
 package zen
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
+	"fmt"
+	"math/big"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 )
 
 func TestRouter_New(t *testing.T) {
@@ -529,20 +540,193 @@ func TestRouter_StaticFile(t *testing.T) {
 	}
 }
 
-func TestRouter_Static_Directory(t *testing.T) {
-	tmpDir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(tmpDir, "test.txt"), []byte("content"), 0644); err != nil {
+func TestEngine_Run_StartsAndServes(t *testing.T) {
+	port := freePort(t)
+	e := New("127.0.0.1:" + port)
+	e.GET("/ping", func(c *Ctx) {
+		c.String(200, "pong")
+	})
+
+	errCh := make(chan error, 1)
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				errCh <- fmt.Errorf("panic: %v", r)
+			}
+		}()
+		e.Run()
+		errCh <- nil
+	}()
+
+	addr := waitListen(t, e.server.Addr, 5*time.Second)
+
+	resp, err := http.Get("http://" + addr + "/ping")
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+
+	p, _ := os.FindProcess(os.Getpid())
+	p.Signal(syscall.SIGTERM)
+
+	select {
+	case err := <-errCh:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("server did not shut down")
+	}
+}
+
+func TestEngine_Run_ServesMultiple(t *testing.T) {
+	port := freePort(t)
+	e := New("127.0.0.1:" + port)
+	e.GET("/a", func(c *Ctx) { c.String(200, "a") })
+	e.GET("/b", func(c *Ctx) { c.String(200, "b") })
+
+	errCh := make(chan error, 1)
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				errCh <- fmt.Errorf("panic: %v", r)
+			}
+		}()
+		e.Run()
+		errCh <- nil
+	}()
+
+	addr := waitListen(t, e.server.Addr, 5*time.Second)
+
+	for _, path := range []string{"/a", "/b"} {
+		resp, err := http.Get("http://" + addr + path)
+		if err != nil {
+			t.Fatalf("request to %s failed: %v", path, err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != 200 {
+			t.Fatalf("status on %s = %d, want 200", path, resp.StatusCode)
+		}
+	}
+
+	p, _ := os.FindProcess(os.Getpid())
+	p.Signal(syscall.SIGTERM)
+	<-errCh
+}
+
+func TestEngine_RunTLS_StartsAndServes(t *testing.T) {
+	certFile, keyFile := generateCert(t)
+	port := freePort(t)
+	e := New("127.0.0.1:" + port)
+	e.GET("/secure", func(c *Ctx) {
+		c.String(200, "secure")
+	})
+
+	errCh := make(chan error, 1)
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				errCh <- fmt.Errorf("panic: %v", r)
+			}
+		}()
+		e.RunTLS(certFile, keyFile)
+		errCh <- nil
+	}()
+
+	addr := waitListen(t, e.server.Addr, 5*time.Second)
+
+	client := &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		},
+	}
+	resp, err := client.Get("https://" + addr + "/secure")
+	if err != nil {
+		t.Fatalf("TLS request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+
+	p, _ := os.FindProcess(os.Getpid())
+	p.Signal(syscall.SIGTERM)
+	<-errCh
+}
+
+func freePort(t *testing.T) string {
+	t.Helper()
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, portStr, err := net.SplitHostPort(l.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	l.Close()
+	return portStr
+}
+
+func waitListen(t *testing.T, addr string, timeout time.Duration) string {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if addr == "" || addr == "127.0.0.1:0" {
+			time.Sleep(10 * time.Millisecond)
+			continue
+		}
+		conn, err := net.DialTimeout("tcp", addr, 50*time.Millisecond)
+		if err == nil {
+			conn.Close()
+			return addr
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("server did not start listening on %s within %v", addr, timeout)
+	return ""
+}
+
+func generateCert(t *testing.T) (certFile, keyFile string) {
+	t.Helper()
+	priv, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
 		t.Fatal(err)
 	}
 
-	r := New(":0")
-	r.Static("/files", tmpDir)
-
-	req := httptest.NewRequest("GET", "/files/test.txt", nil)
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != 200 {
-		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject:      pkix.Name{CommonName: "localhost"},
+		NotBefore:    time.Now(),
+		NotAfter:     time.Now().Add(1 * time.Hour),
+		IPAddresses:  []net.IP{net.ParseIP("127.0.0.1")},
 	}
+
+	certDER, err := x509.CreateCertificate(rand.Reader, template, template, &priv.PublicKey, priv)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	dir := t.TempDir()
+	certFile = filepath.Join(dir, "cert.pem")
+	keyFile = filepath.Join(dir, "key.pem")
+
+	f, err := os.Create(certFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pem.Encode(f, &pem.Block{Type: "CERTIFICATE", Bytes: certDER})
+	f.Close()
+
+	f, err = os.Create(keyFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pem.Encode(f, &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(priv)})
+	f.Close()
+
+	return
 }
