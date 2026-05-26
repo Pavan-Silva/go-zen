@@ -9,3 +9,6 @@ dist/
 
 # Benchmarks
 benchmarks/
+
+# Examples
+examples/
