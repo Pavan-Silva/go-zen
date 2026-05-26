@@ -29,16 +29,14 @@ var rwPool = sync.Pool{
 }
 
 // Logger logs HTTP requests with method, path, status code, and response time.
-// It matches Gin's highly readable color layout while executing at maximum performance.
 func Logger(c *zen.Ctx) {
 	start := time.Now()
 
 	rw := rwPool.Get().(*responseWriter)
 	rw.ResponseWriter = c.Response
-	rw.status = http.StatusOK // Default HTTP status if WriteHeader is not explicitly called
+	rw.status = http.StatusOK
 	rw.written = 0
 
-	// Swap out the framework's writer wrapper
 	c.Response = rw
 
 	c.Next()
@@ -47,23 +45,17 @@ func Logger(c *zen.Ctx) {
 	method := c.Request.Method
 	path := c.Request.URL.Path
 
-	// Acquire a fast stack-allocated working buffer slice
 	buf := make([]byte, 0, 160)
 
-	// Prefix Framework Tag
 	buf = append(buf, "[ZEN] "...)
-
-	// Format Status Code with unique Gin-style status backgrounds
 	buf = appendStatusColor(buf, rw.status)
 	buf = strconv.AppendInt(buf, int64(rw.status), 10)
 	buf = append(buf, colorReset...)
 	buf = append(buf, " | "...)
 
-	// Format Latency Engine Metrics
 	buf = appendLatency(buf, duration)
 	buf = append(buf, " | "...)
 
-	// Client Metadata Details (IP | Req Size | Resp Size)
 	buf = append(buf, clientIP(c.Request)...)
 	buf = append(buf, " | "...)
 	buf = strconv.AppendInt(buf, c.Request.ContentLength, 10)
@@ -71,26 +63,21 @@ func Logger(c *zen.Ctx) {
 	buf = strconv.AppendInt(buf, int64(rw.written), 10)
 	buf = append(buf, "B | "...)
 
-	// Format HTTP Method with unique ANSI colors per verb
 	buf = appendMethodColor(buf, method)
 	buf = append(buf, method...)
 	buf = append(buf, colorReset...)
 	buf = append(buf, " "...)
 
-	// Append Request Route Path
 	buf = append(buf, path...)
 	buf = append(buf, '\n')
 
-	// Write directly to standard output in a single atomic syscall block
 	_, _ = os.Stdout.Write(buf)
 
-	// Recycle allocations cleanly
 	rw.ResponseWriter = nil
 	rwPool.Put(rw)
 }
 
-// responseWriter wraps http.ResponseWriter to capture status codes and output sizes.
-// It implements Flush and Hijack to guarantee streaming systems and WebSockets don't break.
+// responseWriter wraps http.ResponseWriter to capture status codes and body sizes.
 type responseWriter struct {
 	http.ResponseWriter
 	status  int
@@ -108,14 +95,14 @@ func (rw *responseWriter) Write(b []byte) (int, error) {
 	return n, err
 }
 
-// Flush ensures Server-Sent Events (SSE) and HTTP streaming routes work seamlessly.
+// Flush implements http.Flusher.
 func (rw *responseWriter) Flush() {
 	if flusher, ok := rw.ResponseWriter.(http.Flusher); ok {
 		flusher.Flush()
 	}
 }
 
-// Hijack ensures WebSocket connections bypass standard routing mechanics without failing.
+// Hijack implements http.Hijacker.
 func (rw *responseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	if hijacker, ok := rw.ResponseWriter.(http.Hijacker); ok {
 		return hijacker.Hijack()

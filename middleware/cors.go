@@ -8,7 +8,7 @@ import (
 	"github.com/Pavan-Silva/go-zen"
 )
 
-// CORSConfig holds pre-computed configuration schemas for CORS middleware.
+// CORSConfig holds CORS middleware configuration.
 type CORSConfig struct {
 	AllowedOrigins   []string // Origins allowed to make cross-origin requests.
 	AllowedMethods   []string // HTTP methods allowed for CORS requests.
@@ -17,8 +17,7 @@ type CORSConfig struct {
 	AllowCredentials bool     // Whether to allow credentials (cookies, auth headers).
 	MaxAge           int      // Seconds the preflight result can be cached.
 
-	// Internal zero-allocation lookup optimization properties
-	allowedOriginsMap map[string]struct{} // Using empty struct{} saves 1 byte per key vs bool
+	allowedOriginsMap map[string]struct{}
 	allowedMethodsStr string
 	allowedHeadersStr string
 	exposeHeadersStr  string
@@ -26,7 +25,7 @@ type CORSConfig struct {
 	allowAll          bool
 }
 
-// DefaultCORSConfig returns a CORSConfig with secure production-ready defaults.
+// DefaultCORSConfig returns a CORSConfig with secure defaults.
 func DefaultCORSConfig() CORSConfig {
 	return CORSConfig{
 		AllowedOrigins: []string{}, // Locked down by default
@@ -37,9 +36,9 @@ func DefaultCORSConfig() CORSConfig {
 	}
 }
 
-// CORS returns a high-performance framework middleware that securely isolates cross-origin resources.
+// CORS returns a CORS middleware handler.
 func CORS(config CORSConfig) zen.HandlerFunc {
-	// Pre-compute configuration states into local lexical variables during initialization
+	// Pre-compute configuration values.
 	allowedOriginsMap := make(map[string]struct{}, len(config.AllowedOrigins))
 	allowAll := false
 
@@ -59,16 +58,16 @@ func CORS(config CORSConfig) zen.HandlerFunc {
 	return func(c *zen.Ctx) {
 		origin := c.Request.Header.Get("Origin")
 
-		// Case 1: If there's no Origin header, this isn't a cross-origin web browser request. Pass through.
+		// No Origin header means this is not a cross-origin request.
 		if origin == "" {
 			c.Next()
 			return
 		}
 
-		// Case 2: Validate origin boundaries if wildcard mode is turned off
+		// Check origin against allowed list.
 		if !allowAll {
 			if _, allowed := allowedOriginsMap[origin]; !allowed {
-				// Abort early without exposing internal route layout details to rogue actors
+				// Abort with forbidden status.
 				c.Response.WriteHeader(http.StatusForbidden)
 				_, _ = c.Response.Write(zen.StringToBytes("CORS: Origin Disallowed"))
 				return
@@ -77,11 +76,10 @@ func CORS(config CORSConfig) zen.HandlerFunc {
 
 		respHeaders := c.Response.Header()
 
-		// --- W3C Compliance Guard Layer ---
+		// Set CORS headers.
 		if allowAll {
 			if config.AllowCredentials {
-				// CRITICAL SECURITY COMPLIANCE: Web browsers explicitly ban mixing "*" with AllowCredentials.
-				// We must echo back the incoming request origin dynamically to maintain structural validity.
+				// When AllowCredentials is set, echo back the origin instead of using "*".
 				respHeaders.Set("Access-Control-Allow-Origin", origin)
 				respHeaders.Set("Vary", "Origin")
 			} else {
@@ -89,11 +87,11 @@ func CORS(config CORSConfig) zen.HandlerFunc {
 			}
 		} else {
 			respHeaders.Set("Access-Control-Allow-Origin", origin)
-			// MANDATORY FOR CDNs: Tells intermediate proxies to isolate separate caches per origin
+			// Vary header for CDN caching.
 			respHeaders.Set("Vary", "Origin")
 		}
 
-		// Inject pre-computed string blocks down the network pipeline with zero allocation steps
+		// Set optional CORS headers.
 		if exposeHeadersStr != "" {
 			respHeaders.Set("Access-Control-Expose-Headers", exposeHeadersStr)
 		}
@@ -101,7 +99,7 @@ func CORS(config CORSConfig) zen.HandlerFunc {
 			respHeaders.Set("Access-Control-Allow-Credentials", "true")
 		}
 
-		// Handle Preflight Handshakes (OPTIONS)
+		// Handle preflight requests.
 		if c.Request.Method == http.MethodOptions {
 			respHeaders.Set("Access-Control-Allow-Methods", allowedMethodsStr)
 			respHeaders.Set("Access-Control-Allow-Headers", allowedHeadersStr)
@@ -109,12 +107,12 @@ func CORS(config CORSConfig) zen.HandlerFunc {
 				respHeaders.Set("Access-Control-Max-Age", maxAgeStr)
 			}
 
-			// Return a clean 204 No Content to instantly conclude preflight checks
+			// Return 204 for preflight.
 			c.Response.WriteHeader(http.StatusNoContent)
 			return
 		}
 
-		// Continue downstream routing for standard data traffic (GET, POST, etc.)
+		// Continue to next handler.
 		c.Next()
 	}
 }

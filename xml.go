@@ -27,6 +27,7 @@ func (c *Ctx) BindXML(dest any) error {
 	if err := dec.Decode(dest); err != nil {
 		return fmt.Errorf("XML decode: %w", err)
 	}
+
 	return Validate(dest)
 }
 
@@ -46,6 +47,7 @@ func (c *Ctx) BindXML(dest any) error {
 func (c *Ctx) XML(status int, data any) {
 	c.setContentType("application/xml")
 	c.Response.WriteHeader(status)
+
 	if err := xml.NewEncoder(c.Response).Encode(data); err != nil {
 		logger.Error("HTTP: XML encode error: %v", err)
 	}

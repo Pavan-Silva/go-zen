@@ -8,8 +8,7 @@ import (
 	"github.com/Pavan-Silva/go-zen/logger"
 )
 
-// Recover is panic recovery middleware that catches panics and sends a 500 response.
-// The panic is logged with the full structural stack trace for production debugging.
+// Recover catches panics, logs the stack trace, and sends a 500 response.
 // Must be registered first (outermost) to catch panics from subsequent handlers.
 //
 // Example:
@@ -20,15 +19,10 @@ import (
 func Recover(c *zen.Ctx) {
 	defer func() {
 		if err := recover(); err != nil {
-			// Extract the stack trace bytes efficiently
-			stackBytes := debug.Stack()
+	stackBytes := debug.Stack()
+	stackTraceStr := zen.BytesToString(stackBytes)
 
-			// Performance Optimization: Use your zero-allocation byte-to-string utility
-			// rather than forcing a heavy deep string copy on the heap.
-			stackTraceStr := zen.BytesToString(stackBytes)
-
-			// Write to the log using your updated structured attributes
-			logger.Error("HTTP panic recovered",
+	logger.Error("HTTP panic recovered",
 				"error", err,
 				"method", c.Request.Method,
 				"path", c.Request.URL.Path,
@@ -36,11 +30,8 @@ func Recover(c *zen.Ctx) {
 				"stack", stackTraceStr,
 			)
 
-			// Framework Integration: Update context status so the Logger middleware
-			// catches and reports the correct 500 Internal Server Error status code.
 			c.Response.WriteHeader(http.StatusInternalServerError)
 
-			// Safely write the standardized textual representation down the wire
 			_, _ = c.Response.Write(zen.StringToBytes(http.StatusText(http.StatusInternalServerError)))
 		}
 	}()

@@ -32,7 +32,6 @@ type perKeyLimiter struct {
 	lastSeen time.Time
 }
 
-// Fixed-size configuration array to shard localized mutex structures.
 const shardCount = 64
 
 type limiterShard struct {
@@ -45,7 +44,7 @@ func RateLimiter() zen.HandlerFunc {
 	return RateLimiterWithConfig(DefaultRateLimiterConfig())
 }
 
-// RateLimiterWithConfig returns rate limiter middleware with a sharded lock layout.
+// RateLimiterWithConfig returns rate limiting middleware.
 func RateLimiterWithConfig(config RateLimiterConfig) zen.HandlerFunc {
 	if config.Duration == 0 {
 		config.Duration = time.Minute
@@ -69,10 +68,10 @@ func RateLimiterWithConfig(config RateLimiterConfig) zen.HandlerFunc {
 	r := rate.Limit(float64(config.Limit) / config.Duration.Seconds())
 	burst := config.Limit
 
-	// Pre-convert static burst metric to eliminate runtime string allocation overhead
+	// Pre-compute burst value for headers.
 	burstStr := strconv.Itoa(burst)
 
-	// Initialize individual lock memory groups to distribute parallel traffic
+	// Initialize shards.
 	shards := make([]*limiterShard, shardCount)
 	for i := range shardCount {
 		shards[i] = &limiterShard{
@@ -80,13 +79,13 @@ func RateLimiterWithConfig(config RateLimiterConfig) zen.HandlerFunc {
 		}
 	}
 
-	// Dynamic sliding cleanup worker loop
+	// Periodic cleanup of stale limiters.
 	go func() {
 		ticker := time.NewTicker(time.Minute)
 		defer ticker.Stop()
 		for range ticker.C {
 			now := time.Now()
-			// Clean up each map shard independently to avoid blocking global traffic
+			// Clean up each shard independently.
 			for i := range shardCount {
 				shard := shards[i]
 				shard.mu.Lock()
@@ -108,7 +107,7 @@ func RateLimiterWithConfig(config RateLimiterConfig) zen.HandlerFunc {
 
 		key := config.KeyFunc(c.Request)
 
-		// Low-overhead string FNV-1a hash algorithm to select the target map shard index
+		// Hash key to select shard.
 		var hash uint32 = 2166136261
 		for i := 0; i < len(key); i++ {
 			hash ^= uint32(key[i])
@@ -117,15 +116,15 @@ func RateLimiterWithConfig(config RateLimiterConfig) zen.HandlerFunc {
 		shardIdx := hash % shardCount
 		shard := shards[shardIdx]
 
-		// Fast Path: Try a read-lock first to see if the client already has a limiter
+		// Try read-lock first.
 		shard.mu.RLock()
 		pkl, exists := shard.limiters[key]
 		shard.mu.RUnlock()
 
 		if !exists {
-			// Upgrade to a write-lock to add the new client limiter
+			// Acquire write-lock to create new limiter.
 			shard.mu.Lock()
-			// Double-check existence to prevent race conditions during the lock upgrade
+			// Double-check after lock.
 			pkl, exists = shard.limiters[key]
 			if !exists {
 				pkl = &perKeyLimiter{
@@ -136,19 +135,17 @@ func RateLimiterWithConfig(config RateLimiterConfig) zen.HandlerFunc {
 			shard.mu.Unlock()
 		}
 
-		// Update tracking metrics using a localized write-lock
 		shard.mu.Lock()
 		pkl.lastSeen = time.Now()
 		shard.mu.Unlock()
 
 		if !pkl.limiter.Allow() {
-			// Integrated Framework Response: Keeps status tracking visible to your logger
 			c.Response.WriteHeader(http.StatusTooManyRequests)
 			_, _ = c.Response.Write(zen.StringToBytes("Rate limit exceeded"))
 			return
 		}
 
-		// Inject metrics into response headers using zero-allocation operations
+		// Set rate limit response headers.
 		headers := c.Response.Header()
 		headers.Set("X-RateLimit-Limit", burstStr)
 
