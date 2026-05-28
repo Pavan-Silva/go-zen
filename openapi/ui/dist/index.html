@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Zen API Docs</title>
+    <link rel="stylesheet" href="/openapi/swagger-ui/swagger-ui.css" />
+    <style>
+      body {
+        margin: 0;
+      }
+      .zen-header {
+        background: #1b1b1b;
+        padding: 16px 20px;
+      }
+      .zen-header-content {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        max-width: 1420px;
+        margin: 0 auto;
+      }
+      .zen-logo {
+        width: 23px;
+        height: 23px;
+        display: block;
+      }
+      .zen-title {
+        color: #fff;
+        font-weight: 700;
+        font-size: 1.2em;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+    </style>
+  </head>
+
+  <body>
+    <header class="zen-header">
+      <div class="zen-header-content">
+        <img src="/openapi/swagger-ui/logo.svg" alt="" class="zen-logo" />
+        <span class="zen-title">Zen</span>
+      </div>
+    </header>
+
+    <div id="swagger-ui"></div>
+    <script src="/openapi/swagger-ui/swagger-ui-bundle.js"></script>
+    <script>
+      SwaggerUIBundle({
+        url: "%s",
+        dom_id: "#swagger-ui",
+        presets: [SwaggerUIBundle.presets.apis],
+        deepLinking: true,
+        customSiteTitle: "Zen API Docs",
+      });
+    </script>
+  </body>
+</html>

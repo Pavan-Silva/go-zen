@@ -5,7 +5,7 @@
 .DS_Store
 
 # Build artifacts
-dist/
+.dist/
 
 # Benchmarks
 benchmarks/
