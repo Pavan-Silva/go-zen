@@ -34,6 +34,7 @@
         color: rgba(255, 255, 255, 0.35);
         font-size: 0.8em;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        margin-left: 1px;
       }
       .zen-docs-link {
         margin-left: auto;
@@ -74,8 +75,11 @@
     <header class="zen-header">
       <div class="zen-header-content">
         <img src="/openapi/swagger-ui/logo.svg" alt="" class="zen-logo" />
-        <span class="zen-title">Zen</span>
-        <span class="zen-version">v%[2]s</span>
+        <div>
+          <span class="zen-title">Zen</span>
+          <span class="zen-version">v%[2]s</span>
+        </div>
+
         <a
           href="https://zen-docs-steel.vercel.app/"
           class="zen-docs-link"
