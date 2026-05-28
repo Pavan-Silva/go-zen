@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
-	"strconv"
 	"strings"
 	"sync"
 )
@@ -17,7 +16,6 @@ type headerField struct {
 }
 
 // Global thread-safe cache to store compiled struct layouts.
-// This ensures reflect tag scanning happens exactly once per unique struct type.
 var headerCache sync.Map
 
 // BindHeader binds HTTP request headers to a struct using `header` or `json` tags.
@@ -58,7 +56,7 @@ func (c *Ctx) BindHeader(dest any) error {
 		}
 
 		fv := v.Field(f.index)
-		if err := setHeaderField(fv, f.kind, headerValue); err != nil {
+		if err := setFieldValue(fv, f.kind, []string{headerValue}); err != nil {
 			return fmt.Errorf("header %q: %w", f.headerKey, err)
 		}
 	}
@@ -101,38 +99,4 @@ func compileHeaderStruct(t reflect.Type) []headerField {
 		})
 	}
 	return fields
-}
-
-// setHeaderField converts a header string value to the target field type.
-func setHeaderField(fv reflect.Value, kind reflect.Kind, s string) error {
-	switch kind {
-	case reflect.String:
-		fv.SetString(s)
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		n, err := strconv.ParseInt(s, 10, 64)
-		if err != nil {
-			return err
-		}
-		fv.SetInt(n)
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		n, err := strconv.ParseUint(s, 10, 64)
-		if err != nil {
-			return err
-		}
-		fv.SetUint(n)
-	case reflect.Float32, reflect.Float64:
-		n, err := strconv.ParseFloat(s, 64)
-		if err != nil {
-			return err
-		}
-		fv.SetFloat(n)
-	case reflect.Bool:
-		b, err := strconv.ParseBool(s)
-		if err != nil {
-			return err
-		}
-		fv.SetBool(b)
-	default:
-	}
-	return nil
 }
