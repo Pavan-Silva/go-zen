@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/Pavan-Silva/go-zen"
@@ -173,7 +174,7 @@ func TestDocHandler(t *testing.T) {
 func TestDocHandlerSwaggerUI(t *testing.T) {
 	doc := New(Config{Title: "Test", Version: "1.0"})
 	body := uiHTML(doc)
-	if !contains(body, "swagger-ui") {
+	if !strings.Contains(body, "swagger-ui") {
 		t.Fatal("expected swagger-ui in HTML")
 	}
 }
@@ -195,21 +196,6 @@ func TestDocDisabled(t *testing.T) {
 	r.Mux.ServeHTTP(rec2, req2)
 	if rec2.Code != http.StatusNotFound {
 		t.Fatalf("expected 404 when UI disabled, got %d", rec2.Code)
-	}
-}
-
-func TestDocCustomUI(t *testing.T) {
-	doc := New(Config{
-		Title:    "Test",
-		Version:  "1.0",
-		RenderUI: func(specURL string) string { return "<custom>hello</custom>" },
-	})
-	body := doc.DocHandler()
-	w := httptest.NewRecorder()
-	c := &zen.Ctx{Response: w, Request: httptest.NewRequest(http.MethodGet, "/docs", nil)}
-	body(c)
-	if !contains(w.Body.String(), "<custom>") {
-		t.Fatal("expected custom UI HTML")
 	}
 }
 
@@ -435,15 +421,4 @@ func TestContextPoolIntegration(t *testing.T) {
 	}
 }
 
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && containsStr(s, substr)
-}
 
-func containsStr(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
-}

@@ -1,40 +1,34 @@
 package openapi
 
-import "fmt"
+import (
+	"embed"
+	"fmt"
+	"io/fs"
+	"net/http"
 
-// uiHTML returns the HTML for the documentation UI.
-func uiHTML(o *OpenAPI) string {
-	specURL := o.cfg.SpecPath
-	if o.cfg.RenderUI != nil {
-		return o.cfg.RenderUI(specURL)
+	"github.com/Pavan-Silva/go-zen/system"
+)
+
+//go:embed ui/dist/*
+var uiDist embed.FS
+
+var uiAssets http.FileSystem
+var uiTemplate string
+
+func init() {
+	sub, err := fs.Sub(uiDist, "ui/dist")
+	if err != nil {
+		panic(err)
 	}
-	return swaggerUIHTML(specURL)
+	uiAssets = http.FS(sub)
+
+	data, err := uiDist.ReadFile("ui/dist/index.html")
+	if err != nil {
+		panic(err)
+	}
+	uiTemplate = string(data)
 }
 
-func swaggerUIHTML(specURL string) string {
-	return fmt.Sprintf(`
-		<!DOCTYPE html>
-		<html lang="en">
-			<head>
-				<meta charset="UTF-8">
-				<title>API Docs</title>
-				<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css">
-				<style>html { box-sizing: border-box; overflow-y: scroll; } *, *::before, *::after { box-sizing: inherit; } body { margin: 0; background: #fafafa; }</style>
-			</head>
-
-			<body>
-				<div id="swagger-ui"></div>
-				<script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
-				<script>
-					SwaggerUIBundle({
-						url: %q,
-						dom_id: "#swagger-ui",
-						presets: [SwaggerUIBundle.presets.apis],
-						layout: "BaseLayout"
-					});
-				</script>
-			</body>
-		</html>`,
-		specURL,
-	)
+func uiHTML(o *OpenAPI) string {
+	return fmt.Sprintf(uiTemplate, o.cfg.SpecPath, system.Version)
 }
