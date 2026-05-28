@@ -10,10 +10,6 @@ import (
 	"github.com/Pavan-Silva/go-zen"
 )
 
-// RenderUI renders documentation HTML for the given spec URL.
-// Use this to plug in alternative documentation UIs (Scalar, Redoc, etc.).
-type RenderUI func(specURL string) string
-
 // Config configures the OpenAPI spec generation and UI.
 type Config struct {
 	Title           string                    // API title (required).
@@ -22,7 +18,6 @@ type Config struct {
 	SpecPath        string                    // Path to serve spec JSON (default "/openapi.json").
 	DocPath         string                    // Path to serve docs UI (default "/docs").
 	DisableUI       bool                      // When true, no documentation UI is served.
-	RenderUI        RenderUI                  // Optional custom UI renderer; replaces default SwaggerUI.
 	SecuritySchemes map[string]SecurityScheme // Security schemes for components/securitySchemes.
 	DefaultSecurity []map[string][]string     // Default security requirements applied to all routes.
 }
@@ -144,6 +139,7 @@ func (o *OpenAPI) Register(method, path string, b *RouteInfoBuilder) {
 	}
 	o.routes[method][path] = existing
 	o.mu.Unlock()
+	o.spec = nil
 	o.once = sync.Once{}
 }
 
@@ -201,11 +197,14 @@ func (o *OpenAPI) RegisterRoutes(r *zen.Engine) {
 	}))
 
 	if !o.cfg.DisableUI {
+		docHTML := uiHTML(o)
 		r.HandleRaw("GET "+o.cfg.DocPath, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(uiHTML(o)))
+			w.Write([]byte(docHTML))
 		}))
+
+		r.HandleRaw("GET /openapi/swagger-ui/", http.StripPrefix("/openapi/swagger-ui/", http.FileServer(uiAssets)))
 	}
 }
 
@@ -277,7 +276,7 @@ func (o *OpenAPI) buildPaths(sb *schemaBuilder) map[string]any {
 	}
 
 	for path := range uniquePaths {
-		oapiPath := convertPathParams(path)
+		oapiPath := path
 		pathItem := make(map[string]any)
 
 		for _, method := range []string{"GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"} {
@@ -373,9 +372,4 @@ func (o *OpenAPI) buildParams(path string) []map[string]any {
 	return params
 }
 
-// convertPathParams converts zen path params to OpenAPI path format.
-// Currently returns the path unchanged; zen uses {param} which matches
-// the OpenAPI convention.
-func convertPathParams(path string) string {
-	return path
-}
+
