@@ -50,6 +50,20 @@ func DisableAutoValidation() {
 	SetValidator(nil)
 }
 
+// DefaultValidator returns the underlying go-playground/validator/v10 instance
+// when using the default built-in validator, or nil if a custom validator is set.
+// Use this to register custom validation tags:
+//
+//	zen.DefaultValidator().RegisterValidation("is-even", func(fl validator.FieldLevel) bool {
+//	    return fl.Field().Int()%2 == 0
+//	})
+func DefaultValidator() *validator.Validate {
+	if dv, ok := defaultValidator.(*defaultValidate); ok {
+		return dv.inst
+	}
+	return nil
+}
+
 // Validate implements the Validator interface for defaultValidate.
 func (v *defaultValidate) Validate(i any) error {
 	rv := reflect.ValueOf(i)
