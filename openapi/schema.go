@@ -27,7 +27,7 @@ func (sb *schemaBuilder) schemaOf(v any) map[string]any {
 		return map[string]any{"type": "object"}
 	}
 
-	for t.Kind() == reflect.Ptr {
+	for t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
 
@@ -127,6 +127,8 @@ func (sb *schemaBuilder) inlineStruct(t reflect.Type) map[string]any {
 
 // mergeInlineFields merges fields from an embedded struct into the parent schema.
 func (sb *schemaBuilder) mergeInlineFields(schema map[string]any, t reflect.Type) {
+	var required []string
+
 	for i := range t.NumField() {
 		f := t.Field(i)
 		if !f.IsExported() {
@@ -139,6 +141,19 @@ func (sb *schemaBuilder) mergeInlineFields(schema map[string]any, t reflect.Type
 		}
 
 		schema["properties"].(map[string]any)[name] = prop
+		if f.Type.Kind() != reflect.Struct && f.Type.Kind() != reflect.Pointer {
+			if isRequired(f) {
+				required = append(required, name)
+			}
+		}
+	}
+
+	if len(required) > 0 {
+		if existing, ok := schema["required"]; ok {
+			schema["required"] = append(existing.([]string), required...)
+		} else {
+			schema["required"] = required
+		}
 	}
 }
 
@@ -157,8 +172,7 @@ func (sb *schemaBuilder) fieldToProperty(f reflect.StructField) (string, map[str
 		}
 	}
 
-	ft := f.Type
-	return name, sb.typeToSchema(ft)
+	return name, sb.typeToSchema(f.Type)
 }
 
 // isRequired checks whether a struct field has a validate:"required" tag.
@@ -168,7 +182,7 @@ func isRequired(f reflect.StructField) bool {
 		return false
 	}
 
-	for _, part := range strings.Split(tag, ",") {
+	for part := range strings.SplitSeq(tag, ",") {
 		if strings.TrimSpace(part) == "required" {
 			return true
 		}
