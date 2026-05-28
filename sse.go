@@ -55,7 +55,7 @@ func (c *Ctx) SSEvent(event string, data any) error {
 		for i := 0; i < len(event); i++ {
 			char := event[i]
 			if char != '\r' && char != '\n' {
-				if _, err := w.Write(StringToBytes(string(char))); err != nil {
+				if _, err := w.Write([]byte{char}); err != nil {
 					return err
 				}
 			}

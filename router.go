@@ -32,14 +32,7 @@ type Config struct {
 // Timeouts and MaxHeaderBytes default to 0 to bypass the Go standard library's
 // tracking loops, matching raw net/http performance baselines.
 func DefaultConfig() Config {
-	return Config{
-		ReadTimeout:       0,
-		WriteTimeout:      0,
-		IdleTimeout:       0,
-		ReadHeaderTimeout: 0,
-		MaxHeaderBytes:    0, // 0 means use net/http default baseline paths
-		ShutdownTimeout:   5 * time.Second,
-	}
+	return Config{ShutdownTimeout: 5 * time.Second}
 }
 
 // Engine is the top-level application container. It embeds a root RouterGroup
