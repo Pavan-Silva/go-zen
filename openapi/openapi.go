@@ -138,9 +138,9 @@ func (o *OpenAPI) Register(method, path string, b *RouteInfoBuilder) {
 		existing.Security = info.Security
 	}
 	o.routes[method][path] = existing
-	o.mu.Unlock()
 	o.spec = nil
 	o.once = sync.Once{}
+	o.mu.Unlock()
 }
 
 // SpecJSON returns the generated OpenAPI spec as JSON bytes.
@@ -148,14 +148,12 @@ func (o *OpenAPI) SpecJSON() []byte {
 	o.once.Do(func() {
 		o.mu.RLock()
 		data := o.generate()
-		o.mu.RUnlock()
 		b, err := json.MarshalIndent(data, "", "  ")
-
 		if err != nil {
 			b = fmt.Appendf(nil, `{"error":"%s"}`, err.Error())
 		}
-
 		o.spec = b
+		o.mu.RUnlock()
 	})
 
 	return o.spec
@@ -277,6 +275,7 @@ func (o *OpenAPI) buildPaths(sb *schemaBuilder) map[string]any {
 
 	for path := range uniquePaths {
 		oapiPath := path
+		params := o.buildParams(path)
 		pathItem := make(map[string]any)
 
 		for _, method := range []string{"GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"} {
@@ -285,10 +284,12 @@ func (o *OpenAPI) buildPaths(sb *schemaBuilder) map[string]any {
 				continue
 			}
 
-			op := map[string]any{
-				"parameters": o.buildParams(path),
-				"responses":  make(map[string]any),
-			}
+		op := map[string]any{
+			"responses": make(map[string]any),
+		}
+		if params != nil {
+			op["parameters"] = params
+		}
 
 			if info.Summary != "" {
 				op["summary"] = info.Summary
@@ -355,7 +356,11 @@ func (o *OpenAPI) buildPaths(sb *schemaBuilder) map[string]any {
 
 // buildParams extracts path parameters from a route pattern.
 func (o *OpenAPI) buildParams(path string) []map[string]any {
-	params := make([]map[string]any, 0)
+	n := strings.Count(path, "{")
+	if n == 0 {
+		return nil
+	}
+	params := make([]map[string]any, 0, n)
 	for seg := range strings.SplitSeq(path, "/") {
 		if strings.HasPrefix(seg, "{") && strings.HasSuffix(seg, "}") {
 			name := seg[1 : len(seg)-1]

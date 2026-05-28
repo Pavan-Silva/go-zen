@@ -1,0 +1,41 @@
+name: Update Swagger UI
+
+on:
+  schedule:
+    - cron: '0 0 1 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check latest swagger-ui release
+        id: check
+        run: |
+          LATEST=$(curl -s https://api.github.com/repos/swagger-api/swagger-ui/releases/latest | jq -r .tag_name)
+          echo "latest=$LATEST" >> "$GITHUB_OUTPUT"
+          CURRENT=$(cat openapi/ui/version.txt 2>/dev/null || echo "none")
+          echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
+
+      - name: Update assets
+        if: steps.check.outputs.latest != steps.check.outputs.current
+        run: |
+          VER=${{ steps.check.outputs.latest }}
+          curl -sL "https://unpkg.com/swagger-ui-dist@$VER/swagger-ui-bundle.js"  -o openapi/ui/dist/swagger-ui-bundle.js
+          curl -sL "https://unpkg.com/swagger-ui-dist@$VER/swagger-ui.css"       -o openapi/ui/dist/swagger-ui.css
+          echo "$VER" > openapi/ui/version.txt
+
+      - name: Create PR
+        if: steps.check.outputs.latest != steps.check.outputs.current
+        uses: peter-evans/create-pull-request@v6
+        with:
+          title: "chore: update swagger-ui to ${{ steps.check.outputs.latest }}"
+          commit-message: "chore: update swagger-ui to ${{ steps.check.outputs.latest }}"
+          branch: update-swagger-ui
+          delete-branch: true
