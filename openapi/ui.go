@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io/fs"
 	"net/http"
+
+	"github.com/Pavan-Silva/go-zen/system"
 )
 
 //go:embed ui/dist/*
@@ -28,5 +30,5 @@ func init() {
 }
 
 func uiHTML(o *OpenAPI) string {
-	return fmt.Sprintf(uiTemplate, o.cfg.SpecPath)
+	return fmt.Sprintf(uiTemplate, o.cfg.SpecPath, system.Version)
 }
