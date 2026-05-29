@@ -51,13 +51,14 @@ func CompressWithLevel(level int) zen.HandlerFunc {
 
 	return func(c *zen.Ctx) {
 		// Fast Path 1: Validate client capabilities
-		if !strings.Contains(c.Request.Header.Get("Accept-Encoding"), "gzip") {
+		av := c.Request.Header["Accept-Encoding"]
+		if len(av) == 0 || !strings.Contains(av[0], "gzip") {
 			c.Next()
 			return
 		}
 
 		// Fast Path 2: Skip if another middleware already compressed the response
-		if c.Response.Header().Get("Content-Encoding") != "" {
+		if _, exists := c.Response.Header()["Content-Encoding"]; exists {
 			c.Next()
 			return
 		}

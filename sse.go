@@ -30,17 +30,16 @@ func (c *Ctx) SSEvent(event string, data any) error {
 	}
 
 	headers := c.Response.Header()
-	// Set SSE headers only if not already configured by user code.
-	if headers.Get("Content-Type") == "" {
+	if _, exists := headers["Content-Type"]; !exists {
 		headers["Content-Type"] = []string{sseContentType}
 	}
-	if headers.Get("Cache-Control") == "" {
+	if _, exists := headers["Cache-Control"]; !exists {
 		headers["Cache-Control"] = []string{"no-cache"}
 	}
-	if headers.Get("Connection") == "" {
+	if _, exists := headers["Connection"]; !exists {
 		headers["Connection"] = []string{"keep-alive"}
 	}
-	if headers.Get("X-Accel-Buffering") == "" {
+	if _, exists := headers["X-Accel-Buffering"]; !exists {
 		headers["X-Accel-Buffering"] = []string{"no"}
 	}
 

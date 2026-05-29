@@ -55,11 +55,11 @@ func RateLimiterWithConfig(config RateLimiterConfig) zen.HandlerFunc {
 	if config.KeyFunc == nil {
 		config.KeyFunc = func(r *http.Request) string {
 			// Extract client IP efficiently
-			if ip := r.Header.Get("X-Forwarded-For"); ip != "" {
-				return ip
+			if ip := r.Header["X-Forwarded-For"]; len(ip) > 0 {
+				return ip[0]
 			}
-			if ip := r.Header.Get("X-Real-IP"); ip != "" {
-				return ip
+			if ip := r.Header["X-Real-Ip"]; len(ip) > 0 {
+				return ip[0]
 			}
 			return r.RemoteAddr
 		}
