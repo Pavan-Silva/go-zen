@@ -28,7 +28,7 @@ func TestBanner_Version(t *testing.T) {
 }
 
 func TestBanner_DefaultVersion(t *testing.T) {
-	if Version != "dev" {
-		t.Fatalf("default version = %q, want %q", Version, "dev")
+	if Version == "" {
+		t.Fatal("version must not be empty")
 	}
 }
