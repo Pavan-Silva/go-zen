@@ -112,14 +112,14 @@ func (rw *responseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 
 // clientIP extracts the client IP address efficiently.
 func clientIP(r *http.Request) string {
-	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
-		if before, _, ok := strings.Cut(forwarded, ","); ok {
+	if fwd := r.Header["X-Forwarded-For"]; len(fwd) > 0 {
+		if before, _, ok := strings.Cut(fwd[0], ","); ok {
 			return strings.TrimSpace(before)
 		}
-		return strings.TrimSpace(forwarded)
+		return strings.TrimSpace(fwd[0])
 	}
-	if realIP := r.Header.Get("X-Real-IP"); realIP != "" {
-		return strings.TrimSpace(realIP)
+	if realIP := r.Header["X-Real-Ip"]; len(realIP) > 0 {
+		return strings.TrimSpace(realIP[0])
 	}
 	return r.RemoteAddr
 }

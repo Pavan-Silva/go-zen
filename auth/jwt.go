@@ -91,13 +91,13 @@ func ParseJWT(tokenString string, secret []byte, method jwt.SigningMethod) (jwt.
 
 // bearerTokenFromRequest extracts the Bearer token from the Authorization header
 func bearerTokenFromRequest(r *http.Request) (string, error) {
-	authHeader := r.Header.Get("Authorization")
-	if authHeader == "" {
+	ah := r.Header["Authorization"]
+	if len(ah) == 0 {
 		return "", fmt.Errorf("missing authorization header")
 	}
 
-	if len(authHeader) > 7 && authHeader[:7] == "Bearer " {
-		return authHeader[7:], nil
+	if len(ah[0]) > 7 && ah[0][:7] == "Bearer " {
+		return ah[0][7:], nil
 	}
 
 	return "", fmt.Errorf("invalid authorization header format")

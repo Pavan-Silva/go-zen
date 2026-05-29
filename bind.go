@@ -74,8 +74,7 @@ func (c *Ctx) Bind(dest any) error {
 		}
 	}
 
-	ct := c.Request.Header.Get("Content-Type")
-	if ct != "" {
+	if _, exists := c.Request.Header["Content-Type"]; exists {
 		return c.BindBody(dest)
 	}
 	return nil
@@ -84,7 +83,10 @@ func (c *Ctx) Bind(dest any) error {
 // BindBody parses the request body into dest based on the Content-Type header,
 // completely skipping path and query parameters.
 func (c *Ctx) BindBody(dest any) error {
-	ct := c.Request.Header.Get("Content-Type")
+	ct := ""
+	if vals := c.Request.Header["Content-Type"]; len(vals) > 0 {
+		ct = vals[0]
+	}
 	if ct == "" {
 		return nil
 	}

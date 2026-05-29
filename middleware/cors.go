@@ -56,7 +56,11 @@ func CORS(config CORSConfig) zen.HandlerFunc {
 	maxAgeStr := strconv.Itoa(config.MaxAge)
 
 	return func(c *zen.Ctx) {
-		origin := c.Request.Header.Get("Origin")
+		ov := c.Request.Header["Origin"]
+		origin := ""
+		if len(ov) > 0 {
+			origin = ov[0]
+		}
 
 		// No Origin header means this is not a cross-origin request.
 		if origin == "" {
