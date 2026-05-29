@@ -2,6 +2,7 @@ package zen
 
 import (
 	"fmt"
+	"net/http"
 	"reflect"
 	"strconv"
 	"strings"
@@ -13,11 +14,12 @@ var bindMetaCache sync.Map
 
 // bindFieldInfo tracks pre-compiled field metadata and memory mapping layouts.
 type bindFieldInfo struct {
-	index    int
-	kind     reflect.Kind
-	paramTag string
-	queryTag string
-	formTag  string
+	index     int
+	kind      reflect.Kind
+	paramTag  string
+	queryTag  string
+	formTag   string
+	headerTag string
 }
 
 // bindMeta holds the optimized slice of field plans for a unique type configuration.
@@ -47,11 +49,12 @@ func buildBindMeta(rt reflect.Type) *bindMeta {
 		}
 
 		fields = append(fields, bindFieldInfo{
-			index:    i,
-			kind:     field.Type.Kind(),
-			paramTag: parseStructTag(field, "param"),
-			queryTag: parseStructTag(field, "query"),
-			formTag:  parseStructTag(field, "form"),
+			index:     i,
+			kind:      field.Type.Kind(),
+			paramTag:  parseStructTag(field, "param"),
+			queryTag:  parseStructTag(field, "query"),
+			formTag:   parseStructTag(field, "form"),
+			headerTag: parseHeaderTag(field),
 		})
 	}
 	return &bindMeta{fields: fields}
@@ -216,5 +219,60 @@ func setFieldValue(fv reflect.Value, kind reflect.Kind, vals []string) error {
 		fv.SetBool(b)
 	default:
 	}
+	return nil
+}
+
+// parseHeaderTag parses the header tag with canonicalized field name fallback.
+func parseHeaderTag(field reflect.StructField) string {
+	tag := field.Tag.Get("header")
+	if tag == "" || tag == "-" {
+		tag = field.Tag.Get("json")
+	}
+	if tag == "" || tag == "-" {
+		return http.CanonicalHeaderKey(field.Name)
+	}
+	if idx := strings.IndexByte(tag, ','); idx != -1 {
+		tag = tag[:idx]
+	}
+	return tag
+}
+
+// BindHeader binds HTTP request headers to a struct using `header` or `json` tags.
+// Header names are canonicalized via http.CanonicalHeaderKey at compile time.
+//
+// Example:
+//
+//	type Headers struct {
+//	    UserID string `header:"X-User-Id"`
+//	    APIKey string `header:"X-Api-Key"`
+//	    Rate   int    `header:"X-Rate-Limit"`
+//	}
+func (c *Ctx) BindHeader(dest any) error {
+	v := reflect.ValueOf(dest)
+	if v.Kind() != reflect.Pointer || v.Elem().Kind() != reflect.Struct {
+		return fmt.Errorf("header: dest must be a pointer to struct")
+	}
+
+	v = v.Elem()
+	t := v.Type()
+	meta := getBindMeta(t)
+
+	for i := 0; i < len(meta.fields); i++ {
+		f := meta.fields[i]
+		if f.headerTag == "" {
+			continue
+		}
+
+		headerValue := c.Request.Header.Get(f.headerTag)
+		if headerValue == "" {
+			continue
+		}
+
+		fv := v.Field(f.index)
+		if err := setFieldValue(fv, f.kind, []string{headerValue}); err != nil {
+			return fmt.Errorf("header %q: %w", f.headerTag, err)
+		}
+	}
+
 	return nil
 }
