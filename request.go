@@ -10,8 +10,8 @@ import (
 //
 // Example:
 //
-//	page := c.QueryParam("page")      // GET /posts?page=2 → "2"
-//	search := c.QueryParam("q")       // GET /posts?q=golang → "golang"
+//	page := c.QueryParam("page")      // GET /posts?page=2 -> "2"
+//	search := c.QueryParam("q")       // GET /posts?q=golang-> "golang"
 func (c *Ctx) QueryParam(key string) string {
 	rawQuery := c.Request.URL.RawQuery
 	if rawQuery == "" || key == "" {
@@ -50,7 +50,7 @@ func (c *Ctx) QueryParam(key string) string {
 // Given a route registered as "GET /users/{id}", the handler can retrieve
 // the captured segment with:
 //
-//	id := c.Param("id")  // GET /users/42  →  "42"
+//	id := c.Param("id")  // GET /users/42 -> "42"
 func (c *Ctx) Param(key string) string {
 	return c.Request.PathValue(key)
 }
