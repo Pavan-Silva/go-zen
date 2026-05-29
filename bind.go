@@ -40,7 +40,7 @@ func buildBindMeta(rt reflect.Type) *bindMeta {
 	numFields := rt.NumField()
 	fields := make([]bindFieldInfo, 0, numFields)
 
-	for i := 0; i < numFields; i++ {
+	for i := range numFields {
 		field := rt.Field(i)
 		if field.PkgPath != "" && !field.Anonymous {
 			continue
