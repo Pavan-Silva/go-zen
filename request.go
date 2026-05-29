@@ -64,3 +64,13 @@ func (c *Ctx) Body() ([]byte, error) {
 	}
 	return b, nil
 }
+
+// Header returns the value of a request header by key.
+// Returns an empty string if the header is not present.
+//
+// Example:
+//
+//	token := c.Header("Authorization")  // "Bearer <token>"
+func (c *Ctx) Header(key string) string {
+	return c.Request.Header.Get(key)
+}
