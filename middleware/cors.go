@@ -80,31 +80,31 @@ func CORS(config CORSConfig) zen.HandlerFunc {
 		if allowAll {
 			if config.AllowCredentials {
 				// When AllowCredentials is set, echo back the origin instead of using "*".
-				respHeaders.Set("Access-Control-Allow-Origin", origin)
-				respHeaders.Set("Vary", "Origin")
+				respHeaders["Access-Control-Allow-Origin"] = []string{origin}
+				respHeaders["Vary"] = []string{"Origin"}
 			} else {
-				respHeaders.Set("Access-Control-Allow-Origin", "*")
+				respHeaders["Access-Control-Allow-Origin"] = []string{"*"}
 			}
 		} else {
-			respHeaders.Set("Access-Control-Allow-Origin", origin)
+			respHeaders["Access-Control-Allow-Origin"] = []string{origin}
 			// Vary header for CDN caching.
-			respHeaders.Set("Vary", "Origin")
+			respHeaders["Vary"] = []string{"Origin"}
 		}
 
 		// Set optional CORS headers.
 		if exposeHeadersStr != "" {
-			respHeaders.Set("Access-Control-Expose-Headers", exposeHeadersStr)
+			respHeaders["Access-Control-Expose-Headers"] = []string{exposeHeadersStr}
 		}
 		if config.AllowCredentials {
-			respHeaders.Set("Access-Control-Allow-Credentials", "true")
+			respHeaders["Access-Control-Allow-Credentials"] = []string{"true"}
 		}
 
 		// Handle preflight requests.
 		if c.Request.Method == http.MethodOptions {
-			respHeaders.Set("Access-Control-Allow-Methods", allowedMethodsStr)
-			respHeaders.Set("Access-Control-Allow-Headers", allowedHeadersStr)
+			respHeaders["Access-Control-Allow-Methods"] = []string{allowedMethodsStr}
+			respHeaders["Access-Control-Allow-Headers"] = []string{allowedHeadersStr}
 			if maxAgeStr != "0" {
-				respHeaders.Set("Access-Control-Max-Age", maxAgeStr)
+				respHeaders["Access-Control-Max-Age"] = []string{maxAgeStr}
 			}
 
 			// Return 204 for preflight.
