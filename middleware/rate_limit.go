@@ -147,10 +147,10 @@ func RateLimiterWithConfig(config RateLimiterConfig) zen.HandlerFunc {
 
 		// Set rate limit response headers.
 		headers := c.Response.Header()
-		headers.Set("X-RateLimit-Limit", burstStr)
+		headers["X-Ratelimit-Limit"] = []string{burstStr}
 
 		remainingTokens := int(math.Ceil(pkl.limiter.Tokens()))
-		headers.Set("X-RateLimit-Remaining", strconv.Itoa(remainingTokens))
+		headers["X-Ratelimit-Remaining"] = []string{strconv.Itoa(remainingTokens)}
 
 		c.Next()
 	}

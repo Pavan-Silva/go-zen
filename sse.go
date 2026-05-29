@@ -32,16 +32,16 @@ func (c *Ctx) SSEvent(event string, data any) error {
 	headers := c.Response.Header()
 	// Set SSE headers only if not already configured by user code.
 	if headers.Get("Content-Type") == "" {
-		headers.Set("Content-Type", sseContentType)
+		headers["Content-Type"] = []string{sseContentType}
 	}
 	if headers.Get("Cache-Control") == "" {
-		headers.Set("Cache-Control", "no-cache")
+		headers["Cache-Control"] = []string{"no-cache"}
 	}
 	if headers.Get("Connection") == "" {
-		headers.Set("Connection", "keep-alive")
+		headers["Connection"] = []string{"keep-alive"}
 	}
 	if headers.Get("X-Accel-Buffering") == "" {
-		headers.Set("X-Accel-Buffering", "no")
+		headers["X-Accel-Buffering"] = []string{"no"}
 	}
 
 	w := c.Response
