@@ -23,11 +23,13 @@ func (s *SessionAuth) Authenticate(r *http.Request) (*User, error) {
 	if s == nil || s.Store == nil {
 		return nil, errors.New("session store is not configured")
 	}
-	if s.CookieName == "" {
-		return nil, errors.New("session cookie name is not configured")
+
+	cookieName := s.CookieName
+	if cookieName == "" {
+		cookieName = "zen-session"
 	}
 
-	cookie, err := r.Cookie(s.CookieName)
+	cookie, err := r.Cookie(cookieName)
 	if err != nil {
 		return nil, errors.New("missing session cookie")
 	}

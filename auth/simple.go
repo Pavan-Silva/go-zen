@@ -51,10 +51,12 @@ func (a *APIKeyAuth) Authenticate(r *http.Request) (*User, error) {
 
 	var key string
 
-	if a.HeaderName != "" {
-		key = r.Header.Get(a.HeaderName)
+	headerName := a.HeaderName
+	if headerName == "" {
+		headerName = "X-API-Key"
 	}
 
+	key = r.Header.Get(headerName)
 	if key == "" && a.QueryParam != "" {
 		key = r.URL.Query().Get(a.QueryParam)
 	}
