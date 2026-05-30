@@ -2,7 +2,6 @@ package auth
 
 import (
 	"net/http"
-	"slices"
 	"time"
 
 	"github.com/Pavan-Silva/go-zen"
@@ -22,15 +21,10 @@ type Authenticator interface {
 
 // User represents authenticated user information.
 type User struct {
-	ID       string         // Unique identifier for the user.
-	Username string         // Display or login name of the user.
-	Roles    []string       // Roles assigned to the user for authorization.
-	Claims   map[string]any // Arbitrary claims associated with the user.
-}
-
-// HasRole checks if the user has a specific role.
-func (u *User) HasRole(role string) bool {
-	return slices.Contains(u.Roles, role)
+	ID          string         // Unique identifier for the user.
+	Username    string         // Display or login name of the user.
+	Roles  []string       // Roles assigned to the user for authorization.
+	Claims map[string]any // Arbitrary claims associated with the user.
 }
 
 // RequireAuth creates authentication middleware.
@@ -72,32 +66,6 @@ func MiddlewareWithSkipper(auth Authenticator, onError func(*zen.Ctx), skip zen.
 		}
 
 		c.Set("user", user)
-		c.Next()
-	}
-}
-
-// RequireRole creates middleware that requires a specific role.
-// It must be used after RequireAuth.
-func RequireRole(role string, onError func(*zen.Ctx)) zen.HandlerFunc {
-	if onError == nil {
-		onError = func(c *zen.Ctx) {
-			c.Error(http.StatusForbidden, http.StatusText(http.StatusForbidden))
-		}
-	}
-
-	return func(c *zen.Ctx) {
-		userVal, ok := c.Get("user")
-		if !ok || userVal == nil {
-			onError(c)
-			return
-		}
-
-		user, ok := userVal.(*User)
-		if !ok || !user.HasRole(role) {
-			onError(c)
-			return
-		}
-
 		c.Next()
 	}
 }
