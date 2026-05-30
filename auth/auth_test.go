@@ -765,3 +765,83 @@ func TestMiddleware_Deprecated(t *testing.T) {
 		t.Fatalf("status = %d, want 200", w.Code)
 	}
 }
+
+// --- Permission-based access control ---
+
+func TestHasPermission_Exists(t *testing.T) {
+	u := User{Permissions: map[string]struct{}{"read:users": {}}}
+	if !u.HasPermission("read:users") {
+		t.Fatal("expected HasPermission to return true")
+	}
+}
+
+func TestHasPermission_NotExists(t *testing.T) {
+	u := User{Permissions: map[string]struct{}{"read:users": {}}}
+	if u.HasPermission("write:admin") {
+		t.Fatal("expected HasPermission to return false")
+	}
+}
+
+func TestHasPermission_NilMap(t *testing.T) {
+	var u User
+	if u.HasPermission("anything") {
+		t.Fatal("expected HasPermission to return false for nil map")
+	}
+}
+
+func TestRequirePermission_Allowed(t *testing.T) {
+	r := zen.New(":0")
+	r.Use(RequireAuth(&testAuth{
+		user: &User{
+			ID: "1", Username: "john",
+			Permissions: map[string]struct{}{"read:docs": {}},
+		},
+	}))
+	r.GET("/docs", RequirePermission("read:docs"), func(c *zen.Ctx) {
+		c.String(200, "ok")
+	})
+
+	req := httptest.NewRequest("GET", "/docs", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 200 {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestRequirePermission_Denied(t *testing.T) {
+	r := zen.New(":0")
+	r.Use(RequireAuth(&testAuth{
+		user: &User{
+			ID: "1", Username: "john",
+			Permissions: map[string]struct{}{"read:docs": {}},
+		},
+	}))
+	r.GET("/admin", RequirePermission("admin:system"), func(c *zen.Ctx) {
+		c.String(200, "ok")
+	})
+
+	req := httptest.NewRequest("GET", "/admin", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 403 {
+		t.Fatalf("status = %d, want 403; body: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestRequirePermission_NoUser(t *testing.T) {
+	r := zen.New(":0")
+	r.GET("/noauth", RequirePermission("read:anything"), func(c *zen.Ctx) {
+		c.String(200, "ok")
+	})
+
+	req := httptest.NewRequest("GET", "/noauth", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 403 {
+		t.Fatalf("status = %d, want 403; body: %s", w.Code, w.Body.String())
+	}
+}
