@@ -6,6 +6,19 @@ import (
 	"github.com/Pavan-Silva/go-zen"
 )
 
+// Permissions builds a permission map from a list of permission strings.
+//
+//	user := &auth.User{
+//	    Permissions: auth.Permissions("read:users", "write:reports"),
+//	}
+func Permissions(list ...string) map[string]struct{} {
+	p := make(map[string]struct{}, len(list))
+	for _, perm := range list {
+		p[perm] = struct{}{}
+	}
+	return p
+}
+
 // HasPermission checks if the user has an explicit permission key.
 func (u *User) HasPermission(permission string) bool {
 	if u.Permissions == nil {
