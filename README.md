@@ -34,14 +34,6 @@ func main() {
 
 Full documentation is available at **[zen-docs-steel.vercel.app](https://zen-docs-steel.vercel.app)**.
 
-The docs site lives at [`zen-docs`](/Users/pavansilva/Documents/zen-docs) — a Docusaurus project:
-
-```bash
-cd /Users/pavansilva/Documents/zen-docs
-npm install
-npm run start
-```
-
 ## License
 
 MIT
