@@ -1,5 +1,7 @@
 # Zen
 
+> **Preview** — under active development. Minor or unexpected bugs may occur.
+
 [![Go Reference](https://pkg.go.dev/badge/github.com/Pavan-Silva/go-zen.svg)](https://pkg.go.dev/github.com/Pavan-Silva/go-zen)
 
 A lightweight, high-performance HTTP microframework for Go built on `net/http`. Performance on par with Gin and Echo, zero external router dependency.
