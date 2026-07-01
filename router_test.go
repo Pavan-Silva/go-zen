@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"math/big"
 	"net"
@@ -41,6 +42,14 @@ func TestRouter_New_WithConfig(t *testing.T) {
 	if r.server.ReadTimeout != 15*1000000000 {
 		t.Fatalf("ReadTimeout = %v, want %v", r.server.ReadTimeout, 15*1000000000)
 	}
+}
+
+func TestRouter_RunServer_HandlesListenError(t *testing.T) {
+	r := New(":0")
+
+	r.runServer(func() error {
+		return errors.New("listen failed")
+	})
 }
 
 func TestRouter_DefaultConfig(t *testing.T) {

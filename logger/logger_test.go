@@ -2,8 +2,6 @@ package logger
 
 import (
 	"bytes"
-	"os"
-	"os/exec"
 	"strings"
 	"testing"
 )
@@ -194,28 +192,30 @@ func TestSetDefault(t *testing.T) {
 	}
 }
 
-func TestFatal_LogsBeforeExit(t *testing.T) {
-	if os.Getenv("TEST_FATAL_EXIT") == "1" {
-		l := New(FATAL, os.Stdout)
-		l.Fatal("fatal message", "key", "val")
-		return
-	}
+func TestFatal_PanicsAfterLogging(t *testing.T) {
+	buf := &bytes.Buffer{}
+	l := New(FATAL, buf)
 
-	cmd := exec.Command(os.Args[0], "-test.run="+t.Name())
-	cmd.Env = append(os.Environ(), "TEST_FATAL_EXIT=1")
-	out, err := cmd.CombinedOutput()
-	if err == nil {
-		t.Fatal("Fatal should exit with code 1")
-	}
-	if !strings.Contains(string(out), "fatal message") {
-		t.Fatal("Fatal should log message before exit")
-	}
-	if !strings.Contains(string(out), "FATAL") {
-		t.Fatal("FATAL level should appear in output")
-	}
-	if !strings.Contains(string(out), "key") || !strings.Contains(string(out), "val") {
-		t.Fatal("Fatal should include args")
-	}
+	defer func() {
+		recovered := recover()
+		if recovered == nil {
+			t.Fatal("Fatal should panic after logging")
+		}
+		if _, ok := recovered.(FatalError); !ok {
+			t.Fatalf("expected FatalError, got %T", recovered)
+		}
+		if !strings.Contains(buf.String(), "fatal message") {
+			t.Fatal("Fatal should log message before panic")
+		}
+		if !strings.Contains(buf.String(), "FATAL") {
+			t.Fatal("FATAL level should appear in output")
+		}
+		if !strings.Contains(buf.String(), "key") || !strings.Contains(buf.String(), "val") {
+			t.Fatal("Fatal should include args")
+		}
+	}()
+
+	l.Fatal("fatal message", "key", "val")
 }
 
 func TestFmtArguments(t *testing.T) {

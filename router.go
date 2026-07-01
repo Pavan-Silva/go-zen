@@ -140,28 +140,33 @@ func (e *Engine) RunTLS(certFile, keyFile string) {
 func (e *Engine) runServer(listen func() error) {
 	fmt.Print(system.Banner(e.server.Addr))
 
+	errCh := make(chan error, 1)
 	go func() {
-		if err := listen(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			logger.Error("Server error: %v", err)
-			os.Exit(1)
-		}
+		errCh <- listen()
 	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(quit)
+
+	select {
+	case err := <-errCh:
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			logger.Error("Server error: %v", err)
+		}
+		return
+	case <-quit:
+	}
 
 	e.gracefulShutdown()
 }
 
 // Tracks kernel termination signals to gracefully clean up underlying network sockets.
 func (e *Engine) gracefulShutdown() {
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
-
 	ctx, cancel := context.WithTimeout(context.Background(), e.shutdownTimeout)
 	defer cancel()
 
-	if err := e.server.Shutdown(ctx); err != nil {
+	if err := e.server.Shutdown(ctx); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		logger.Error("Server shutdown error: %v", err)
 	}
-
-	signal.Stop(quit)
 }

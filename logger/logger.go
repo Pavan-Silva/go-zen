@@ -39,6 +39,13 @@ func (l Level) String() string {
 	}
 }
 
+// FatalError is returned by Fatal logs as a recoverable error signal.
+type FatalError struct {
+	Message string
+}
+
+func (e FatalError) Error() string { return e.Message }
+
 // Logger provides structured logging with slog backend.
 type Logger struct {
 	logger  *slog.Logger
@@ -118,7 +125,7 @@ func (l *Logger) log(level Level, message string, args ...any) {
 	_ = l.logger.Handler().Handle(context.Background(), r)
 
 	if level >= FATAL {
-		os.Exit(1)
+		panic(FatalError{Message: message})
 	}
 }
 
