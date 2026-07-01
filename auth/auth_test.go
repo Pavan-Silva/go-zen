@@ -137,6 +137,53 @@ func TestRequireRole_Failure(t *testing.T) {
 	}
 }
 
+func TestRequireClaim_AllowsMatchingClaim(t *testing.T) {
+	r := zen.New(":0")
+	r.Use(RequireAuth(&testAuth{
+		user: &User{ID: "1", Username: "john", Claims: map[string]any{"tenant": "acme"}},
+	}))
+	r.GET("/documents", RequireClaim("tenant", "acme"), func(c *zen.Ctx) {
+		c.String(200, "ok")
+	})
+
+	req := httptest.NewRequest("GET", "/documents", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+}
+
+func TestRequireClaim_DeniesMismatchedClaim(t *testing.T) {
+	r := zen.New(":0")
+	r.Use(RequireAuth(&testAuth{
+		user: &User{ID: "1", Username: "john", Claims: map[string]any{"tenant": "other"}},
+	}))
+	r.GET("/documents", RequireClaim("tenant", "acme"), func(c *zen.Ctx) {
+		c.String(200, "ok")
+	})
+
+	req := httptest.NewRequest("GET", "/documents", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403", w.Code)
+	}
+}
+
+func TestUser_GetClaim(t *testing.T) {
+	user := &User{Claims: map[string]any{"tenant": "acme"}}
+	value, ok := user.GetClaim("tenant")
+	if !ok {
+		t.Fatal("expected tenant claim to be found")
+	}
+	if value != "acme" {
+		t.Fatalf("expected acme, got %v", value)
+	}
+}
+
 func TestGetUser_Nil(t *testing.T) {
 	r := zen.New(":0")
 	r.GET("/no-auth", func(c *zen.Ctx) {
