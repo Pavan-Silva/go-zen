@@ -385,7 +385,6 @@ func TestRIEmpty(t *testing.T) {
 	}
 }
 
-type empty struct{}
 type nested struct {
 	Inner struct{ X string }
 	Value int
