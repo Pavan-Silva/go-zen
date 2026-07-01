@@ -202,7 +202,9 @@ func (o *OpenAPI) RegisterRoutes(r *zen.Engine) {
 			w.Write([]byte(docHTML))
 		}))
 
-		r.HandleRaw("GET /openapi/swagger-ui/", http.StripPrefix("/openapi/swagger-ui/", http.FileServer(uiAssets)))
+		if uiAssets != nil {
+			r.HandleRaw("GET /openapi/swagger-ui/", http.StripPrefix("/openapi/swagger-ui/", http.FileServer(uiAssets)))
+		}
 	}
 }
 
@@ -284,12 +286,12 @@ func (o *OpenAPI) buildPaths(sb *schemaBuilder) map[string]any {
 				continue
 			}
 
-		op := map[string]any{
-			"responses": make(map[string]any),
-		}
-		if params != nil {
-			op["parameters"] = params
-		}
+			op := map[string]any{
+				"responses": make(map[string]any),
+			}
+			if params != nil {
+				op["parameters"] = params
+			}
 
 			if info.Summary != "" {
 				op["summary"] = info.Summary
@@ -376,5 +378,3 @@ func (o *OpenAPI) buildParams(path string) []map[string]any {
 	}
 	return params
 }
-
-

@@ -179,6 +179,32 @@ func TestDocHandlerSwaggerUI(t *testing.T) {
 	}
 }
 
+func TestDocHandlerFallbackWhenAssetsMissing(t *testing.T) {
+	prevTemplate := uiTemplate
+	prevAssets := uiAssets
+	uiTemplate = ""
+	uiAssets = nil
+	t.Cleanup(func() {
+		uiTemplate = prevTemplate
+		uiAssets = prevAssets
+	})
+
+	doc := New(Config{Title: "Test", Version: "1.0"})
+	handler := doc.DocHandler()
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/docs", nil)
+	c := &zen.Ctx{Response: w, Request: r}
+	handler(c)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	if body := w.Body.String(); !strings.Contains(body, "fallback mode") {
+		t.Fatalf("expected fallback HTML content, got %s", body)
+	}
+}
+
 func TestDocDisabled(t *testing.T) {
 	doc := New(Config{Title: "Test", Version: "1.0", SpecPath: "/spec.json", DisableUI: true})
 	r := zen.New(":0")
@@ -420,5 +446,3 @@ func TestContextPoolIntegration(t *testing.T) {
 		t.Fatalf("expected 200, got %d", w.Code)
 	}
 }
-
-
