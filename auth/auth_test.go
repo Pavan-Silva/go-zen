@@ -22,7 +22,7 @@ func (a *testAuth) Authenticate(r *http.Request) (*User, error) {
 func TestRequireAuth_Success(t *testing.T) {
 	r := zen.New(":0")
 	r.Use(RequireAuth(&testAuth{
-		user: &User{ID: "1", Username: "john", Roles: []string{"admin"}},
+		user: &User{ID: "1", Username: "john", Authorities: []string{"ROLE_ADMIN"}},
 	}))
 
 	var captured *User
@@ -98,7 +98,7 @@ func TestRequireAuth_Skip(t *testing.T) {
 func TestRequireRole(t *testing.T) {
 	r := zen.New(":0")
 	r.Use(RequireAuth(&testAuth{
-		user: &User{ID: "1", Username: "john", Roles: []string{"admin"}},
+		user: &User{ID: "1", Username: "john", Authorities: []string{"role:admin"}},
 	}))
 	r.Use(RequireRole("admin", nil))
 
@@ -120,7 +120,7 @@ func TestRequireRole(t *testing.T) {
 func TestRequireRole_Failure(t *testing.T) {
 	r := zen.New(":0")
 	r.Use(RequireAuth(&testAuth{
-		user: &User{ID: "1", Username: "john", Roles: []string{"user"}},
+		user: &User{ID: "1", Username: "john", Authorities: []string{"role:user"}},
 	}))
 	r.Use(RequireRole("admin", nil))
 
@@ -199,14 +199,76 @@ func TestGetUser_Nil(t *testing.T) {
 	r.ServeHTTP(w, req)
 }
 
-func TestUser_HasRole(t *testing.T) {
-	u := User{Roles: []string{"admin", "user"}}
+func TestUser_RequireRole(t *testing.T) {
+	u := User{Authorities: []string{"role:admin", "role:user"}}
 
-	if !u.HasRole("admin") {
+	if !u.RequireRole("admin") {
 		t.Fatal("should have admin role")
 	}
-	if u.HasRole("superadmin") {
+	if u.RequireRole("superadmin") {
 		t.Fatal("should not have superadmin role")
+	}
+}
+
+func TestUser_RequireRole_MixedCasePrefix(t *testing.T) {
+	u := User{Authorities: []string{"ROLE:ADMIN", "ROLE:USER"}}
+
+	if !u.RequireRole("ROLE:ADMIN") {
+		t.Fatal("should match role authorities regardless of prefix casing")
+	}
+	if !u.RequireRole("admin") {
+		t.Fatal("should match role authorities regardless of role casing")
+	}
+}
+
+func TestUser_RequireAuthority(t *testing.T) {
+	u := User{Authorities: []string{"read:documents"}}
+
+	if !u.RequireAuthority("read:documents") {
+		t.Fatal("should have authority")
+	}
+	if u.RequireAuthority("write:documents") {
+		t.Fatal("should not have other authority")
+	}
+}
+
+func TestUser_RequireAnyPermission(t *testing.T) {
+	u := User{Authorities: []string{"read:documents"}}
+
+	if !u.RequireAnyPermission("write:documents", "read:documents") {
+		t.Fatal("should match any listed permission")
+	}
+	if u.RequireAnyPermission("write:documents", "delete:documents") {
+		t.Fatal("should not match unrelated permissions")
+	}
+}
+
+func TestUser_RequireAllPermissions(t *testing.T) {
+	u := User{Authorities: []string{"read:documents", "write:documents"}}
+
+	if !u.RequireAllPermissions("read:documents", "write:documents") {
+		t.Fatal("should match all listed permissions")
+	}
+	if u.RequireAllPermissions("read:documents", "delete:documents") {
+		t.Fatal("should require all permissions")
+	}
+}
+
+func TestRequireAnyPermission(t *testing.T) {
+	r := zen.New(":0")
+	r.Use(RequireAuth(&testAuth{
+		user: &User{ID: "1", Username: "john", Authorities: []string{"read:docs"}},
+	}))
+	r.GET("/docs", RequireAnyPermission("write:docs", "read:docs"), func(c *zen.Ctx) {
+		c.String(200, "ok")
+	})
+
+	req := httptest.NewRequest("GET", "/docs", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
 	}
 }
 
@@ -684,8 +746,8 @@ func TestDefaultUserMapper(t *testing.T) {
 	if user.Username != "john" {
 		t.Fatalf("username = %q, want %q", user.Username, "john")
 	}
-	if len(user.Roles) != 2 {
-		t.Fatalf("roles len = %d, want 2", len(user.Roles))
+	if len(user.Authorities) != 2 {
+		t.Fatalf("authorities len = %d, want 2", len(user.Authorities))
 	}
 }
 
@@ -714,8 +776,8 @@ func TestDefaultUserMapper_ScopeRoles(t *testing.T) {
 	if user == nil {
 		t.Fatal("user should not be nil")
 	}
-	if len(user.Roles) != 3 {
-		t.Fatalf("roles len = %d, want 3", len(user.Roles))
+	if len(user.Authorities) != 3 {
+		t.Fatalf("authorities len = %d, want 3", len(user.Authorities))
 	}
 }
 
@@ -729,11 +791,11 @@ func TestDefaultUserMapper_AuthoritiesRoles(t *testing.T) {
 	if user == nil {
 		t.Fatal("user should not be nil")
 	}
-	if len(user.Roles) != 2 {
-		t.Fatalf("roles len = %d, want 2", len(user.Roles))
+	if len(user.Authorities) != 2 {
+		t.Fatalf("authorities len = %d, want 2", len(user.Authorities))
 	}
-	if user.Roles[0] != "ROLE_ADMIN" {
-		t.Fatalf("roles[0] = %q, want %q", user.Roles[0], "ROLE_ADMIN")
+	if user.Authorities[0] != "ROLE_ADMIN" {
+		t.Fatalf("authorities[0] = %q, want %q", user.Authorities[0], "ROLE_ADMIN")
 	}
 }
 
@@ -813,26 +875,26 @@ func TestMiddleware_Deprecated(t *testing.T) {
 	}
 }
 
-// --- Permission-based access control ---
+// --- Authority-based access control ---
 
-func TestHasPermission_Exists(t *testing.T) {
-	u := User{Permissions: map[string]struct{}{"read:users": {}}}
-	if !u.HasPermission("read:users") {
-		t.Fatal("expected HasPermission to return true")
+func TestHasAuthority_Exists(t *testing.T) {
+	u := User{Authorities: []string{"read:users"}}
+	if !u.RequireAuthority("read:users") {
+		t.Fatal("expected RequireAuthority to return true")
 	}
 }
 
-func TestHasPermission_NotExists(t *testing.T) {
-	u := User{Permissions: map[string]struct{}{"read:users": {}}}
-	if u.HasPermission("write:admin") {
-		t.Fatal("expected HasPermission to return false")
+func TestRequireAuthority_NotExists(t *testing.T) {
+	u := User{Authorities: []string{"read:users"}}
+	if u.RequireAuthority("write:admin") {
+		t.Fatal("expected RequireAuthority to return false")
 	}
 }
 
-func TestHasPermission_NilMap(t *testing.T) {
+func TestRequireAuthority_NilUser(t *testing.T) {
 	var u User
-	if u.HasPermission("anything") {
-		t.Fatal("expected HasPermission to return false for nil map")
+	if u.RequireAuthority("anything") {
+		t.Fatal("expected RequireAuthority to return false for nil user")
 	}
 }
 
@@ -841,7 +903,7 @@ func TestRequirePermission_Allowed(t *testing.T) {
 	r.Use(RequireAuth(&testAuth{
 		user: &User{
 			ID: "1", Username: "john",
-			Permissions: map[string]struct{}{"read:docs": {}},
+			Authorities: []string{"read:docs"},
 		},
 	}))
 	r.GET("/docs", RequirePermission("read:docs"), func(c *zen.Ctx) {
@@ -862,7 +924,7 @@ func TestRequirePermission_Denied(t *testing.T) {
 	r.Use(RequireAuth(&testAuth{
 		user: &User{
 			ID: "1", Username: "john",
-			Permissions: map[string]struct{}{"read:docs": {}},
+			Authorities: []string{"read:docs"},
 		},
 	}))
 	r.GET("/admin", RequirePermission("admin:system"), func(c *zen.Ctx) {

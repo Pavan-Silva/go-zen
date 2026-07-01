@@ -128,21 +128,21 @@ func DefaultUserMapper(claims jwt.MapClaims) *User {
 	}
 
 	if roles, ok := claims["roles"].([]any); ok {
-		user.Roles = make([]string, len(roles))
+		user.Authorities = make([]string, len(roles))
 		for i, r := range roles {
 			if s, ok := r.(string); ok {
-				user.Roles[i] = s
+				user.Authorities[i] = s
 			}
 		}
 	} else if roles, ok := claims["authorities"].([]any); ok {
-		user.Roles = make([]string, len(roles))
+		user.Authorities = make([]string, len(roles))
 		for i, r := range roles {
 			if s, ok := r.(string); ok {
-				user.Roles[i] = s
+				user.Authorities[i] = s
 			}
 		}
 	} else if scope, ok := claims["scope"].(string); ok && scope != "" {
-		user.Roles = strings.Split(scope, " ")
+		user.Authorities = strings.Split(scope, " ")
 	}
 
 	return user

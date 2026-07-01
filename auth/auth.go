@@ -21,11 +21,10 @@ type Authenticator interface {
 
 // User represents authenticated user information.
 type User struct {
-	ID          string              // Unique identifier for the user.
-	Username    string              // Display or login name of the user.
-	Roles       []string            // Roles assigned to the user for authorization.
-	Permissions map[string]struct{} // Specific permissions granted to the user.
-	Claims      map[string]any      // Arbitrary claims associated with the user.
+	ID          string         // Unique identifier for the user.
+	Username    string         // Display or login name of the user.
+	Authorities []string       // Authorities assigned to the user for authorization.
+	Claims      map[string]any // Arbitrary claims associated with the user.
 }
 
 // RequireAuth creates authentication middleware.

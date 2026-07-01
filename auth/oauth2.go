@@ -90,7 +90,7 @@ func (o *OAuth2Auth) Authenticate(r *http.Request) (*User, error) {
 	}
 
 	if tokenInfo.Scope != "" {
-		user.Roles = strings.Split(tokenInfo.Scope, " ")
+		user.Authorities = strings.Split(tokenInfo.Scope, " ")
 	}
 
 	return user, nil
