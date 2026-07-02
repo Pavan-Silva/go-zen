@@ -60,7 +60,7 @@ func New(addr string, config ...Config) *Engine {
 		shutdownTimeout: cfg.ShutdownTimeout,
 	}
 
-	if e.shutdownTimeout <= 0 {
+	if e.shutdownTimeout == 0 {
 		e.shutdownTimeout = 5 * time.Second
 	}
 

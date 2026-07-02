@@ -96,19 +96,34 @@ func newValidator() *validator.Validate {
 	return inst
 }
 
-// typeHasValidateTags checks whether a struct type has any "validate" struct tags.
-// Results are cached to avoid repeated reflection scans on the hot path.
+// typeHasValidateTags checks whether a struct type or any nested/embedded struct
+// has "validate" struct tags. Results are cached to avoid repeated reflection scans.
 func typeHasValidateTags(t reflect.Type) bool {
 	if v, ok := validateTagCache.Load(t); ok {
 		return v.(bool)
 	}
+
+	ok := typeHasValidateTagsRecursive(t)
+	validateTagCache.Store(t, ok)
+	return ok
+}
+
+func typeHasValidateTagsRecursive(t reflect.Type) bool {
 	for i := 0; i < t.NumField(); i++ {
-		if t.Field(i).Tag.Get("validate") != "" {
-			validateTagCache.Store(t, true)
+		f := t.Field(i)
+		if f.Tag.Get("validate") != "" {
 			return true
 		}
+		if f.Anonymous {
+			if typeHasValidateTagsRecursive(f.Type) {
+				return true
+			}
+		} else if f.Type.Kind() == reflect.Struct {
+			if typeHasValidateTagsRecursive(f.Type) {
+				return true
+			}
+		}
 	}
-	validateTagCache.Store(t, false)
 	return false
 }
 

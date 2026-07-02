@@ -80,12 +80,12 @@ func RateLimiterWithConfig(config RateLimiterConfig) zen.HandlerFunc {
 	}
 
 	// Periodic cleanup of stale limiters.
+	// Runs for the process lifetime - rate limiter middleware is registered once at startup.
 	go func() {
 		ticker := time.NewTicker(time.Minute)
 		defer ticker.Stop()
 		for range ticker.C {
 			now := time.Now()
-			// Clean up each shard independently.
 			for i := range shardCount {
 				shard := shards[i]
 				shard.mu.Lock()

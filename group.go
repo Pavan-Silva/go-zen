@@ -2,6 +2,7 @@ package zen
 
 import (
 	"net/http"
+	"strings"
 )
 
 // RouterGroup groups routes under a common prefix with optional shared middleware.
@@ -120,11 +121,12 @@ func (g *RouterGroup) registerRoute(method, fullPath string, handlers []HandlerF
 	})
 }
 
-// ensureLeadingSlash adds a leading slash if the prefix does not have one.
+// ensureLeadingSlash adds a leading slash (if absent) and strips a trailing slash.
 func ensureLeadingSlash(prefix string) string {
 	if prefix == "" {
 		return "/"
 	}
+	prefix = strings.TrimSuffix(prefix, "/")
 	if prefix[0] != '/' {
 		return "/" + prefix
 	}

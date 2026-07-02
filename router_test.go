@@ -304,58 +304,6 @@ func TestRouter_ShutdownTimeout(t *testing.T) {
 	}
 }
 
-func BenchmarkRouter_ServeHTTP(b *testing.B) {
-	r := New(":0")
-	r.GET("/bench", func(c *Ctx) {
-		c.String(200, "ok")
-	})
-
-	req := httptest.NewRequest("GET", "/bench", nil)
-	w := httptest.NewRecorder()
-
-	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		r.ServeHTTP(w, req)
-	}
-}
-
-func BenchmarkRouter_ServeHTTP_WithMiddleware(b *testing.B) {
-	r := New(":0")
-	r.Use(func(c *Ctx) {
-		c.Next()
-	})
-	r.GET("/bench", func(c *Ctx) {
-		c.String(200, "ok")
-	})
-
-	req := httptest.NewRequest("GET", "/bench", nil)
-	w := httptest.NewRecorder()
-
-	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		r.ServeHTTP(w, req)
-	}
-}
-
-func BenchmarkRouter_PathParams(b *testing.B) {
-	r := New(":0")
-	r.GET("/users/{id}", func(c *Ctx) {
-		c.Param("id")
-		c.String(200, "ok")
-	})
-
-	req := httptest.NewRequest("GET", "/users/123", nil)
-	w := httptest.NewRecorder()
-
-	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		r.ServeHTTP(w, req)
-	}
-}
-
 // Test per-route middleware
 func TestRouter_HandleWith_PerRouteMiddleware(t *testing.T) {
 	r := New(":0")

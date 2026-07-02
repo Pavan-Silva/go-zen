@@ -19,10 +19,10 @@ import (
 func Recover(c *zen.Ctx) {
 	defer func() {
 		if err := recover(); err != nil {
-	stackBytes := debug.Stack()
-	stackTraceStr := zen.BytesToString(stackBytes)
+			stackBytes := debug.Stack()
+			stackTraceStr := zen.BytesToString(stackBytes)
 
-	logger.Error("HTTP panic recovered",
+			logger.Error("HTTP panic recovered",
 				"error", err,
 				"method", c.Request.Method,
 				"path", c.Request.URL.Path,

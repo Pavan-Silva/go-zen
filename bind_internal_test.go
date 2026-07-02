@@ -138,10 +138,7 @@ func TestSetFieldValue_Slice(t *testing.T) {
 func TestSetFieldValue_Default(t *testing.T) {
 	var m map[string]string
 	fv := reflect.ValueOf(&m).Elem()
-	if err := setFieldValue(fv, reflect.Map, []string{"x"}); err != nil {
-		t.Fatal(err)
-	}
-	if m != nil {
-		t.Fatal("should not modify map type")
+	if err := setFieldValue(fv, reflect.Map, []string{"x"}); err == nil {
+		t.Fatal("expected error for unsupported type")
 	}
 }

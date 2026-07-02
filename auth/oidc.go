@@ -3,12 +3,17 @@ package auth
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/golang-jwt/jwt/v5"
 )
+
+// errOIDCJWTVerificationSkipped is a sentinel error indicating JWT verification
+// was intentionally skipped because no verification key is configured.
+var errOIDCJWTVerificationSkipped = errors.New("jwt verification not configured for OIDC access tokens; set SkipTokenVerification=true if using opaque tokens")
 
 // OIDCUserInfo represents the user information returned by the userinfo endpoint.
 type OIDCUserInfo struct {
@@ -56,9 +61,9 @@ func (o *OIDCAuth) Authenticate(r *http.Request) (*User, error) {
 
 	if !o.SkipTokenVerification && strings.Count(token, ".") == 2 {
 		if _, err := jwt.Parse(token, func(t *jwt.Token) (any, error) {
-			return nil, fmt.Errorf("JWT signature verification not configured for OIDC access tokens; set SkipTokenVerification=true if using opaque tokens")
+			return nil, errOIDCJWTVerificationSkipped
 		}); err != nil {
-			if !strings.Contains(err.Error(), "JWT signature verification not configured") {
+			if !errors.Is(err, errOIDCJWTVerificationSkipped) {
 				return nil, fmt.Errorf("access token verification failed: %w", err)
 			}
 		}

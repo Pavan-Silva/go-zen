@@ -85,7 +85,6 @@ type OpenAPI struct {
 	mu     sync.RWMutex
 	routes map[string]map[string]RouteInfo
 	spec   []byte
-	once   sync.Once
 }
 
 // New creates an OpenAPI instance with the given configuration.
@@ -139,24 +138,31 @@ func (o *OpenAPI) Register(method, path string, b *RouteInfoBuilder) {
 	}
 	o.routes[method][path] = existing
 	o.spec = nil
-	o.once = sync.Once{}
 	o.mu.Unlock()
 }
 
 // SpecJSON returns the generated OpenAPI spec as JSON bytes.
 func (o *OpenAPI) SpecJSON() []byte {
-	o.once.Do(func() {
-		o.mu.RLock()
-		data := o.generate()
-		b, err := json.MarshalIndent(data, "", "  ")
-		if err != nil {
-			b = fmt.Appendf(nil, `{"error":"%s"}`, err.Error())
-		}
-		o.spec = b
-		o.mu.RUnlock()
-	})
+	o.mu.RLock()
+	spec := o.spec
+	o.mu.RUnlock()
+	if spec != nil {
+		return spec
+	}
 
-	return o.spec
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if o.spec != nil {
+		return o.spec
+	}
+
+	data := o.generate()
+	b, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		b = fmt.Appendf(nil, `{"error":"%s"}`, err.Error())
+	}
+	o.spec = b
+	return b
 }
 
 // SpecHandler returns a HandlerFunc that serves /openapi.json.

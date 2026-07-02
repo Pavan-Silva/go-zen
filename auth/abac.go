@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/Pavan-Silva/go-zen"
@@ -42,11 +43,17 @@ func RequireClaim(key string, expected any, onError ...func(*zen.Ctx)) zen.Handl
 		}
 
 		value, exists := user.GetClaim(key)
-		if !exists || value != expected {
+		if !exists || !equalClaims(value, expected) {
 			errFunc(c)
 			return
 		}
 
 		c.Next()
 	}
+}
+
+// equalClaims compares two claim values with type coercion.
+// Uses fmt.Sprint to handle JSON-decoded float64 vs int literal comparisons.
+func equalClaims(a, b any) bool {
+	return fmt.Sprint(a) == fmt.Sprint(b)
 }

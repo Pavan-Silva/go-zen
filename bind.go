@@ -220,6 +220,7 @@ func setFieldValue(fv reflect.Value, kind reflect.Kind, vals []string) error {
 		}
 		fv.SetBool(b)
 	default:
+		return fmt.Errorf("unsupported bind type %v for field", kind)
 	}
 	return nil
 }

@@ -43,6 +43,7 @@ func (c *Ctx) HTML(status int, html string) {
 //
 //	c.String(http.StatusOK, "Hello World")
 func (c *Ctx) String(status int, text string) {
+	c.setContentType("text/plain; charset=utf-8")
 	c.Response.WriteHeader(status)
 	if _, err := io.WriteString(c.Response, text); err != nil {
 		logger.Error("HTTP: string response write error: %v", err)

@@ -17,9 +17,11 @@ const minCompressionThreshold = 1024
 type compressResponseWriter struct {
 	http.ResponseWriter
 	gz          *gzip.Writer
-	bodyBuffer  *bytes.Buffer // Local buffer to delay writing until threshold is verified
+	bodyBuffer  *bytes.Buffer
 	status      int
+	level       int
 	wroteHeader bool
+	gzipPool    *sync.Pool
 }
 
 // Compress returns standard gzip compression middleware using default compression parameters.
@@ -66,25 +68,23 @@ func CompressWithLevel(level int) zen.HandlerFunc {
 		cw := writerStructPool.Get().(*compressResponseWriter)
 		cw.ResponseWriter = c.Response
 		cw.status = http.StatusOK
+		cw.level = level
 		cw.wroteHeader = false
 		cw.bodyBuffer.Reset()
 		cw.gz = nil
+		cw.gzipPool = &gzipPool
 
-		// Intercept framework context writer layout
 		c.Response = cw
 
 		c.Next()
 
-		// --- Request Execution Concludes: Process Deferred Compression Path ---
 		if !cw.wroteHeader {
 			cw.writeFinal(&gzipPool)
 		} else if cw.gz != nil {
-			// Flush final gzip structural chunks to complete the stream
 			_ = cw.gz.Close()
 			gzipPool.Put(cw.gz)
 		}
 
-		// Clean up structural fields completely to prevent memory leaks in the pool
 		cw.ResponseWriter = nil
 		cw.gz = nil
 		writerStructPool.Put(cw)
@@ -124,11 +124,9 @@ func (w *compressResponseWriter) initGzipStream() {
 	w.Header().Set("Vary", "Accept-Encoding")
 	w.ResponseWriter.WriteHeader(w.status)
 
-	// Fallback to on-the-fly writer creation if the threshold is crossed mid-stream.
-	// This avoids passing the pool deep into the raw Write call graph.
-	w.gz, _ = gzip.NewWriterLevel(w.ResponseWriter, gzip.DefaultCompression)
+	w.gz = w.gzipPool.Get().(*gzip.Writer)
+	w.gz.Reset(w.ResponseWriter)
 
-	// Dump whatever we accumulated in our small buffer out to the new gzip stream first
 	if w.bodyBuffer.Len() > 0 {
 		_, _ = w.gz.Write(w.bodyBuffer.Bytes())
 		w.bodyBuffer.Reset()

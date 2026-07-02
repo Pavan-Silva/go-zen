@@ -2,6 +2,7 @@ package zen
 
 import (
 	"io"
+	"net/url"
 	"strings"
 )
 
@@ -34,12 +35,20 @@ func (c *Ctx) QueryParam(key string) string {
 			if pos == len(rawQuery) || rawQuery[pos] != '=' {
 				return ""
 			}
+
 			valueStart := pos + 1
 			valueEnd := strings.IndexByte(rawQuery[valueStart:], '&')
+
+			var val string
 			if valueEnd == -1 {
-				return rawQuery[valueStart:]
+				val = rawQuery[valueStart:]
+			} else {
+				val = rawQuery[valueStart : valueStart+valueEnd]
 			}
-			return rawQuery[valueStart : valueStart+valueEnd]
+			if decoded, err := url.QueryUnescape(val); err == nil {
+				return decoded
+			}
+			return val
 		}
 	}
 }
