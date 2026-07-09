@@ -111,7 +111,7 @@ func (sb *schemaBuilder) inlineStruct(t reflect.Type) map[string]any {
 		}
 
 		schema["properties"].(map[string]any)[name] = prop
-		if f.Type.Kind() != reflect.Struct && f.Type.Kind() != reflect.Ptr {
+		if f.Type.Kind() != reflect.Struct && f.Type.Kind() != reflect.Pointer {
 			if isRequired(f) {
 				required = append(required, name)
 			}

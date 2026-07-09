@@ -93,12 +93,6 @@ func (n *node) addChild(child *node) {
 	}
 }
 
-func countParams(path string) int {
-	colons := strings.Count(path, ":")
-	stars := strings.Count(path, "*")
-	return colons + stars
-}
-
 func longestCommonPrefix(a, b string) int {
 	i := 0
 	max_ := min(len(a), len(b))
@@ -335,7 +329,7 @@ type skippedNode struct {
 	paramsCount int16
 }
 
-func (n *node) getValue(path string, ps *params, skippedNodes *[]skippedNode, unescape bool) (value nodeValue) {
+func (n *node) getValue(path string, ps *params, skippedNodes *[]skippedNode) (value nodeValue) {
 	var globalParamsCount int16
 
 walk:
@@ -402,28 +396,24 @@ walk:
 						end++
 					}
 
-					if ps != nil {
-						if cap(*ps) < int(globalParamsCount) {
-							newParams := make(params, len(*ps), globalParamsCount)
-							copy(newParams, *ps)
-							*ps = newParams
-						}
+					if cap(*ps) < int(globalParamsCount) {
+						newParams := make(params, len(*ps), globalParamsCount)
+						copy(newParams, *ps)
+						*ps = newParams
+					}
 
-						if value.params == nil {
-							value.params = ps
-						}
-						i := len(*value.params)
-						*value.params = (*value.params)[:i+1]
-						val := path[:end]
-						if unescape {
-							if v, err := url.QueryUnescape(val); err == nil {
-								val = v
-							}
-						}
-						(*value.params)[i] = paramPair{
-							Key:   n.path[1:],
-							Value: val,
-						}
+					if value.params == nil {
+						value.params = ps
+					}
+					i := len(*value.params)
+					*value.params = (*value.params)[:i+1]
+					val := path[:end]
+					if v, err := url.QueryUnescape(val); err == nil {
+						val = v
+					}
+					(*value.params)[i] = paramPair{
+						Key:   n.path[1:],
+						Value: val,
 					}
 
 					if end < len(path) {
@@ -448,31 +438,27 @@ walk:
 					return value
 
 				case catchAll:
-					if ps != nil {
-						if cap(*ps) < int(globalParamsCount) {
-							newParams := make(params, len(*ps), globalParamsCount)
-							copy(newParams, *ps)
-							*ps = newParams
-						}
+					if cap(*ps) < int(globalParamsCount) {
+						newParams := make(params, len(*ps), globalParamsCount)
+						copy(newParams, *ps)
+						*ps = newParams
+					}
 
-						if value.params == nil {
-							value.params = ps
-						}
-						i := len(*value.params)
-						*value.params = (*value.params)[:i+1]
-						val := path
-						if len(val) > 0 && val[0] == '/' {
-							val = val[1:]
-						}
-						if unescape {
-							if v, err := url.QueryUnescape(val); err == nil {
-								val = v
-							}
-						}
-						(*value.params)[i] = paramPair{
-							Key:   n.path[2:],
-							Value: val,
-						}
+					if value.params == nil {
+						value.params = ps
+					}
+					i := len(*value.params)
+					*value.params = (*value.params)[:i+1]
+					val := path
+					if len(val) > 0 && val[0] == '/' {
+						val = val[1:]
+					}
+					if v, err := url.QueryUnescape(val); err == nil {
+						val = v
+					}
+					(*value.params)[i] = paramPair{
+						Key:   n.path[2:],
+						Value: val,
 					}
 
 					value.handlers = n.handlers
@@ -556,8 +542,7 @@ walk:
 // ── Router ─────────────────────────────────────────────────────────────────
 
 type radixRouter struct {
-	trees     methodTrees
-	maxParams int
+	trees methodTrees
 }
 
 func newRadixRouter() *radixRouter {
@@ -581,15 +566,10 @@ func (r *radixRouter) add(method, path string, handlers []HandlerFunc) {
 		r.trees = append(r.trees, methodTree{method: method, root: root})
 	}
 	root.addRoute(path, handlers)
-
-	if pc := countParams(path); pc > r.maxParams {
-		r.maxParams = pc
-	}
 }
 
 type routeResult struct {
 	handlers      []HandlerFunc
-	ps            params
 	tsr           bool
 	allowedMethod string
 }
@@ -598,9 +578,9 @@ func (r *radixRouter) find(method, path string, ps *params, skipped *[]skippedNo
 	// HEAD → fall back to GET
 	if method == "HEAD" {
 		if root := r.trees.get("HEAD"); root != nil {
-			value := root.getValue(path, ps, skipped, true)
+			value := root.getValue(path, ps, skipped)
 			if value.handlers != nil || value.tsr {
-				return routeResult{handlers: value.handlers, ps: *ps, tsr: value.tsr}
+				return routeResult{handlers: value.handlers, tsr: value.tsr}
 			}
 		}
 		method = "GET"
@@ -611,9 +591,9 @@ func (r *radixRouter) find(method, path string, ps *params, skipped *[]skippedNo
 		return routeResult{allowedMethod: r.allowed(path, method)}
 	}
 
-	value := root.getValue(path, ps, skipped, true)
+	value := root.getValue(path, ps, skipped)
 	if value.handlers != nil || value.tsr {
-		return routeResult{handlers: value.handlers, ps: *ps, tsr: value.tsr}
+		return routeResult{handlers: value.handlers, tsr: value.tsr}
 	}
 
 	return routeResult{allowedMethod: r.allowed(path, method)}
@@ -627,7 +607,7 @@ func (r *radixRouter) allowed(path, currentMethod string) string {
 		}
 		ps := make(params, 0, 4)
 		var skipped []skippedNode
-		v := t.root.getValue(path, &ps, &skipped, true)
+		v := t.root.getValue(path, &ps, &skipped)
 		if v.handlers != nil {
 			methods = append(methods, t.method)
 		}

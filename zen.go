@@ -15,7 +15,6 @@
 //
 //	r.Use(middleware.Recover)
 //	r.Use(middleware.Logger)
-//	r.HandleWith("GET /admin", adminHandler, authMiddleware)
 //
 // # Routing
 //
@@ -29,7 +28,7 @@
 // # Route Groups
 //
 //	api := r.Group("/api")
-//	api.Handle("GET /health", healthCheck)
+//	api.HandleRaw("GET /health", healthCheck)
 //
 // # Binding and Validation
 //

@@ -117,7 +117,9 @@ func writeBytesSSE(w http.ResponseWriter, b []byte) error {
 		idx := bytes.IndexByte(remaining, '\n')
 		if idx == -1 {
 			// Write the final chunk
-			cleanWrite(w, remaining)
+			if err := cleanWrite(w, remaining); err != nil {
+				return err
+			}
 			if _, err := w.Write(tokenDoubleNL); err != nil {
 				return err
 			}
@@ -125,7 +127,9 @@ func writeBytesSSE(w http.ResponseWriter, b []byte) error {
 		}
 
 		// Write up to the newline token slice bounds
-		cleanWrite(w, remaining[:idx])
+		if err := cleanWrite(w, remaining[:idx]); err != nil {
+			return err
+		}
 		if _, err := w.Write(tokenNL); err != nil {
 			return err
 		}
@@ -135,10 +139,11 @@ func writeBytesSSE(w http.ResponseWriter, b []byte) error {
 }
 
 // cleanWrite strips out trailing carriage returns ('\r') inline during raw stream flush.
-func cleanWrite(w http.ResponseWriter, b []byte) {
+func cleanWrite(w http.ResponseWriter, b []byte) error {
 	if len(b) > 0 && b[len(b)-1] == '\r' {
-		_, _ = w.Write(b[:len(b)-1])
-		return
+		_, err := w.Write(b[:len(b)-1])
+		return err
 	}
-	_, _ = w.Write(b)
+	_, err := w.Write(b)
+	return err
 }

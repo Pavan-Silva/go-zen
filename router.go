@@ -68,7 +68,7 @@ func New(addr string, config ...Config) *Engine {
 	e.pool.New = func() any {
 		return &Ctx{
 			ps:           make(params, 0, 8),
-			skippedNodes: make([]skippedNode, 0, 8),
+			skippedNodes: make([]skippedNode, 0, 16),
 		}
 	}
 	e.RouterGroup = RouterGroup{prefix: "", engine: e, middleware: nil}

@@ -37,9 +37,10 @@ func (g *RouterGroup) Group(prefix string, middleware ...HandlerFunc) *RouterGro
 // HandleRaw registers a raw http.Handler on the router using the zen handler chain.
 // The pattern uses Go 1.22+ ServeMux syntax ({param}, {path...}) which is
 // automatically converted to the router's native syntax (:param, *path).
+// The group prefix is prepended to the path automatically.
 func (g *RouterGroup) HandleRaw(pattern string, handler http.Handler) {
 	method, path := convertServeMuxPattern(pattern)
-	g.registerRoute(method, path, []HandlerFunc{func(c *Ctx) {
+	g.registerRoute(method, g.prefix+path, []HandlerFunc{func(c *Ctx) {
 		handler.ServeHTTP(c.Response, c.Request)
 	}})
 }

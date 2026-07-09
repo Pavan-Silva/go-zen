@@ -190,8 +190,7 @@ func (o *OpenAPI) DocHandler() zen.HandlerFunc {
 	}
 }
 
-// RegisterRoutes registers the spec endpoint and optionally the docs UI on the engine
-// via HandleRaw (bypasses middleware to avoid logging noise on doc endpoints).
+// RegisterRoutes registers the spec endpoint and optionally the docs UI on the engine.
 // The docs UI is skipped when DisableUI is true.
 func (o *OpenAPI) RegisterRoutes(r *zen.Engine) {
 	r.HandleRaw("GET "+o.cfg.SpecPath, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -209,7 +208,7 @@ func (o *OpenAPI) RegisterRoutes(r *zen.Engine) {
 		}))
 
 		if uiAssets != nil {
-			r.HandleRaw("GET /openapi/swagger-ui/", http.StripPrefix("/openapi/swagger-ui/", http.FileServer(uiAssets)))
+			r.HandleRaw("GET /openapi/swagger-ui/{path...}", http.StripPrefix("/openapi/swagger-ui/", http.FileServer(uiAssets)))
 		}
 	}
 }

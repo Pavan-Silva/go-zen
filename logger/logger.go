@@ -13,12 +13,12 @@ import (
 type Level int32
 
 const (
-	TRACE Level = -4 // Custom trace level below Debug
-	DEBUG Level = 0  // slog.LevelDebug = 0
-	INFO  Level = 4  // slog.LevelInfo = 4
-	WARN  Level = 8  // slog.LevelWarn = 8
-	ERROR Level = 12 // slog.LevelError = 12
-	FATAL Level = 16 // Custom fatal level above Error
+	TRACE Level = -8 // slog.LevelDebug - 4
+	DEBUG Level = -4 // slog.LevelDebug
+	INFO  Level = 0  // slog.LevelInfo
+	WARN  Level = 4  // slog.LevelWarn
+	ERROR Level = 8  // slog.LevelError
+	FATAL Level = 12 // slog.LevelError + 4
 )
 
 // String returns the string representation of the level.
@@ -144,7 +144,7 @@ func (l *Logger) Warn(message string, args ...any) { l.log(WARN, message, args..
 // Error logs an error message with key-value fields.
 func (l *Logger) Error(message string, args ...any) { l.log(ERROR, message, args...) }
 
-// Fatal logs a fatal message, flushes, and invokes os.Exit(1).
+// Fatal logs a fatal message and panics with FatalError (recoverable).
 func (l *Logger) Fatal(message string, args ...any) { l.log(FATAL, message, args...) }
 
 // --- Global Facade Layer ---
@@ -172,5 +172,5 @@ func Warn(msg string, args ...any) { defaultLogger.log(WARN, msg, args...) }
 // Error logs at ERROR level via the global logger.
 func Error(msg string, args ...any) { defaultLogger.log(ERROR, msg, args...) }
 
-// Fatal logs at FATAL level and calls os.Exit(1) via the global logger.
+// Fatal logs at FATAL level and panics with FatalError via the global logger.
 func Fatal(msg string, args ...any) { defaultLogger.log(FATAL, msg, args...) }

@@ -49,6 +49,12 @@ func RegisterPprofWithConfig(r *zen.Engine, config PprofConfig) {
 	r.GET(p+"/symbol", wrapHandler(pprof.Symbol))
 	r.GET(p+"/trace", wrapHandler(pprof.Trace))
 
+	// Additional profiles served by pprof.Index (the standard ServeMux uses prefix
+	// matching to route these; with exact-match routing we register them explicitly)
+	for _, profile := range []string{"goroutine", "heap", "threadcreate", "block", "mutex", "allocs"} {
+		r.GET(p+"/"+profile, wrapHandler(pprof.Index))
+	}
+
 	// Post endpoints are required for symbol lookups during interactive CLI debugging sessions
 	r.POST(p+"/symbol", wrapHandler(pprof.Symbol))
 }

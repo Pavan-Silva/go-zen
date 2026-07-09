@@ -110,8 +110,9 @@ func (c *Ctx) BindBody(dest any) error {
 	}
 }
 
-// BindPathParams extracts route wildcards using native Go 1.22+ request context maps.
-func (c *Ctx) BindPathParams(dest any) error {
+// bindFields iterates over struct fields and applies a getter function.
+// tag returns the tag name for error messages.
+func (c *Ctx) bindFields(dest any, getter func(bindFieldInfo) string, tag func(bindFieldInfo) string, errPrefix string) error {
 	rv := reflect.ValueOf(dest)
 	if rv.Kind() != reflect.Pointer || rv.Elem().Kind() != reflect.Struct {
 		return nil
@@ -123,49 +124,38 @@ func (c *Ctx) BindPathParams(dest any) error {
 	meta := getBindMeta(rt)
 	for i := 0; i < len(meta.fields); i++ {
 		field := meta.fields[i]
-		val := c.Param(field.paramTag)
+		val := getter(field)
 		if val == "" {
 			continue
 		}
 
 		fv := rv.Field(field.index)
 		if err := setFieldValue(fv, field.kind, []string{val}); err != nil {
-			return fmt.Errorf("path param %q: %w", field.paramTag, err)
+			return fmt.Errorf("%s %q: %w", errPrefix, tag(field), err)
 		}
 	}
 	return nil
 }
 
+// BindPathParams extracts route wildcards using native Go 1.22+ request context maps.
+func (c *Ctx) BindPathParams(dest any) error {
+	return c.bindFields(dest,
+		func(f bindFieldInfo) string { return c.Param(f.paramTag) },
+		func(f bindFieldInfo) string { return f.paramTag },
+		"path param",
+	)
+}
+
 // BindQueryParams parses query parameters into dest struct fields.
 func (c *Ctx) BindQueryParams(dest any) error {
-	rv := reflect.ValueOf(dest)
-	if rv.Kind() != reflect.Pointer || rv.Elem().Kind() != reflect.Struct {
-		return nil
-	}
-
 	if c.Request.URL.RawQuery == "" {
 		return nil
 	}
-
-	rv = rv.Elem()
-	rt := rv.Type()
-
-	meta := getBindMeta(rt)
-	for i := 0; i < len(meta.fields); i++ {
-		field := meta.fields[i]
-
-		// Fast Path: Zero map allocations, parses offsets directly from the raw string line
-		val := c.QueryParam(field.queryTag)
-		if val == "" {
-			continue
-		}
-
-		fv := rv.Field(field.index)
-		if err := setFieldValue(fv, field.kind, []string{val}); err != nil {
-			return fmt.Errorf("query param %q: %w", field.queryTag, err)
-		}
-	}
-	return nil
+	return c.bindFields(dest,
+		func(f bindFieldInfo) string { return c.QueryParam(f.queryTag) },
+		func(f bindFieldInfo) string { return f.queryTag },
+		"query param",
+	)
 }
 
 // parseStructTag isolates clean lookup strings from structured field tag entries.
@@ -191,9 +181,52 @@ func setFieldValue(fv reflect.Value, kind reflect.Kind, vals []string) error {
 	case reflect.String:
 		fv.SetString(val)
 	case reflect.Slice:
-		// Specialized support for string slices ([]string)
-		if fv.Type().Elem().Kind() == reflect.String {
+		elemKind := fv.Type().Elem().Kind()
+		switch elemKind {
+		case reflect.String:
 			fv.Set(reflect.ValueOf(vals))
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			slice := reflect.MakeSlice(fv.Type(), len(vals), len(vals))
+			for i, v := range vals {
+				n, err := strconv.ParseInt(v, 10, 64)
+				if err != nil {
+					return err
+				}
+				slice.Index(i).SetInt(n)
+			}
+			fv.Set(slice)
+		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+			slice := reflect.MakeSlice(fv.Type(), len(vals), len(vals))
+			for i, v := range vals {
+				n, err := strconv.ParseUint(v, 10, 64)
+				if err != nil {
+					return err
+				}
+				slice.Index(i).SetUint(n)
+			}
+			fv.Set(slice)
+		case reflect.Float32, reflect.Float64:
+			slice := reflect.MakeSlice(fv.Type(), len(vals), len(vals))
+			for i, v := range vals {
+				n, err := strconv.ParseFloat(v, 64)
+				if err != nil {
+					return err
+				}
+				slice.Index(i).SetFloat(n)
+			}
+			fv.Set(slice)
+		case reflect.Bool:
+			slice := reflect.MakeSlice(fv.Type(), len(vals), len(vals))
+			for i, v := range vals {
+				b, err := strconv.ParseBool(v)
+				if err != nil {
+					return err
+				}
+				slice.Index(i).SetBool(b)
+			}
+			fv.Set(slice)
+		default:
+			return fmt.Errorf("unsupported slice element type %v", elemKind)
 		}
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		n, err := strconv.ParseInt(val, 10, 64)

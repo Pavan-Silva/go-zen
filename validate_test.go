@@ -5,7 +5,7 @@ import (
 )
 
 func TestDefaultValidator(t *testing.T) {
-	if defaultValidator == nil {
+	if getValidator() == nil {
 		t.Fatal("defaultValidator should not be nil")
 	}
 }
@@ -118,8 +118,8 @@ func TestValidate_DirectStruct(t *testing.T) {
 }
 
 func TestSetValidator_Custom(t *testing.T) {
-	original := defaultValidator
-	t.Cleanup(func() { defaultValidator = original })
+	original := getValidator()
+	t.Cleanup(func() { SetValidator(original) })
 
 	called := false
 	SetValidator(ValidatorFunc(func(i any) error {
@@ -140,8 +140,8 @@ func TestSetValidator_Custom(t *testing.T) {
 }
 
 func TestSetValidator_Nil(t *testing.T) {
-	original := defaultValidator
-	t.Cleanup(func() { defaultValidator = original })
+	original := getValidator()
+	t.Cleanup(func() { SetValidator(original) })
 
 	SetValidator(nil)
 
@@ -155,8 +155,8 @@ func TestSetValidator_Nil(t *testing.T) {
 }
 
 func TestDisableAutoValidation(t *testing.T) {
-	original := defaultValidator
-	t.Cleanup(func() { defaultValidator = original })
+	original := getValidator()
+	t.Cleanup(func() { SetValidator(original) })
 
 	DisableAutoValidation()
 
@@ -186,7 +186,7 @@ func BenchmarkValidation(b *testing.B) {
 
 	b.ReportAllocs()
 	b.ResetTimer()
-	_ = defaultValidator
+	_ = getValidator()
 	for i := 0; i < b.N; i++ {
 		_ = Validate(&s)
 	}

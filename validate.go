@@ -30,17 +30,30 @@ type Validator interface {
 
 // defaultValidator is the global validator instance.
 // Set a custom validator via SetValidator().
-var defaultValidator Validator = &defaultValidate{inst: newValidator()}
+var (
+	defaultValidatorMu sync.RWMutex
+	defaultValidator   Validator = &defaultValidate{inst: newValidator()}
+)
 
 // defaultValidate is the built-in validator using go-playground/validator/v10.
 type defaultValidate struct {
 	inst *validator.Validate
 }
 
+// getValidator returns the current global validator.
+func getValidator() Validator {
+	defaultValidatorMu.RLock()
+	v := defaultValidator
+	defaultValidatorMu.RUnlock()
+	return v
+}
+
 // SetValidator sets a custom validator for request validation.
 // Pass nil to disable validation entirely.
 func SetValidator(v Validator) {
+	defaultValidatorMu.Lock()
 	defaultValidator = v
+	defaultValidatorMu.Unlock()
 }
 
 // DisableAutoValidation disables automatic request validation for BindJSON,
@@ -58,7 +71,7 @@ func DisableAutoValidation() {
 //	    return fl.Field().Int()%2 == 0
 //	})
 func DefaultValidator() *validator.Validate {
-	if dv, ok := defaultValidator.(*defaultValidate); ok {
+	if dv, ok := getValidator().(*defaultValidate); ok {
 		return dv.inst
 	}
 	return nil
@@ -118,9 +131,15 @@ func typeHasValidateTagsRecursive(t reflect.Type) bool {
 			if typeHasValidateTagsRecursive(f.Type) {
 				return true
 			}
-		} else if f.Type.Kind() == reflect.Struct {
-			if typeHasValidateTagsRecursive(f.Type) {
-				return true
+		} else {
+			ft := f.Type
+			if ft.Kind() == reflect.Pointer {
+				ft = ft.Elem()
+			}
+			if ft.Kind() == reflect.Struct {
+				if typeHasValidateTagsRecursive(ft) {
+					return true
+				}
 			}
 		}
 	}
@@ -130,13 +149,14 @@ func typeHasValidateTagsRecursive(t reflect.Type) bool {
 // Validate runs struct validation on dest using the configured Validator.
 // BindJSON, BindXML, and BindForm call this automatically after decoding.
 func Validate(dest any) error {
-	if defaultValidator == nil {
+	v := getValidator()
+	if v == nil {
 		return nil
 	}
 
 	// Only skip tag-based validation for the default built-in validator.
 	// Custom validators may have logic beyond struct tags.
-	if _, ok := defaultValidator.(*defaultValidate); ok {
+	if _, ok := v.(*defaultValidate); ok {
 		rv := reflect.ValueOf(dest)
 		if rv.Kind() == reflect.Pointer {
 			rv = rv.Elem()
@@ -146,5 +166,5 @@ func Validate(dest any) error {
 		}
 	}
 
-	return defaultValidator.Validate(dest)
+	return v.Validate(dest)
 }
