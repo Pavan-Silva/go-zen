@@ -212,14 +212,14 @@ func TestDocDisabled(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/spec.json", nil)
-	r.Mux.ServeHTTP(rec, req)
+	r.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200 from spec, got %d", rec.Code)
 	}
 
 	rec2 := httptest.NewRecorder()
 	req2 := httptest.NewRequest(http.MethodGet, "/docs", nil)
-	r.Mux.ServeHTTP(rec2, req2)
+	r.ServeHTTP(rec2, req2)
 	if rec2.Code != http.StatusNotFound {
 		t.Fatalf("expected 404 when UI disabled, got %d", rec2.Code)
 	}
@@ -233,14 +233,14 @@ func TestRegisterRoutes(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/openapi.json", nil)
-	r.Mux.ServeHTTP(rec, req)
+	r.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200 from spec endpoint, got %d", rec.Code)
 	}
 
 	rec2 := httptest.NewRecorder()
 	req2 := httptest.NewRequest(http.MethodGet, "/docs", nil)
-	r.Mux.ServeHTTP(rec2, req2)
+	r.ServeHTTP(rec2, req2)
 	if rec2.Code != http.StatusOK {
 		t.Fatalf("expected 200 from doc endpoint, got %d", rec2.Code)
 	}
@@ -294,7 +294,7 @@ func TestEngineIntegration(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/openapi.json", nil)
-	r.Mux.ServeHTTP(rec, req)
+	r.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rec.Code)
 	}

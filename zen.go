@@ -1,5 +1,5 @@
-// Package zen is a lightweight, high-performance HTTP microframework built on Go's
-// standard net/http and Go 1.22+ enhanced routing (http.ServeMux with method+pattern).
+// Package zen is a lightweight, high-performance HTTP microframework built on
+// net/http with a custom radix tree router.
 //
 // # Quick Start
 //

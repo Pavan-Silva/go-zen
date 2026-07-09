@@ -34,10 +34,14 @@ func (g *RouterGroup) Group(prefix string, middleware ...HandlerFunc) *RouterGro
 	}
 }
 
-// HandleRaw registers a raw http.Handler directly on the underlying ServeMux,
-// bypassing the zen middleware chain for native performance.
+// HandleRaw registers a raw http.Handler on the router using the zen handler chain.
+// The pattern uses Go 1.22+ ServeMux syntax ({param}, {path...}) which is
+// automatically converted to the router's native syntax (:param, *path).
 func (g *RouterGroup) HandleRaw(pattern string, handler http.Handler) {
-	g.engine.Mux.Handle(pattern, handler)
+	method, path := convertServeMuxPattern(pattern)
+	g.registerRoute(method, path, []HandlerFunc{func(c *Ctx) {
+		handler.ServeHTTP(c.Response, c.Request)
+	}})
 }
 
 // Prefix returns the full path prefix of this group.
@@ -85,8 +89,6 @@ func (g *RouterGroup) registerRoute(method, fullPath string, handlers []HandlerF
 		panic("zen: route registered with zero handlers")
 	}
 
-	fullPattern := method + " " + fullPath
-
 	// The last function is always the final business logic handler
 	handler := handlers[len(handlers)-1]
 	routeMiddleware := handlers[:len(handlers)-1]
@@ -111,14 +113,7 @@ func (g *RouterGroup) registerRoute(method, fullPath string, handlers []HandlerF
 		}
 	}
 
-	g.engine.Mux.HandleFunc(fullPattern, func(w http.ResponseWriter, r *http.Request) {
-		c := g.engine.pool.Get().(*Ctx)
-		c.reset(w, r)
-
-		finalHandler(c)
-
-		g.engine.pool.Put(c)
-	})
+	g.engine.router.add(method, convertPath(fullPath), []HandlerFunc{finalHandler})
 }
 
 // ensureLeadingSlash adds a leading slash (if absent) and strips a trailing slash.

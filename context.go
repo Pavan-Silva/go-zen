@@ -20,11 +20,13 @@ type SkipFunc func(*http.Request) bool
 // Ctx is the per-request context container for zen handlers and middleware components.
 // Valid ONLY for the explicit lifetime of the request—never preserve references beyond handler returns.
 type Ctx struct {
-	Response http.ResponseWriter
-	Request  *http.Request
-	store    map[string]any
-	mu       sync.RWMutex
-	next     HandlerFunc
+	Response     http.ResponseWriter
+	Request      *http.Request
+	store        map[string]any
+	mu           sync.RWMutex
+	next         HandlerFunc
+	ps           params
+	skippedNodes []skippedNode
 }
 
 // reset reinitializes Ctx for the given request and response.
@@ -32,6 +34,8 @@ func (c *Ctx) reset(w http.ResponseWriter, r *http.Request) {
 	c.Response = w
 	c.Request = r
 	c.next = nil
+	c.ps = c.ps[:0]
+	c.skippedNodes = c.skippedNodes[:0]
 
 	if c.store != nil {
 		clear(c.store)

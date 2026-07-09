@@ -17,6 +17,8 @@ import (
 	"github.com/Pavan-Silva/go-zen/system"
 )
 
+var _ http.Handler = (*Engine)(nil)
+
 // Config holds server-level timeout and header size settings.
 // Use DefaultConfig to obtain sensible defaults, then override fields as needed.
 type Config struct {
@@ -36,17 +38,16 @@ func DefaultConfig() Config {
 }
 
 // Engine is the top-level application container. It embeds a root RouterGroup
-// and owns the http.Server and the Go 1.22+ ServeMux.
+// and owns the radix tree router and the http.Server.
 type Engine struct {
 	RouterGroup
-	Mux             *http.ServeMux // Mux is the underlying HTTP request multiplexer.
+	router          *radixRouter
 	pool            sync.Pool
 	server          *http.Server
 	shutdownTimeout time.Duration
 }
 
 // New creates an Engine with the given listen address and optional custom Config.
-// The server's Handler is mapped directly to the ServeMux to eliminate structural router wrappers.
 func New(addr string, config ...Config) *Engine {
 	var cfg Config
 	if len(config) > 0 {
@@ -56,7 +57,7 @@ func New(addr string, config ...Config) *Engine {
 	}
 
 	e := &Engine{
-		Mux:             http.NewServeMux(),
+		router:          newRadixRouter(),
 		shutdownTimeout: cfg.ShutdownTimeout,
 	}
 
@@ -64,12 +65,17 @@ func New(addr string, config ...Config) *Engine {
 		e.shutdownTimeout = 5 * time.Second
 	}
 
-	e.pool.New = func() any { return &Ctx{} }
+	e.pool.New = func() any {
+		return &Ctx{
+			ps:           make(params, 0, 8),
+			skippedNodes: make([]skippedNode, 0, 8),
+		}
+	}
 	e.RouterGroup = RouterGroup{prefix: "", engine: e, middleware: nil}
 
 	e.server = &http.Server{
 		Addr:              addr,
-		Handler:           e.Mux,
+		Handler:           e,
 		ReadTimeout:       cfg.ReadTimeout,
 		WriteTimeout:      cfg.WriteTimeout,
 		IdleTimeout:       cfg.IdleTimeout,
@@ -80,10 +86,37 @@ func New(addr string, config ...Config) *Engine {
 	return e
 }
 
-// ServeHTTP delegates directly to the underlying ServeMux.
-// This supports test-suite routing when using standard engines like httptest.
+// ServeHTTP implements the http.Handler interface using the radix tree router.
 func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	e.Mux.ServeHTTP(w, r)
+	c := e.pool.Get().(*Ctx)
+	c.reset(w, r)
+
+	path := r.URL.Path
+	if r.URL.RawPath != "" {
+		path = r.URL.RawPath
+	}
+
+	result := e.router.find(r.Method, path, &c.ps, &c.skippedNodes)
+
+	if result.handlers != nil {
+		result.handlers[0](c)
+	} else if result.tsr {
+		path = r.URL.Path
+		if path[len(path)-1] == '/' {
+			path = path[:len(path)-1]
+		} else {
+			path = path + "/"
+		}
+		http.Redirect(w, r, path, http.StatusMovedPermanently)
+	} else if result.allowedMethod != "" {
+		w.Header().Set("Allow", result.allowedMethod)
+		http.Error(w, "405 method not allowed\n", http.StatusMethodNotAllowed)
+	} else {
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte("404 page not found\n"))
+	}
+
+	e.pool.Put(c)
 }
 
 // File serves a single file at the given path pattern via http.ServeFile.

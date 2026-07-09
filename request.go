@@ -53,15 +53,15 @@ func (c *Ctx) QueryParam(key string) string {
 	}
 }
 
-// Param returns the URL path parameter for the given key using Go 1.22+
-// enhanced routing via [http.Request.PathValue].
+// Param returns the URL path parameter for the given key.
 //
 // Given a route registered as "GET /users/{id}", the handler can retrieve
 // the captured segment with:
 //
 //	id := c.Param("id")  // GET /users/42 -> "42"
 func (c *Ctx) Param(key string) string {
-	return c.Request.PathValue(key)
+	v, _ := c.ps.get(key)
+	return v
 }
 
 // Body reads and returns the complete raw request body as a byte slice.
