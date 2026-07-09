@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-// ── param types ──────────────────────────────────────────────────────────────
+// -- param types --
 
 // paramPair stores a single URL parameter key-value pair extracted from
 // either a named path segment (:param) or a catch-all (*param).
@@ -29,7 +29,7 @@ func (ps params) get(name string) (string, bool) {
 	return "", false
 }
 
-// ── method trees ─────────────────────────────────────────────────────────────
+// -- method trees --
 
 // methodTree associates an HTTP method string with the root of its radix tree.
 type methodTree struct {
@@ -52,7 +52,7 @@ func (trees methodTrees) get(method string) *node {
 	return nil
 }
 
-// ── radix tree node ──────────────────────────────────────────────────────────
+// -- radix tree node --
 
 // nodeType classifies a radix tree node into one of four categories.
 type nodeType uint8
@@ -155,7 +155,7 @@ func longestCommonPrefix(a, b string) int {
 	return i
 }
 
-// ── addRoute ─────────────────────────────────────────────────────────────────
+// -- addRoute --
 
 // addRoute inserts a path into the radix tree and associates it with the
 // given handler chain. The path may include :param and *param wildcard
@@ -406,7 +406,7 @@ func (n *node) insertChild(path string, fullPath string, handlers []HandlerFunc)
 	n.fullPath = fullPath
 }
 
-// ── getValue ─────────────────────────────────────────────────────────────────
+// -- getValue --
 
 // nodeValue is the result of a route lookup. It carries the matched handler
 // chain, any extracted parameters, a trailing-slash-redirect (TSR) hint, and
@@ -452,6 +452,11 @@ walk:
 						// path ultimately fails.
 						if n.wildChild {
 							index := len(*skippedNodes)
+							if cap(*skippedNodes) <= index {
+								cp := make([]skippedNode, index, index+8)
+								copy(cp, *skippedNodes)
+								*skippedNodes = cp
+							}
 							*skippedNodes = (*skippedNodes)[:index+1]
 							(*skippedNodes)[index] = skippedNode{
 								path: prefix + path,
@@ -670,7 +675,7 @@ walk:
 	}
 }
 
-// ── Router ───────────────────────────────────────────────────────────────────
+// -- Router --
 
 // radixRouter wraps a set of per-method radix trees and provides high-level
 // route registration and lookup. Each HTTP method gets its own tree so that
