@@ -18,7 +18,10 @@ func (c *Ctx) BindJSON(dest any) error {
 		return fmt.Errorf("JSON decode: %w", err)
 	}
 
-	return Validate(dest)
+	if autoValidateOn() {
+		return Validate(dest)
+	}
+	return nil
 }
 
 // JSON encodes data as JSON and streams it straight to the response writer.

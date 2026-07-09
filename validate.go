@@ -8,10 +8,6 @@ import (
 	"github.com/go-playground/validator/v10"
 )
 
-// validateTagCache tracks which struct types have "validate" struct tags,
-// so we can skip the full validator pipeline for types without any rules.
-var validateTagCache sync.Map
-
 // Validator is the interface for request validation.
 // Implement this to plug in any validation library.
 //
@@ -35,6 +31,13 @@ var (
 	defaultValidator   Validator = &defaultValidate{inst: newValidator()}
 )
 
+// autoValidate controls whether BindJSON/BindXML/BindForm automatically
+// call Validate after decoding. Disabled by default.
+var (
+	autoValidateMu      sync.RWMutex
+	autoValidateEnabled bool
+)
+
 // defaultValidate is the built-in validator using go-playground/validator/v10.
 type defaultValidate struct {
 	inst *validator.Validate
@@ -56,11 +59,20 @@ func SetValidator(v Validator) {
 	defaultValidatorMu.Unlock()
 }
 
-// DisableAutoValidation disables automatic request validation for BindJSON,
-// BindXML, and BindForm. This is useful for performance-sensitive handlers where
-// the request payload is already trusted or validation is performed elsewhere.
-func DisableAutoValidation() {
-	SetValidator(nil)
+// EnableAutoValidation enables automatic Validate() calls after
+// BindJSON, BindXML, and BindForm.
+func EnableAutoValidation() {
+	autoValidateMu.Lock()
+	autoValidateEnabled = true
+	autoValidateMu.Unlock()
+}
+
+// autoValidateOn returns whether auto-validation is enabled.
+func autoValidateOn() bool {
+	autoValidateMu.RLock()
+	v := autoValidateEnabled
+	autoValidateMu.RUnlock()
+	return v
 }
 
 // DefaultValidator returns the underlying go-playground/validator/v10 instance
@@ -94,7 +106,6 @@ func newValidator() *validator.Validate {
 	inst := validator.New()
 	inst.SetTagName("validate")
 
-	// Configures error messages to use the structural JSON name tags instead of Go field names
 	inst.RegisterTagNameFunc(func(fld reflect.StructField) string {
 		tag := fld.Tag.Get("json")
 		if tag == "" || tag == "-" {
@@ -109,62 +120,12 @@ func newValidator() *validator.Validate {
 	return inst
 }
 
-// typeHasValidateTags checks whether a struct type or any nested/embedded struct
-// has "validate" struct tags. Results are cached to avoid repeated reflection scans.
-func typeHasValidateTags(t reflect.Type) bool {
-	if v, ok := validateTagCache.Load(t); ok {
-		return v.(bool)
-	}
-
-	ok := typeHasValidateTagsRecursive(t)
-	validateTagCache.Store(t, ok)
-	return ok
-}
-
-func typeHasValidateTagsRecursive(t reflect.Type) bool {
-	for i := 0; i < t.NumField(); i++ {
-		f := t.Field(i)
-		if f.Tag.Get("validate") != "" {
-			return true
-		}
-		if f.Anonymous {
-			if typeHasValidateTagsRecursive(f.Type) {
-				return true
-			}
-		} else {
-			ft := f.Type
-			if ft.Kind() == reflect.Pointer {
-				ft = ft.Elem()
-			}
-			if ft.Kind() == reflect.Struct {
-				if typeHasValidateTagsRecursive(ft) {
-					return true
-				}
-			}
-		}
-	}
-	return false
-}
-
 // Validate runs struct validation on dest using the configured Validator.
-// BindJSON, BindXML, and BindForm call this automatically after decoding.
+// Call this explicitly after BindJSON, BindXML, or BindForm.
 func Validate(dest any) error {
 	v := getValidator()
 	if v == nil {
 		return nil
 	}
-
-	// Only skip tag-based validation for the default built-in validator.
-	// Custom validators may have logic beyond struct tags.
-	if _, ok := v.(*defaultValidate); ok {
-		rv := reflect.ValueOf(dest)
-		if rv.Kind() == reflect.Pointer {
-			rv = rv.Elem()
-		}
-		if rv.Kind() == reflect.Struct && !typeHasValidateTags(rv.Type()) {
-			return nil
-		}
-	}
-
 	return v.Validate(dest)
 }

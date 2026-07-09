@@ -1,6 +1,8 @@
 package zen
 
 import (
+	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -154,18 +156,33 @@ func TestSetValidator_Nil(t *testing.T) {
 	}
 }
 
-func TestDisableAutoValidation(t *testing.T) {
-	original := getValidator()
-	t.Cleanup(func() { SetValidator(original) })
+func TestEnableAutoValidation(t *testing.T) {
+	EnableAutoValidation()
+	defer func() {
+		autoValidateMu.Lock()
+		autoValidateEnabled = false
+		autoValidateMu.Unlock()
+	}()
 
-	DisableAutoValidation()
+	r := New(":0")
+	r.POST("/test", func(c *Ctx) {
+		var v struct {
+			Name string `validate:"required"`
+		}
+		if err := c.BindJSON(&v); err != nil {
+			c.Error(400, err.Error())
+			return
+		}
+		c.String(200, "ok")
+	})
 
-	type S struct {
-		Name string `validate:"required"`
-	}
-	err := Validate(&S{Name: ""})
-	if err != nil {
-		t.Fatal("DisableAutoValidation should disable validation")
+	body := strings.NewReader(`{"name":""}`)
+	req := httptest.NewRequest("POST", "/test", body)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 400 {
+		t.Fatalf("auto-validation enabled: expected 400, got %d: %s", w.Code, w.Body.String())
 	}
 }
 

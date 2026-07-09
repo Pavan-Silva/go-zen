@@ -87,7 +87,10 @@ func (c *Ctx) BindForm(dest any) error {
 		}
 	}
 
-	return Validate(dest)
+	if autoValidateOn() {
+		return Validate(dest)
+	}
+	return nil
 }
 
 // compileFormStruct parses struct tags once at boot time / first request.

@@ -28,7 +28,10 @@ func (c *Ctx) BindXML(dest any) error {
 		return fmt.Errorf("XML decode: %w", err)
 	}
 
-	return Validate(dest)
+	if autoValidateOn() {
+		return Validate(dest)
+	}
+	return nil
 }
 
 // XML encodes data as XML and writes it to the response with the given HTTP status code.
