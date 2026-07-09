@@ -2,9 +2,11 @@ package openapi
 
 import (
 	"embed"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"net/http"
+	"strings"
 
 	"github.com/Pavan-Silva/go-zen/system"
 )
@@ -56,5 +58,39 @@ func uiHTML(o *OpenAPI) string {
 		return fmt.Sprintf(fallbackUIHTML, o.cfg.SpecPath, o.cfg.SpecPath, system.Version)
 	}
 
-	return fmt.Sprintf(uiTemplate, o.cfg.SpecPath, system.Version)
+	html := fmt.Sprintf(uiTemplate, o.cfg.SpecPath, system.Version)
+
+	if extraOpts := swaggerUIOptionsString(o.cfg.SwaggerUIOptions); extraOpts != "" {
+		html = strings.Replace(html, "// swagger-ui-extra-options", extraOpts, 1)
+	} else {
+		html = strings.Replace(html, "// swagger-ui-extra-options", "", 1)
+	}
+
+	return html
+}
+
+// swaggerUIOptionsString serializes a map of SwaggerUI init options into
+// indented JavaScript object-literal lines. Each value is marshalled as a
+// JSON literal so that strings, booleans, numbers, arrays, and nested objects
+// are all represented correctly. Returns empty string when the map is empty.
+func swaggerUIOptionsString(opts map[string]any) string {
+	if len(opts) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	first := true
+	for k, v := range opts {
+		j, err := json.Marshal(v)
+		if err != nil {
+			continue
+		}
+		if !first {
+			b.WriteString(",\n        ")
+		}
+		b.WriteString(k)
+		b.WriteString(": ")
+		b.Write(j)
+		first = false
+	}
+	return b.String()
 }

@@ -20,6 +20,7 @@ type Config struct {
 	DisableUI       bool                      // When true, no documentation UI is served.
 	SecuritySchemes map[string]SecurityScheme // Security schemes for components/securitySchemes.
 	DefaultSecurity []map[string][]string     // Default security requirements applied to all routes.
+	SwaggerUIOptions map[string]any           // Extra SwaggerUI init options (e.g. "persistAuthorizations": true).
 }
 
 // RouteInfo holds OpenAPI metadata for a route.
