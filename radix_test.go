@@ -764,9 +764,9 @@ func TestRadix_ConvertServeMuxPattern(t *testing.T) {
 		wantM    string
 		wantPath string
 	}{
-		{"GET /users/{id}", "GET", "/users/:id"},
-		{"POST /api/{path...}", "POST", "/api/*path"},
-		{"/static/{path...}", "", "/static/*path"},
+		{"GET /users/{id}", "GET", "/users/{id}"},
+		{"POST /api/{path...}", "POST", "/api/{path...}"},
+		{"/static/{path...}", "", "/static/{path...}"},
 		{"/plain", "", "/plain"},
 	}
 

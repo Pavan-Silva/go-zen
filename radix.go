@@ -229,7 +229,7 @@ walk:
 			// for wildcard conflicts.
 			if c != ':' && c != '*' && n.nType != catchAll {
 				// Regular static segment — create a new child.
-				n.indices += string([]byte{c})
+				n.indices += string(c)
 				child := &node{fullPath: fullPath}
 				n.addChild(child)
 				n.incrementChildPrio(len(n.indices) - 1)
@@ -527,7 +527,7 @@ walk:
 					i := len(*value.params)
 					*value.params = (*value.params)[:i+1]
 					val := path[:end]
-					if v, err := url.QueryUnescape(val); err == nil {
+					if v, err := url.PathUnescape(val); err == nil {
 						val = v
 					}
 					(*value.params)[i] = paramPair{
@@ -579,7 +579,7 @@ walk:
 					if len(val) > 0 && val[0] == '/' {
 						val = val[1:]
 					}
-					if v, err := url.QueryUnescape(val); err == nil {
+					if v, err := url.PathUnescape(val); err == nil {
 						val = v
 					}
 					(*value.params)[i] = paramPair{
@@ -729,10 +729,14 @@ func (r *radixRouter) find(method, path string, ps *params, skipped *[]skippedNo
 	// HEAD → fall back to GET
 	if method == "HEAD" {
 		if root := r.trees.get("HEAD"); root != nil {
+			psLen := len(*ps)
+			skipLen := len(*skipped)
 			value := root.getValue(path, ps, skipped)
 			if value.handlers != nil || value.tsr {
 				return routeResult{handlers: value.handlers, tsr: value.tsr}
 			}
+			*ps = (*ps)[:psLen]
+			*skipped = (*skipped)[:skipLen]
 		}
 		method = "GET"
 	}
@@ -773,8 +777,9 @@ func (r *radixRouter) allowed(path, currentMethod string) string {
 }
 
 // convertServeMuxPattern splits a Go 1.22+ ServeMux-style pattern into
-// method and path components, and translates {param} → :param and
-// {path...} → *path for compatibility with the radix router syntax.
+// method and path components. Path conversion ({param} → :param) is
+// applied later by registerRoute, which handles the full path including
+// any group prefix.
 func convertServeMuxPattern(pattern string) (method, path string) {
 	if strings.Contains(pattern, " ") {
 		parts := strings.SplitN(pattern, " ", 2)
@@ -785,7 +790,6 @@ func convertServeMuxPattern(pattern string) (method, path string) {
 		path = pattern
 	}
 
-	path = convertPath(path)
 	return method, path
 }
 

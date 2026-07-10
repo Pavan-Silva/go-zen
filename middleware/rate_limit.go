@@ -83,7 +83,6 @@ func RateLimiterWithConfig(config RateLimiterConfig) zen.HandlerFunc {
 	// Runs for the process lifetime - rate limiter middleware is registered once at startup.
 	go func() {
 		ticker := time.NewTicker(time.Minute)
-		defer ticker.Stop()
 		for range ticker.C {
 			now := time.Now()
 			for i := range shardCount {

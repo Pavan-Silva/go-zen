@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"runtime"
+	"sync/atomic"
 	"time"
 )
 
@@ -149,28 +150,32 @@ func (l *Logger) Fatal(message string, args ...any) { l.log(FATAL, message, args
 
 // --- Global Facade Layer ---
 
-var defaultLogger = Default()
+var defaultLogger atomic.Pointer[Logger]
+
+func init() {
+	defaultLogger.Store(Default())
+}
 
 // SetDefault sets the global default logger.
-func SetDefault(l *Logger) { defaultLogger = l }
+func SetDefault(l *Logger) { defaultLogger.Store(l) }
 
 // SetLevel changes the minimum log level on the global logger.
-func SetLevel(level Level) { defaultLogger.SetLevel(level) }
+func SetLevel(level Level) { defaultLogger.Load().SetLevel(level) }
 
 // Trace logs at TRACE level via the global logger.
-func Trace(msg string, args ...any) { defaultLogger.log(TRACE, msg, args...) }
+func Trace(msg string, args ...any) { defaultLogger.Load().log(TRACE, msg, args...) }
 
 // Debug logs at DEBUG level via the global logger.
-func Debug(msg string, args ...any) { defaultLogger.log(DEBUG, msg, args...) }
+func Debug(msg string, args ...any) { defaultLogger.Load().log(DEBUG, msg, args...) }
 
 // Info logs at INFO level via the global logger.
-func Info(msg string, args ...any) { defaultLogger.log(INFO, msg, args...) }
+func Info(msg string, args ...any) { defaultLogger.Load().log(INFO, msg, args...) }
 
 // Warn logs at WARN level via the global logger.
-func Warn(msg string, args ...any) { defaultLogger.log(WARN, msg, args...) }
+func Warn(msg string, args ...any) { defaultLogger.Load().log(WARN, msg, args...) }
 
 // Error logs at ERROR level via the global logger.
-func Error(msg string, args ...any) { defaultLogger.log(ERROR, msg, args...) }
+func Error(msg string, args ...any) { defaultLogger.Load().log(ERROR, msg, args...) }
 
 // Fatal logs at FATAL level and panics with FatalError via the global logger.
-func Fatal(msg string, args ...any) { defaultLogger.log(FATAL, msg, args...) }
+func Fatal(msg string, args ...any) { defaultLogger.Load().log(FATAL, msg, args...) }

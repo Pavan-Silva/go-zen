@@ -61,10 +61,11 @@ func (c *Ctx) Set(key string, val any) {
 
 // Get retrieves a value from the context store.
 func (c *Ctx) Get(key string) (any, bool) {
+	c.mu.RLock()
 	if c.store == nil {
+		c.mu.RUnlock()
 		return nil, false
 	}
-	c.mu.RLock()
 	val, ok := c.store[key]
 	c.mu.RUnlock()
 	return val, ok
@@ -72,10 +73,11 @@ func (c *Ctx) Get(key string) (any, bool) {
 
 // Keys returns a copy of all key-value entries in the store.
 func (c *Ctx) Keys() map[string]any {
+	c.mu.RLock()
 	if len(c.store) == 0 {
+		c.mu.RUnlock()
 		return nil
 	}
-	c.mu.RLock()
 	cp := make(map[string]any, len(c.store))
 	maps.Copy(cp, c.store)
 	c.mu.RUnlock()

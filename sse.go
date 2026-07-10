@@ -108,6 +108,7 @@ func writeBytesSSE(w http.ResponseWriter, b []byte) error {
 	}
 
 	remaining := b
+	wroteTerm := false
 	for len(remaining) > 0 {
 		if _, err := w.Write(prefixData); err != nil {
 			return err
@@ -123,6 +124,7 @@ func writeBytesSSE(w http.ResponseWriter, b []byte) error {
 			if _, err := w.Write(tokenDoubleNL); err != nil {
 				return err
 			}
+			wroteTerm = true
 			break
 		}
 
@@ -134,6 +136,11 @@ func writeBytesSSE(w http.ResponseWriter, b []byte) error {
 			return err
 		}
 		remaining = remaining[idx+1:]
+	}
+
+	if !wroteTerm {
+		_, err := w.Write(tokenDoubleNL)
+		return err
 	}
 	return nil
 }
