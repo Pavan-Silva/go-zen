@@ -61,10 +61,9 @@ func Logger(c *zen.Ctx) {
 
 	buf = leftPad(buf, clientIP(c.Request), 15)
 	buf = append(buf, " | "...)
-	buf = strconv.AppendInt(buf, c.Request.ContentLength, 10)
-	buf = append(buf, "->"...)
-	buf = strconv.AppendInt(buf, int64(rw.written), 10)
-	buf = append(buf, "B | "...)
+	size := strconv.FormatInt(c.Request.ContentLength, 10) + "->" + strconv.FormatInt(int64(rw.written), 10) + "B"
+	buf = rightPad(buf, size, 13)
+	buf = append(buf, " | "...)
 
 	buf = appendMethodColor(buf, method)
 	buf = leftPad(buf, method, 7)
@@ -184,9 +183,9 @@ func formatLatency(d time.Duration) string {
 	case d > time.Second:
 		return strconv.FormatFloat(float64(d)/float64(time.Second), 'f', 2, 64) + "s"
 	case d > time.Millisecond:
-		return strconv.FormatFloat(float64(d)/float64(time.Millisecond), 'f', 1, 64) + "ms"
+		return strconv.FormatFloat(float64(d)/float64(time.Millisecond), 'f', 2, 64) + "ms"
 	case d > time.Microsecond:
-		return strconv.FormatFloat(float64(d)/float64(time.Microsecond), 'f', 1, 64) + "µs"
+		return strconv.FormatFloat(float64(d)/float64(time.Microsecond), 'f', 1, 64) + "us"
 	default:
 		return strconv.FormatInt(int64(d), 10) + "ns"
 	}
