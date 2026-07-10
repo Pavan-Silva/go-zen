@@ -5,9 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"runtime"
 	"sync/atomic"
-	"time"
 )
 
 // Level represents the severity of log entries.
@@ -57,29 +55,13 @@ type Logger struct {
 
 // New creates a new logger with the specified level and output writer.
 // The level can be changed dynamically via SetLevel.
+// Output is colored by log level when writing to a terminal.
+// Set NO_COLOR=1 to disable ANSI colors.
 func New(level Level, out io.Writer) *Logger {
 	leveler := &slog.LevelVar{}
 	leveler.Set(slog.Level(level))
 
-	// Intercept and cleanly normalize custom TRACE/FATAL strings inside the output writer
-	replaceAttr := func(groups []string, a slog.Attr) slog.Attr {
-		if a.Key == slog.LevelKey {
-			l := a.Value.Any().(slog.Level)
-			switch l {
-			case slog.Level(TRACE):
-				a.Value = slog.StringValue("TRACE")
-			case slog.Level(FATAL):
-				a.Value = slog.StringValue("FATAL")
-			}
-		}
-		return a
-	}
-
-	handler := slog.NewTextHandler(out, &slog.HandlerOptions{
-		Level:       leveler,
-		ReplaceAttr: replaceAttr,
-		AddSource:   true, // Automatically captures correct file:line details
-	})
+	handler := newConsoleHandler(out, leveler, true)
 
 	return &Logger{
 		level:   level,
@@ -105,25 +87,15 @@ func (l *Logger) Enabled(level Level) bool {
 	return slog.Level(level) >= l.leveler.Level()
 }
 
-// log writes a log entry if the level is enabled, adjusting call depth natively
-// to track correct file lines instead of the wrapper helper line.
+// log writes a log entry if the level is enabled.
+// Source location is captured by slog via AddSource in handler options.
 func (l *Logger) log(level Level, message string, args ...any) {
 	slogLevel := slog.Level(level)
 	if !l.logger.Enabled(context.Background(), slogLevel) {
 		return
 	}
 
-	// Capture caller PC to fix source file/line reporting accuracy
-	var pc uintptr
-	var pcs [1]uintptr
-	// Skip 3 frames: runtime.Callers -> l.log -> Public Wrapper (e.g. Info) -> Real Application Caller
-	if n := runtime.Callers(3, pcs[:]); n > 0 {
-		pc = pcs[0]
-	}
-
-	r := slog.NewRecord(time.Now(), slogLevel, message, pc)
-	r.Add(args...)
-	_ = l.logger.Handler().Handle(context.Background(), r)
+	l.logger.Log(context.Background(), slogLevel, message, args...)
 
 	if level >= FATAL {
 		panic(FatalError{Message: message})
