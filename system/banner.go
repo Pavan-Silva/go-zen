@@ -1,3 +1,4 @@
+// Package system provides build-time metadata (version, banner) for the zen framework.
 package system
 
 import (

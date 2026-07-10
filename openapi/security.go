@@ -3,11 +3,12 @@ package openapi
 // SecuritySchemeType is the type of an OpenAPI security scheme.
 type SecuritySchemeType string
 
+// Security scheme type constants for OpenAPI security definitions.
 const (
-	SecurityAPIKey SecuritySchemeType = "apiKey"
-	SecurityHTTP   SecuritySchemeType = "http"
-	SecurityOAuth2 SecuritySchemeType = "oauth2"
-	SecurityOpenID SecuritySchemeType = "openIdConnect"
+	SecurityAPIKey  SecuritySchemeType = "apiKey"
+	SecurityHTTP    SecuritySchemeType = "http"
+	SecurityOAuth2  SecuritySchemeType = "oauth2"
+	SecurityOpenID  SecuritySchemeType = "openIdConnect"
 )
 
 // SecurityScheme defines an OpenAPI security scheme for components/securitySchemes.

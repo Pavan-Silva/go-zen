@@ -1,3 +1,4 @@
+// Package openapi generates OpenAPI 3.0.3 specifications and serves the Swagger UI for zen routes.
 package openapi
 
 import (

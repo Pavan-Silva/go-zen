@@ -1,3 +1,4 @@
+// Package logger provides a structured logging facade with slog backend and colored console output.
 package logger
 
 import (
@@ -11,13 +12,14 @@ import (
 // Level represents the severity of log entries.
 type Level int32
 
+// Log level constants ordered from lowest to highest severity.
 const (
-	TRACE Level = -8 // slog.LevelDebug - 4
-	DEBUG Level = -4 // slog.LevelDebug
-	INFO  Level = 0  // slog.LevelInfo
-	WARN  Level = 4  // slog.LevelWarn
-	ERROR Level = 8  // slog.LevelError
-	FATAL Level = 12 // slog.LevelError + 4
+	TRACE Level = -8
+	DEBUG Level = -4
+	INFO  Level = 0
+	WARN  Level = 4
+	ERROR Level = 8
+	FATAL Level = 12
 )
 
 // String returns the string representation of the level.

@@ -1,3 +1,4 @@
+// Package env provides helpers for reading configuration from environment variables.
 package env
 
 import (

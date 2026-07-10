@@ -1,3 +1,4 @@
+// Package middleware provides built-in HTTP middleware for zen (recovery, logging, CORS, CSRF, compression, rate limiting, body limit, pprof).
 package middleware
 
 import (

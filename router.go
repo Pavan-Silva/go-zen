@@ -194,7 +194,8 @@ func (e *Engine) runServer(listen func() error) {
 	e.gracefulShutdown()
 }
 
-// Tracks kernel termination signals to gracefully clean up underlying network sockets.
+// gracefulShutdown shuts down the HTTP server with the configured timeout.
+// Called after a signal is received by runServer.
 func (e *Engine) gracefulShutdown() {
 	ctx, cancel := context.WithTimeout(context.Background(), e.shutdownTimeout)
 	defer cancel()
