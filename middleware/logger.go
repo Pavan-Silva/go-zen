@@ -22,6 +22,7 @@ var (
 	colorBlue    = []byte("\033[34m")
 	colorMagenta = []byte("\033[35m")
 	colorCyan    = []byte("\033[36m")
+	spaces       = []byte("                    ") // 20 spaces for padding
 )
 
 var rwPool = sync.Pool{
@@ -45,18 +46,20 @@ func Logger(c *zen.Ctx) {
 	method := c.Request.Method
 	path := c.Request.URL.Path
 
-	buf := make([]byte, 0, 160)
+	buf := make([]byte, 0, 200)
 
 	buf = append(buf, "[ZEN] "...)
+	buf = start.AppendFormat(buf, "2006/01/02 - 15:04:05")
+	buf = append(buf, " | "...)
 	buf = appendStatusColor(buf, rw.status)
-	buf = strconv.AppendInt(buf, int64(rw.status), 10)
+	buf = rightPad(buf, strconv.Itoa(rw.status), 5)
 	buf = append(buf, colorReset...)
 	buf = append(buf, " | "...)
 
-	buf = appendLatency(buf, duration)
+	buf = rightPad(buf, formatLatency(duration), 9)
 	buf = append(buf, " | "...)
 
-	buf = append(buf, clientIP(c.Request)...)
+	buf = leftPad(buf, clientIP(c.Request), 15)
 	buf = append(buf, " | "...)
 	buf = strconv.AppendInt(buf, c.Request.ContentLength, 10)
 	buf = append(buf, "->"...)
@@ -64,7 +67,7 @@ func Logger(c *zen.Ctx) {
 	buf = append(buf, "B | "...)
 
 	buf = appendMethodColor(buf, method)
-	buf = append(buf, method...)
+	buf = leftPad(buf, method, 7)
 	buf = append(buf, colorReset...)
 	buf = append(buf, " "...)
 
@@ -124,6 +127,30 @@ func clientIP(r *http.Request) string {
 	return r.RemoteAddr
 }
 
+func rightPad(buf []byte, s string, width int) []byte {
+	n := width - len(s)
+	if n > 0 {
+		if n > len(spaces) {
+			n = len(spaces)
+		}
+		buf = append(buf, spaces[:n]...)
+	}
+	buf = append(buf, s...)
+	return buf
+}
+
+func leftPad(buf []byte, s string, width int) []byte {
+	buf = append(buf, s...)
+	n := width - len(s)
+	if n > 0 {
+		if n > len(spaces) {
+			n = len(spaces)
+		}
+		buf = append(buf, spaces[:n]...)
+	}
+	return buf
+}
+
 func appendStatusColor(buf []byte, status int) []byte {
 	switch {
 	case status >= 200 && status < 300:
@@ -152,19 +179,15 @@ func appendMethodColor(buf []byte, method string) []byte {
 	}
 }
 
-func appendLatency(buf []byte, d time.Duration) []byte {
+func formatLatency(d time.Duration) string {
 	switch {
 	case d > time.Second:
-		buf = strconv.AppendFloat(buf, float64(d)/float64(time.Second), 'f', 2, 64)
-		return append(buf, 's')
+		return strconv.FormatFloat(float64(d)/float64(time.Second), 'f', 2, 64) + "s"
 	case d > time.Millisecond:
-		buf = strconv.AppendFloat(buf, float64(d)/float64(time.Millisecond), 'f', 1, 64)
-		return append(buf, "ms"...)
+		return strconv.FormatFloat(float64(d)/float64(time.Millisecond), 'f', 1, 64) + "ms"
 	case d > time.Microsecond:
-		buf = strconv.AppendFloat(buf, float64(d)/float64(time.Microsecond), 'f', 1, 64)
-		return append(buf, "µs"...)
+		return strconv.FormatFloat(float64(d)/float64(time.Microsecond), 'f', 1, 64) + "µs"
 	default:
-		buf = strconv.AppendInt(buf, int64(d), 10)
-		return append(buf, "ns"...)
+		return strconv.FormatInt(int64(d), 10) + "ns"
 	}
 }
