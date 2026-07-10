@@ -18,11 +18,11 @@ func TestBanner(t *testing.T) {
 
 func TestBanner_Version(t *testing.T) {
 	origVersion := Version
-	Version = "v1.0.0"
+	Version = "1.3.0"
 	defer func() { Version = origVersion }()
 
 	banner := Banner(":8080")
-	if !strings.Contains(banner, "v1.0.0") {
+	if !strings.Contains(banner, "v1.3.0") {
 		t.Fatalf("banner should contain version; got: %s", banner)
 	}
 }

@@ -6,8 +6,8 @@ import (
 )
 
 // Version is the current release version.
-// Override at build time with: -ldflags "-X github.com/Pavan-Silva/go-zen/system.Version=v1.0.0"
-var Version = "1.2.0"
+// Override at build time with: -ldflags "-X github.com/Pavan-Silva/go-zen/system.Version=v1.3.0"
+var Version = "1.3.0"
 
 // Banner prints a minimal startup banner.
 func Banner(addr string) string {
