@@ -77,14 +77,16 @@ func (c *Ctx) Get(key string) (any, bool) {
 
 // Keys returns a copy of all key-value entries in the store.
 func (c *Ctx) Keys() map[string]any {
+	if c.store == nil {
+		return nil
+	}
 	c.mu.RLock()
+	defer c.mu.RUnlock()
 	if len(c.store) == 0 {
-		c.mu.RUnlock()
 		return nil
 	}
 	cp := make(map[string]any, len(c.store))
 	maps.Copy(cp, c.store)
-	c.mu.RUnlock()
 	return cp
 }
 
@@ -94,12 +96,12 @@ func (c *Ctx) Copy() *Ctx {
 		Response: c.Response,
 		Request:  c.Request,
 	}
+	c.mu.RLock()
 	if len(c.store) > 0 {
-		c.mu.RLock()
 		cp.store = make(map[string]any, len(c.store))
 		maps.Copy(cp.store, c.store)
-		c.mu.RUnlock()
 	}
+	c.mu.RUnlock()
 	return cp
 }
 

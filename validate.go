@@ -3,6 +3,7 @@ package zen
 import (
 	"reflect"
 	"strings"
+	"sync/atomic"
 
 	"github.com/go-playground/validator/v10"
 )
@@ -25,11 +26,16 @@ type Validator interface {
 
 // defaultValidator is the global validator instance.
 // Set a custom validator via SetValidator() at startup.
-var defaultValidator Validator = &defaultValidate{inst: newValidator()}
+var defaultValidator atomic.Pointer[Validator]
+
+func init() {
+	v := Validator(&defaultValidate{inst: newValidator()})
+	defaultValidator.Store(&v)
+}
 
 // autoValidate controls whether BindJSON/BindXML/BindForm automatically
 // call Validate after decoding. Disabled by default.
-var autoValidateEnabled bool
+var autoValidateEnabled atomic.Bool
 
 // defaultValidate is the built-in validator using go-playground/validator/v10.
 type defaultValidate struct {
@@ -38,25 +44,33 @@ type defaultValidate struct {
 
 // getValidator returns the current global validator.
 func getValidator() Validator {
-	return defaultValidator
+	p := defaultValidator.Load()
+	if p == nil {
+		return nil
+	}
+	return *p
 }
 
 // SetValidator sets a global validator for request validation.
-// Must be called at startup, before handling any requests. Not safe for concurrent use.
+// Must be called at startup, before handling any requests.
 // Pass nil to disable validation entirely.
 func SetValidator(v Validator) {
-	defaultValidator = v
+	if v == nil {
+		defaultValidator.Store(nil)
+		return
+	}
+	defaultValidator.Store(&v)
 }
 
 // EnableAutoValidation enables automatic Validate() calls after
 // BindJSON, BindXML, and BindForm. Must be called at startup.
 func EnableAutoValidation() {
-	autoValidateEnabled = true
+	autoValidateEnabled.Store(true)
 }
 
 // autoValidateOn returns whether auto-validation is enabled.
 func autoValidateOn() bool {
-	return autoValidateEnabled
+	return autoValidateEnabled.Load()
 }
 
 // DefaultValidator returns the underlying go-playground/validator/v10 instance

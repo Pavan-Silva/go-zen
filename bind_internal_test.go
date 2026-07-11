@@ -1,11 +1,12 @@
 package zen
 
 import (
+	"net/http"
 	"reflect"
 	"testing"
 )
 
-func TestParseStructTag(t *testing.T) {
+func TestTagVal(t *testing.T) {
 	type s struct {
 		Explicit string `param:"id"`
 		Fallback string `json:"name"`
@@ -17,24 +18,60 @@ func TestParseStructTag(t *testing.T) {
 	rt := reflect.TypeOf(s{})
 
 	tests := []struct {
-		field   string
-		tagName string
-		want    string
+		field  string
+		keys   []string
+		want   string
 	}{
-		{"Explicit", "param", "id"},
-		{"Explicit", "json", "Explicit"},
-		{"Fallback", "query", "name"},
-		{"Skip", "query", "Skip"},
-		{"NoTag", "param", "NoTag"},
-		{"CommaOpt", "json", "field"},
+		{"Explicit", []string{"param"}, "id"},
+		{"Explicit", []string{"param", "json"}, "id"},
+		{"Fallback", []string{"query", "json"}, "name"},
+		{"Skip", []string{"query", "json"}, ""},
+		{"NoTag", []string{"param"}, ""},
+		{"CommaOpt", []string{"json"}, "field"},
 	}
 
 	for _, tt := range tests {
 		f, _ := rt.FieldByName(tt.field)
-		got := parseStructTag(f, tt.tagName)
+		got := tagVal(f, tt.keys...)
 		if got != tt.want {
-			t.Errorf("parseStructTag(%q, %q) = %q, want %q", tt.field, tt.tagName, got, tt.want)
+			t.Errorf("tagVal(%q, %v) = %q, want %q", tt.field, tt.keys, got, tt.want)
 		}
+	}
+}
+
+func TestParamTag(t *testing.T) {
+	type s struct {
+		Explicit string `param:"id"`
+		Fallback string `json:"name"`
+		NoTag    string
+	}
+	rt := reflect.TypeOf(s{})
+	if got := paramTag(rt.Field(0)); got != "id" {
+		t.Fatalf("paramTag(Explicit) = %q, want %q", got, "id")
+	}
+	if got := paramTag(rt.Field(1)); got != "name" {
+		t.Fatalf("paramTag(Fallback) = %q, want %q", got, "name")
+	}
+	if got := paramTag(rt.Field(2)); got != "NoTag" {
+		t.Fatalf("paramTag(NoTag) = %q, want %q", got, "NoTag")
+	}
+}
+
+func TestHeaderTag(t *testing.T) {
+	type s struct {
+		Explicit string `header:"X-Custom"`
+		Fallback string `json:"x-fallback"`
+		NoTag    string
+	}
+	rt := reflect.TypeOf(s{})
+	if got := headerTag(rt.Field(0)); got != "X-Custom" {
+		t.Fatalf("headerTag(Explicit) = %q, want %q", got, "X-Custom")
+	}
+	if got := headerTag(rt.Field(1)); got != "x-fallback" {
+		t.Fatalf("headerTag(Fallback) = %q, want %q", got, "x-fallback")
+	}
+	if got := headerTag(rt.Field(2)); got != http.CanonicalHeaderKey("NoTag") {
+		t.Fatalf("headerTag(NoTag) = %q, want %q", got, http.CanonicalHeaderKey("NoTag"))
 	}
 }
 

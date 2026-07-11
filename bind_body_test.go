@@ -223,9 +223,9 @@ func TestBind_GET(t *testing.T) {
 func TestBind_NoBody(t *testing.T) {
 	r := New(":0")
 	r.POST("/nobody", func(c *Ctx) {
-		if err := c.Bind(nil); err != nil {
-			c.Error(http.StatusBadRequest, err.Error())
-			return
+		err := c.Bind(nil)
+		if err == nil {
+			t.Fatal("Bind(nil) should return an error")
 		}
 		c.String(http.StatusOK, "ok")
 	})
@@ -298,9 +298,9 @@ func TestBindPathParams_NonStruct(t *testing.T) {
 	r := New(":0")
 	r.GET("/users/{id}", func(c *Ctx) {
 		var s string
-		if err := c.BindPathParams(&s); err != nil {
-			c.Error(http.StatusBadRequest, err.Error())
-			return
+		err := c.BindPathParams(&s)
+		if err == nil {
+			t.Fatal("BindPathParams on non-struct should return an error")
 		}
 		c.String(http.StatusOK, "ok")
 	})

@@ -27,14 +27,14 @@ func NewTestRequest(method, path string, body io.Reader) *TestRequest {
 	}
 }
 
-// NewTestRequestWithBody creates a test request with a string body and sets
+// NewTestRequestWithJSON creates a test request with a JSON string body and sets
 // the Content-Type header to application/json.
 //
 // Example:
 //
-//	tr := zen.NewTestRequestWithBody("POST", "/api/users", `{"name":"John"}`)
+//	tr := zen.NewTestRequestWithJSON("POST", "/api/users", `{"name":"John"}`)
 //	r.ServeHTTP(tr.Response, tr.Request)
-func NewTestRequestWithBody(method, path, jsonBody string) *TestRequest {
+func NewTestRequestWithJSON(method, path, jsonBody string) *TestRequest {
 	body := bytes.NewBufferString(jsonBody)
 	tr := NewTestRequest(method, path, body)
 	tr.Request.Header.Set("Content-Type", "application/json")

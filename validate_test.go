@@ -158,9 +158,7 @@ func TestSetValidator_Nil(t *testing.T) {
 
 func TestEnableAutoValidation(t *testing.T) {
 	EnableAutoValidation()
-	defer func() {
-		autoValidateEnabled = false
-	}()
+	defer autoValidateEnabled.Store(false)
 
 	r := New(":0")
 	r.POST("/test", func(c *Ctx) {

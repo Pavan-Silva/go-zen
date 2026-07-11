@@ -50,14 +50,15 @@ func (c *Ctx) SSEvent(event string, data any) error {
 		if _, err := w.Write(prefixEvent); err != nil {
 			return err
 		}
-		// Clean out carriage returns safely without rewriting string allocations
+		// Clean out carriage returns, write once
+		cleaned := make([]byte, 0, len(event))
 		for i := 0; i < len(event); i++ {
-			char := event[i]
-			if char != '\r' && char != '\n' {
-				if _, err := w.Write([]byte{char}); err != nil {
-					return err
-				}
+			if c := event[i]; c != '\r' && c != '\n' {
+				cleaned = append(cleaned, c)
 			}
+		}
+		if _, err := w.Write(cleaned); err != nil {
+			return err
 		}
 		if _, err := w.Write(tokenNL); err != nil {
 			return err
