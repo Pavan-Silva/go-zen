@@ -206,8 +206,8 @@ func BenchmarkGroup(b *testing.B) {
 	})
 
 	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	
+	for b.Loop() {
 		req := httptest.NewRequest("GET", "/api/users/list", nil)
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, req)

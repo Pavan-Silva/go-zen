@@ -182,8 +182,8 @@ func BenchmarkBindJSON(b *testing.B) {
 	body := strings.NewReader(`{"name":"John","email":"john@example.com","age":30}`)
 
 	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	
+	for b.Loop() {
 		req := httptest.NewRequest("POST", "/user", body)
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, req)
@@ -197,8 +197,8 @@ func BenchmarkJSON(b *testing.B) {
 	})
 
 	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	
+	for b.Loop() {
 		req := httptest.NewRequest("GET", "/json", nil)
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, req)

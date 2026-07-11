@@ -156,8 +156,8 @@ func BenchmarkBindXML(b *testing.B) {
 	body := strings.NewReader(`<user><name>John</name><email>john@example.com</email><age>30</age></user>`)
 
 	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	
+	for b.Loop() {
 		req := httptest.NewRequest("POST", "/user", body)
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, req)
@@ -171,8 +171,8 @@ func BenchmarkXML(b *testing.B) {
 	})
 
 	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	
+	for b.Loop() {
 		req := httptest.NewRequest("GET", "/xml", nil)
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, req)

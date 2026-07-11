@@ -99,7 +99,7 @@ func TestFormFiles_MultipleFiles(t *testing.T) {
 	writer := multipart.NewWriter(body)
 	for i := 1; i <= 3; i++ {
 		part, _ := writer.CreateFormFile("files", fmt.Sprintf("file%d.txt", i))
-		_, _ = part.Write([]byte(fmt.Sprintf("content%d", i)))
+		_, _ = fmt.Fprintf(part, "content%d", i)
 	}
 	_ = writer.Close()
 

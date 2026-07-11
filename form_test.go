@@ -261,8 +261,8 @@ func BenchmarkBindForm(b *testing.B) {
 	data.Set("flag", "true")
 
 	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for b.Loop() {
 		req := httptest.NewRequest("POST", "/form", strings.NewReader(data.Encode()))
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		w := httptest.NewRecorder()

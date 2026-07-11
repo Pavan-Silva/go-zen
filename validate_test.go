@@ -202,9 +202,9 @@ func BenchmarkValidation(b *testing.B) {
 	s := S{Name: "John", Email: "john@example.com", Age: 30}
 
 	b.ReportAllocs()
-	b.ResetTimer()
+	
 	_ = getValidator()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_ = Validate(&s)
 	}
 }
