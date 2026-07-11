@@ -1,5 +1,38 @@
 # Changelog
 
+## v1.4.0
+
+### Features
+
+- `ClientIP()` on `*Ctx` — checks `X-Forwarded-For` → `X-Real-IP` → `RemoteAddr`
+- `Params()` on `*Ctx` — returns all matched path params as `map[string]string`
+- `QueryParams()` on `*Ctx` — returns all query params as `map[string][]string`
+- `DefaultQuery(key, default)` on `*Ctx` — fallback when query param is absent or empty
+- `DefaultParam(key, default)` on `*Ctx` — fallback when path param is absent or empty
+- `HeaderXRequestID` constant on `zen` package — canonical request ID header name
+- Request ID middleware — injects unique ID per request via configurable header
+- Request timeout middleware — `middleware.Timeout()` with configurable duration and skipper
+- Template rendering — `LoadTemplates()` and `c.Render()` / `RenderWriter()` for HTML templates
+- `JSONPretty()` on `*Ctx` — indented JSON response with two-space indentation
+- `IsAjax()` on `*Ctx` — checks `X-Requested-With: XMLHttpRequest` header
+- `ContentType()` on `*Ctx` — returns parsed MIME content type without parameters
+- Testing utilities — `NewTestRequest()` and `NewTestRequestWithBody()`
+
+### Fixes
+
+- Removed validator mutex — `Validate` now uses atomic `sync.Uint32` for race-free config reinit
+- Request ID middleware uses `zen.HeaderXRequestID` constant
+
+### Documentation
+
+- Updated routing docs with `Params`, `QueryParams`, `DefaultQuery`, `DefaultParam`, `ClientIP`
+- Updated request-id docs to show response header retrieval pattern (`c.Response.Header().Get(zen.HeaderXRequestID)`)
+- Updated context docs to reference `zen.HeaderXRequestID`
+- Added request-id, timeout, and middleware docs for all new features
+- Updated responses.mdx with Template and JSONPretty
+- Updated routing.mdx with IsAjax and ContentType
+- Updated middleware.mdx with full example stack
+
 ## v1.3.0
 
 ### Features
