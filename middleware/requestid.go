@@ -10,7 +10,7 @@ import (
 // RequestIDConfig holds configuration for the Request ID middleware.
 type RequestIDConfig struct {
 	// Header is the request/response header for the request ID.
-	// Default: "X-Request-ID"
+	// Default: HeaderXRequestID ("X-Request-ID")
 	Header string
 	// Generator generates a unique request ID. Default: 16-byte hex.
 	Generator func() string
@@ -21,7 +21,7 @@ type RequestIDConfig struct {
 // DefaultRequestIDConfig returns a RequestIDConfig with sensible defaults.
 func DefaultRequestIDConfig() RequestIDConfig {
 	return RequestIDConfig{
-		Header: "X-Request-ID",
+		Header: zen.HeaderXRequestID,
 	}
 }
 
@@ -41,7 +41,7 @@ func RequestID() zen.HandlerFunc {
 // RequestIDWithConfig returns Request ID middleware with the given config.
 func RequestIDWithConfig(config RequestIDConfig) zen.HandlerFunc {
 	if config.Header == "" {
-		config.Header = "X-Request-ID"
+		config.Header = zen.HeaderXRequestID
 	}
 	if config.Generator == nil {
 		config.Generator = defaultRequestIDGenerator

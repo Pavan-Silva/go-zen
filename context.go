@@ -10,6 +10,10 @@ import (
 // zenCtxKey is used for storing Ctx inside standard request context instances.
 type zenCtxKey struct{}
 
+// HeaderXRequestID is the canonical header name for request IDs.
+// Set on responses by the Request ID middleware.
+const HeaderXRequestID = "X-Request-ID"
+
 // HandlerFunc is the universal type for both route handlers and middleware.
 type HandlerFunc func(*Ctx)
 
