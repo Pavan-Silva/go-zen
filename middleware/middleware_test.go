@@ -279,7 +279,8 @@ func TestClientIP_XForwardedFor(t *testing.T) {
 	req.Header.Set("X-Forwarded-For", "1.2.3.4, 5.6.7.8")
 	req.RemoteAddr = "127.0.0.1:12345"
 
-	got := clientIP(req)
+	c := &zen.Ctx{Request: req}
+	got := c.ClientIP()
 	if got != "1.2.3.4" {
 		t.Fatalf("ip = %q, want %q", got, "1.2.3.4")
 	}
@@ -290,7 +291,8 @@ func TestClientIP_XRealIP(t *testing.T) {
 	req.Header.Set("X-Real-IP", "10.0.0.1")
 	req.RemoteAddr = "127.0.0.1:12345"
 
-	got := clientIP(req)
+	c := &zen.Ctx{Request: req}
+	got := c.ClientIP()
 	if got != "10.0.0.1" {
 		t.Fatalf("ip = %q, want %q", got, "10.0.0.1")
 	}
@@ -298,11 +300,12 @@ func TestClientIP_XRealIP(t *testing.T) {
 
 func TestClientIP_RemoteAddr(t *testing.T) {
 	req := httptest.NewRequest("GET", "/", nil)
-	req.RemoteAddr = "127.0.0.1:12345"
+	req.RemoteAddr = "192.168.1.1:54321"
 
-	got := clientIP(req)
-	if got != "127.0.0.1:12345" {
-		t.Fatalf("ip = %q, want %q", got, "127.0.0.1:12345")
+	c := &zen.Ctx{Request: req}
+	got := c.ClientIP()
+	if got != "192.168.1.1" {
+		t.Fatalf("ip = %q, want %q", got, "192.168.1.1")
 	}
 }
 
@@ -597,6 +600,74 @@ func TestRequestID_CustomHeader(t *testing.T) {
 
 	if w.Header().Get("X-Trace-Id") != "trace-42" {
 		t.Fatalf("X-Trace-Id = %q, want %q", w.Header().Get("X-Trace-Id"), "trace-42")
+	}
+}
+
+func TestTimeout_Default(t *testing.T) {
+	r := zen.New(":0")
+	r.Use(Timeout(5 * time.Second))
+	r.GET("/", func(c *zen.Ctx) {
+		c.String(200, "ok")
+	})
+
+	req := httptest.NewRequest("GET", "/", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 200 {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	if w.Body.String() != "ok" {
+		t.Fatalf("body = %q, want %q", w.Body.String(), "ok")
+	}
+}
+
+func TestTimeout_ContextDeadline(t *testing.T) {
+	r := zen.New(":0")
+	r.Use(Timeout(time.Hour))
+	r.GET("/", func(c *zen.Ctx) {
+		deadline, ok := c.Request.Context().Deadline()
+		if !ok {
+			t.Fatal("expected deadline on context")
+		}
+		if time.Until(deadline) < 50*time.Minute {
+			t.Fatal("deadline too soon")
+		}
+		c.String(200, "ok")
+	})
+
+	req := httptest.NewRequest("GET", "/", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 200 {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+}
+
+func TestTimeout_Skipped(t *testing.T) {
+	cfg := DefaultTimeoutConfig()
+	cfg.Duration = 30 * time.Second
+	cfg.Skipper = func(r *http.Request) bool {
+		return r.URL.Path == "/skip"
+	}
+
+	r := zen.New(":0")
+	r.Use(TimeoutWithConfig(cfg))
+	r.GET("/skip", func(c *zen.Ctx) {
+		_, ok := c.Request.Context().Deadline()
+		if ok {
+			t.Fatal("expected no deadline for skipped request")
+		}
+		c.String(200, "ok")
+	})
+
+	req := httptest.NewRequest("GET", "/skip", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 200 {
+		t.Fatalf("status = %d, want 200", w.Code)
 	}
 }
 
