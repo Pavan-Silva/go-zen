@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"os"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -59,7 +58,7 @@ func Logger(c *zen.Ctx) {
 	buf = rightPad(buf, formatLatency(duration), 9)
 	buf = append(buf, " | "...)
 
-	buf = leftPad(buf, clientIP(c.Request), 15)
+	buf = leftPad(buf, c.ClientIP(), 15)
 	buf = append(buf, " | "...)
 	size := strconv.FormatInt(c.Request.ContentLength, 10) + "->" + strconv.FormatInt(int64(rw.written), 10) + "B"
 	buf = rightPad(buf, size, 13)
@@ -110,20 +109,6 @@ func (rw *responseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 		return hijacker.Hijack()
 	}
 	return nil, nil, http.ErrNotSupported
-}
-
-// clientIP extracts the client IP address efficiently.
-func clientIP(r *http.Request) string {
-	if fwd := r.Header["X-Forwarded-For"]; len(fwd) > 0 {
-		if before, _, ok := strings.Cut(fwd[0], ","); ok {
-			return strings.TrimSpace(before)
-		}
-		return strings.TrimSpace(fwd[0])
-	}
-	if realIP := r.Header["X-Real-Ip"]; len(realIP) > 0 {
-		return strings.TrimSpace(realIP[0])
-	}
-	return r.RemoteAddr
 }
 
 func rightPad(buf []byte, s string, width int) []byte {

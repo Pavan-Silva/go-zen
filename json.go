@@ -36,3 +36,16 @@ func (c *Ctx) JSON(status int, data any) {
 		logger.Error("HTTP: JSON encode error: %v", err)
 	}
 }
+
+// JSONPretty encodes data as indented JSON for human-readable responses.
+// Uses two-space indentation. For compact JSON, use JSON() instead.
+func (c *Ctx) JSONPretty(status int, data any) {
+	c.setContentType("application/json")
+	c.Response.WriteHeader(status)
+
+	enc := json.NewEncoder(c.Response)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(data); err != nil {
+		logger.Error("HTTP: JSON encode error: %v", err)
+	}
+}

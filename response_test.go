@@ -262,6 +262,133 @@ func TestContext_Stream(t *testing.T) {
 	}
 }
 
+func TestStatic_ServesFile(t *testing.T) {
+	tmp := t.TempDir()
+	err := os.WriteFile(filepath.Join(tmp, "hello.txt"), []byte("static content"), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	r := New(":0")
+	r.Static("/static", tmp)
+
+	req := httptest.NewRequest("GET", "/static/hello.txt", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 200 {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	if w.Body.String() != "static content" {
+		t.Fatalf("body = %q, want %q", w.Body.String(), "static content")
+	}
+}
+
+func TestStatic_NotFound(t *testing.T) {
+	r := New(":0")
+	r.Static("/static", t.TempDir())
+
+	req := httptest.NewRequest("GET", "/static/nonexistent.txt", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 404 {
+		t.Fatalf("status = %d, want 404", w.Code)
+	}
+}
+
+func TestJSONPretty(t *testing.T) {
+	r := New(":0")
+	r.GET("/pretty", func(c *Ctx) {
+		c.JSONPretty(200, map[string]any{"name": "zen", "version": 1})
+	})
+
+	req := httptest.NewRequest("GET", "/pretty", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 200 {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	if ct := w.Header().Get("Content-Type"); ct != "application/json" {
+		t.Fatalf("Content-Type = %q", ct)
+	}
+	expected := "{\n  \"name\": \"zen\",\n  \"version\": 1\n}\n"
+	if w.Body.String() != expected {
+		t.Fatalf("body = %q, want %q", w.Body.String(), expected)
+	}
+}
+
+func TestIsAjax(t *testing.T) {
+	r := New(":0")
+	var isAjax bool
+	r.GET("/check", func(c *Ctx) {
+		isAjax = c.IsAjax()
+		c.String(200, "ok")
+	})
+
+	req := httptest.NewRequest("GET", "/check", nil)
+	req.Header.Set("X-Requested-With", "XMLHttpRequest")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if !isAjax {
+		t.Fatal("expected IsAjax to be true")
+	}
+}
+
+func TestIsAjax_False(t *testing.T) {
+	r := New(":0")
+	var isAjax bool
+	r.GET("/check", func(c *Ctx) {
+		isAjax = c.IsAjax()
+		c.String(200, "ok")
+	})
+
+	req := httptest.NewRequest("GET", "/check", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if isAjax {
+		t.Fatal("expected IsAjax to be false")
+	}
+}
+
+func TestContentType(t *testing.T) {
+	r := New(":0")
+	var ct string
+	r.POST("/check", func(c *Ctx) {
+		ct = c.ContentType()
+		c.String(200, "ok")
+	})
+
+	req := httptest.NewRequest("POST", "/check", nil)
+	req.Header.Set("Content-Type", "application/json; charset=utf-8")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if ct != "application/json" {
+		t.Fatalf("ContentType = %q, want %q", ct, "application/json")
+	}
+}
+
+func TestContentType_Empty(t *testing.T) {
+	r := New(":0")
+	var ct string
+	r.GET("/check", func(c *Ctx) {
+		ct = c.ContentType()
+		c.String(200, "ok")
+	})
+
+	req := httptest.NewRequest("GET", "/check", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if ct != "" {
+		t.Fatalf("ContentType = %q, want empty", ct)
+	}
+}
+
 func TestContext_Error(t *testing.T) {
 	r := New(":0")
 	r.GET("/err", func(c *Ctx) {
