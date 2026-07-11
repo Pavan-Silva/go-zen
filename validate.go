@@ -3,7 +3,6 @@ package zen
 import (
 	"reflect"
 	"strings"
-	"sync"
 
 	"github.com/go-playground/validator/v10"
 )
@@ -25,18 +24,12 @@ type Validator interface {
 }
 
 // defaultValidator is the global validator instance.
-// Set a custom validator via SetValidator().
-var (
-	defaultValidatorMu sync.RWMutex
-	defaultValidator   Validator = &defaultValidate{inst: newValidator()}
-)
+// Set a custom validator via SetValidator() at startup.
+var defaultValidator Validator = &defaultValidate{inst: newValidator()}
 
 // autoValidate controls whether BindJSON/BindXML/BindForm automatically
 // call Validate after decoding. Disabled by default.
-var (
-	autoValidateMu      sync.RWMutex
-	autoValidateEnabled bool
-)
+var autoValidateEnabled bool
 
 // defaultValidate is the built-in validator using go-playground/validator/v10.
 type defaultValidate struct {
@@ -45,34 +38,25 @@ type defaultValidate struct {
 
 // getValidator returns the current global validator.
 func getValidator() Validator {
-	defaultValidatorMu.RLock()
-	v := defaultValidator
-	defaultValidatorMu.RUnlock()
-	return v
+	return defaultValidator
 }
 
-// SetValidator sets a custom validator for request validation.
+// SetValidator sets a global validator for request validation.
+// Must be called at startup, before handling any requests. Not safe for concurrent use.
 // Pass nil to disable validation entirely.
 func SetValidator(v Validator) {
-	defaultValidatorMu.Lock()
 	defaultValidator = v
-	defaultValidatorMu.Unlock()
 }
 
 // EnableAutoValidation enables automatic Validate() calls after
-// BindJSON, BindXML, and BindForm.
+// BindJSON, BindXML, and BindForm. Must be called at startup.
 func EnableAutoValidation() {
-	autoValidateMu.Lock()
 	autoValidateEnabled = true
-	autoValidateMu.Unlock()
 }
 
 // autoValidateOn returns whether auto-validation is enabled.
 func autoValidateOn() bool {
-	autoValidateMu.RLock()
-	v := autoValidateEnabled
-	autoValidateMu.RUnlock()
-	return v
+	return autoValidateEnabled
 }
 
 // DefaultValidator returns the underlying go-playground/validator/v10 instance

@@ -159,9 +159,7 @@ func TestSetValidator_Nil(t *testing.T) {
 func TestEnableAutoValidation(t *testing.T) {
 	EnableAutoValidation()
 	defer func() {
-		autoValidateMu.Lock()
 		autoValidateEnabled = false
-		autoValidateMu.Unlock()
 	}()
 
 	r := New(":0")
