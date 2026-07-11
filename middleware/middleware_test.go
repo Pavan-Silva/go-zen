@@ -536,3 +536,87 @@ func TestPprof_Handler(t *testing.T) {
 		t.Fatalf("status = %d, want 200", w.Code)
 	}
 }
+
+func TestRequestID_Default(t *testing.T) {
+	r := zen.New(":0")
+	r.Use(RequestID())
+	r.GET("/", func(c *zen.Ctx) {
+		id := GetRequestID(c)
+		if id == "" {
+			t.Fatal("expected non-empty request ID")
+		}
+		c.String(200, id)
+	})
+
+	req := httptest.NewRequest("GET", "/", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 200 {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	if w.Header().Get("X-Request-Id") == "" {
+		t.Fatal("expected X-Request-Id header")
+	}
+	if w.Body.String() != w.Header().Get("X-Request-Id") {
+		t.Fatal("response body should match request ID")
+	}
+}
+
+func TestRequestID_ClientProvided(t *testing.T) {
+	r := zen.New(":0")
+	r.Use(RequestID())
+	r.GET("/", func(c *zen.Ctx) {
+		c.String(200, GetRequestID(c))
+	})
+
+	req := httptest.NewRequest("GET", "/", nil)
+	req.Header.Set("X-Request-ID", "client-id-123")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Body.String() != "client-id-123" {
+		t.Fatalf("body = %q, want %q", w.Body.String(), "client-id-123")
+	}
+}
+
+func TestRequestID_CustomHeader(t *testing.T) {
+	cfg := DefaultRequestIDConfig()
+	cfg.Header = "X-Trace-ID"
+	cfg.Generator = func() string { return "trace-42" }
+
+	r := zen.New(":0")
+	r.Use(RequestIDWithConfig(cfg))
+	r.GET("/", func(c *zen.Ctx) {
+		c.String(200, GetRequestID(c))
+	})
+
+	req := httptest.NewRequest("GET", "/", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Header().Get("X-Trace-Id") != "trace-42" {
+		t.Fatalf("X-Trace-Id = %q, want %q", w.Header().Get("X-Trace-Id"), "trace-42")
+	}
+}
+
+func TestRequestID_Skipper(t *testing.T) {
+	cfg := DefaultRequestIDConfig()
+	cfg.Skipper = func(r *http.Request) bool {
+		return r.URL.Path == "/skip"
+	}
+
+	r := zen.New(":0")
+	r.Use(RequestIDWithConfig(cfg))
+	r.GET("/skip", func(c *zen.Ctx) {
+		c.String(200, GetRequestID(c))
+	})
+
+	req := httptest.NewRequest("GET", "/skip", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Header().Get("X-Request-ID") != "" {
+		t.Fatal("expected no X-Request-ID for skipped request")
+	}
+}
