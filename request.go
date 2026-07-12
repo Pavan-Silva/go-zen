@@ -4,7 +4,6 @@ import (
 	"io"
 	"mime"
 	"net"
-	"net/url"
 	"strings"
 )
 
@@ -16,43 +15,7 @@ import (
 //	page := c.QueryParam("page")      // GET /posts?page=2 -> "2"
 //	search := c.QueryParam("q")       // GET /posts?q=golang-> "golang"
 func (c *Ctx) QueryParam(key string) string {
-	rawQuery := c.Request.URL.RawQuery
-	if rawQuery == "" || key == "" {
-		return ""
-	}
-
-	// Look for the key boundary configurations matching target bounds
-	keyLen := len(key)
-	pos := 0
-	for {
-		idx := strings.Index(rawQuery[pos:], key)
-		if idx == -1 {
-			return ""
-		}
-		start := pos + idx
-		pos = start + keyLen
-
-		// Ensure we matched the whole key, not just a substring suffix
-		if (start == 0 || rawQuery[start-1] == '&') && (pos == len(rawQuery) || rawQuery[pos] == '=') {
-			if pos == len(rawQuery) || rawQuery[pos] != '=' {
-				return ""
-			}
-
-			valueStart := pos + 1
-			valueEnd := strings.IndexByte(rawQuery[valueStart:], '&')
-
-			var val string
-			if valueEnd == -1 {
-				val = rawQuery[valueStart:]
-			} else {
-				val = rawQuery[valueStart : valueStart+valueEnd]
-			}
-			if decoded, err := url.QueryUnescape(val); err == nil {
-				return decoded
-			}
-			return val
-		}
-	}
+	return c.Request.URL.Query().Get(key)
 }
 
 // Param returns the URL path parameter for the given key.

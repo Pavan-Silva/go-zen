@@ -13,7 +13,11 @@ const defaultMultipartMemory int64 = 32 << 20
 // parseMultipartForm ensures the multipart form is parsed.
 func (c *Ctx) parseMultipartForm() error {
 	if c.Request.MultipartForm == nil {
-		if err := c.Request.ParseMultipartForm(defaultMultipartMemory); err != nil {
+		maxMemory := c.engine.MaxMultipartMemory
+		if maxMemory <= 0 {
+			maxMemory = defaultMultipartMemory
+		}
+		if err := c.Request.ParseMultipartForm(maxMemory); err != nil {
 			return fmt.Errorf("http: ParseMultipartForm error: %w", err)
 		}
 	}

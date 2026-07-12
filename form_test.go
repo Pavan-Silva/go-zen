@@ -137,7 +137,7 @@ func TestBindForm_Validation(t *testing.T) {
 	}
 }
 
-func TestBindForm_InvalidTarget(t *testing.T) {
+func TestBindForm_ToMap(t *testing.T) {
 	r := New(":0")
 	var captured map[string]string
 	r.POST("/form", func(c *Ctx) {
@@ -156,8 +156,11 @@ func TestBindForm_InvalidTarget(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	if w.Code != 400 {
-		t.Fatalf("status = %d, want 400", w.Code)
+	if w.Code != 200 {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	if captured["key"] != "value" {
+		t.Fatalf("captured = %v, want key=value", captured)
 	}
 }
 

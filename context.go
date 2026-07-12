@@ -42,7 +42,6 @@ func (c *Ctx) reset(w http.ResponseWriter, r *http.Request, e *Engine) {
 	c.next = nil
 	c.ps = c.ps[:0]
 	c.skippedNodes = c.skippedNodes[:0]
-
 	if c.store != nil {
 		clear(c.store)
 	}

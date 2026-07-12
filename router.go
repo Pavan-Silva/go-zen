@@ -41,12 +41,15 @@ func DefaultConfig() Config {
 // and owns the radix tree router and the http.Server.
 type Engine struct {
 	RouterGroup
-	router          *radixRouter
-	pool            sync.Pool
-	server          *http.Server
-	shutdownTimeout time.Duration
-	validator       Validator
-	autoValidate    bool
+	router              *radixRouter
+	pool                sync.Pool
+	server              *http.Server
+	shutdownTimeout     time.Duration
+	validator           Validator
+	autoValidate        bool
+	JSONSerializer      JSONSerializer
+	XMLSerializer       XMLSerializer
+	MaxMultipartMemory int64
 }
 
 // New creates an Engine with the given listen address and optional custom Config.
@@ -59,8 +62,11 @@ func New(addr string, config ...Config) *Engine {
 	}
 
 	e := &Engine{
-		router:          newRadixRouter(),
-		shutdownTimeout: cfg.ShutdownTimeout,
+		router:              newRadixRouter(),
+		shutdownTimeout:     cfg.ShutdownTimeout,
+		JSONSerializer:      jsonSerializer{},
+		XMLSerializer:       xmlSerializer{},
+		MaxMultipartMemory: 32 << 20,
 	}
 
 	e.validator = Validator(&defaultValidate{inst: newValidator()})

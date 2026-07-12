@@ -1,194 +1,78 @@
+// Package zen provides binding of HTTP request data into Go structs and maps.
+//
+// # Subsystem overview
+//
+// The binding subsystem maps incoming data from four sources onto a destination:
+//   - Path parameters  (via BindPathValues)
+//   - Query parameters (via BindQueryParams)
+//   - Request body     (via BindBody)
+//   - HTTP headers     (via BindHeaders)
+//
+// # Tag resolution order
+//
+// For a given source each struct field is located by looking up its struct tag
+// (param / query / form / header). If that tag is empty the json tag is tried
+// next. If the json tag is also empty (or set to "-") the field name is used
+// as-is. This allows a single set of json tags to double as binding tags in
+// most cases.
+//
+// # Supported field types
+//
+// Basic types (int*, uint*, float*, bool, string), pointers to those types,
+// slices of those types, time.Time (with format tag), BindUnmarshaler,
+// encoding.TextUnmarshaler, and multipart.FileHeader variants.
 package zen
 
 import (
 	"errors"
 	"fmt"
+	"mime/multipart"
 	"net/http"
-	"reflect"
-	"strconv"
 	"strings"
 )
 
-// ErrInvalidBindTarget is returned by BindForm, BindPathParams, BindQueryParams,
-// and bindFields when dest is not a pointer to a struct.
+// ErrInvalidBindTarget is returned when the bind destination is not a pointer
+// to a struct or map.
 var ErrInvalidBindTarget = errors.New("http: bind dest must be a pointer to a struct")
 
-// FormError is returned by BindForm when a form value cannot be parsed into
-// the target field's type (e.g., "abc" into an int field).
+// FormError represents a form binding error for a specific field.
 type FormError struct {
 	Field string
 	Err   error
 }
 
-// Error implements the error interface.
 func (e *FormError) Error() string {
-	return "BindForm field \"" + e.Field + "\": " + e.Err.Error()
+	return "form field \"" + e.Field + "\": " + e.Err.Error()
 }
 
-// Unwrap returns the underlying cause error.
 func (e *FormError) Unwrap() error { return e.Err }
 
-// Bind auto-detects the request content type and decodes the payload into dest.
-// For GET, DELETE, and HEAD requests, it automatically populates query parameters first.
+// BindUnmarshaler is the interface used to wrap the UnmarshalParam method.
+// Types implementing this interface gain control over how a single string
+// value is deserialised during binding.
+type BindUnmarshaler interface {
+	UnmarshalParam(param string) error
+}
+
+// Bind binds path params, query params (GET/DELETE/HEAD), and the request
+// body to dest. The order of precedence is:
+//  1. Path parameters
+//  2. Query parameters (only for GET, DELETE, HEAD)
+//  3. Request body (Content-Type driven)
 func (c *Ctx) Bind(dest any) error {
-	if err := c.BindPathParams(dest); err != nil {
+	if dest == nil {
+		return ErrInvalidBindTarget
+	}
+	if err := bindPathValues(c, dest); err != nil {
 		return err
 	}
-
 	method := c.Request.Method
-	if method == "GET" || method == "DELETE" || method == "HEAD" {
-		if err := c.BindQueryParams(dest); err != nil {
+	if method == http.MethodGet || method == http.MethodDelete || method == http.MethodHead {
+		if err := bindQueryParams(c, dest); err != nil {
 			return err
 		}
 	}
-
-	if _, exists := c.Request.Header["Content-Type"]; exists {
-		return c.BindBody(dest)
-	}
-	return nil
-}
-
-// BindBody parses the request body into dest based on the Content-Type header,
-// completely skipping path and query parameters.
-func (c *Ctx) BindBody(dest any) error {
-	ct := ""
-	if vals := c.Request.Header["Content-Type"]; len(vals) > 0 {
-		ct = vals[0]
-	}
-	if ct == "" {
-		return nil
-	}
-
-	before, _, _ := strings.Cut(ct, ";")
-	ct = strings.ToLower(strings.TrimSpace(before))
-
-	switch ct {
-	case "application/json":
-		return c.BindJSON(dest)
-	case "application/xml", "text/xml":
-		return c.BindXML(dest)
-	case "application/x-www-form-urlencoded", "multipart/form-data":
-		return c.BindForm(dest)
-	default:
-		if strings.HasSuffix(ct, "+json") || strings.HasSuffix(ct, "/json") {
-			return c.BindJSON(dest)
-		}
-		return fmt.Errorf("BindBody: unsupported content type %q", ct)
-	}
-}
-
-// tagVal returns the first non-empty, non-"-" value from the given tag keys,
-// stripped of comma options.
-func tagVal(field reflect.StructField, keys ...string) string {
-	for _, key := range keys {
-		v := field.Tag.Get(key)
-		if v == "" || v == "-" {
-			continue
-		}
-		if idx := strings.IndexByte(v, ','); idx != -1 {
-			v = v[:idx]
-		}
-		return v
-	}
-	return ""
-}
-
-// paramTag extracts the param tag, falling back to json then field name.
-func paramTag(field reflect.StructField) string {
-	if v := tagVal(field, "param", "json"); v != "" {
-		return v
-	}
-	return field.Name
-}
-
-// queryTag extracts the query tag, falling back to json then field name.
-func queryTag(field reflect.StructField) string {
-	if v := tagVal(field, "query", "json"); v != "" {
-		return v
-	}
-	return field.Name
-}
-
-// formTag extracts the form tag, falling back to json. Returns empty if neither exists.
-func formTag(field reflect.StructField) string {
-	return tagVal(field, "form", "json")
-}
-
-// headerTag extracts the header tag, falling back to json then canonical field name.
-func headerTag(field reflect.StructField) string {
-	if v := tagVal(field, "header", "json"); v != "" {
-		return v
-	}
-	return http.CanonicalHeaderKey(field.Name)
-}
-
-// walkStructFields iterates exported fields of a struct, recursing into embedded
-// structs. For each leaf field it calls fn with the field info and reflected value.
-func walkStructFields(rv reflect.Value, rt reflect.Type, fn func(reflect.StructField, reflect.Value) error) error {
-	for i := range rt.NumField() {
-		field := rt.Field(i)
-		fv := rv.Field(i)
-
-		if field.Anonymous {
-			if fv.Kind() == reflect.Struct {
-				if err := walkStructFields(fv, fv.Type(), fn); err != nil {
-					return err
-				}
-			}
-			continue
-		}
-
-		if !field.IsExported() {
-			continue
-		}
-
-		if err := fn(field, fv); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// bindFields iterates over struct fields and applies a getter using the
-// tag name from one of the given tag keys.
-func (c *Ctx) bindFields(dest any, getter func(string) string, errPrefix string, tagKeys ...string) error {
-	rv, rt, err := checkPointerToStruct(dest)
-	if err != nil {
-		return err
-	}
-
-	return walkStructFields(rv, rt, func(field reflect.StructField, fv reflect.Value) error {
-		var name string
-		if len(tagKeys) > 0 {
-			switch tagKeys[0] {
-			case "param":
-				name = paramTag(field)
-			case "query":
-				name = queryTag(field)
-			case "header":
-				name = headerTag(field)
-			default:
-				name = tagVal(field, tagKeys[0])
-				if name == "" {
-					return nil
-				}
-			}
-		}
-
-		val := getter(name)
-		if val == "" {
-			return nil
-		}
-		if err := setFieldValue(fv, field.Type.Kind(), []string{val}); err != nil {
-			return fmt.Errorf("%s %q: %w", errPrefix, name, err)
-		}
-		return nil
-	})
-}
-
-// BindPathParams extracts route wildcards using native Go 1.22+ request context maps.
-func (c *Ctx) BindPathParams(dest any) error {
-	if err := c.bindFields(dest, c.Param, "path param", "param"); err != nil {
+	if err := bindBody(c, dest); err != nil {
 		return err
 	}
 	if c.engine.autoValidate && c.engine.validator != nil {
@@ -197,12 +81,58 @@ func (c *Ctx) BindPathParams(dest any) error {
 	return nil
 }
 
-// BindQueryParams parses query parameters into dest struct fields.
-func (c *Ctx) BindQueryParams(dest any) error {
+// BindPathValues binds URL path parameters to dest. Path params are
+// extracted from the route pattern and mapped onto struct fields tagged
+// with the "param" struct tag.
+func BindPathValues(c *Ctx, dest any) error {
+	if err := bindPathValues(c, dest); err != nil {
+		return err
+	}
+	if c.engine.autoValidate && c.engine.validator != nil {
+		return c.engine.validator.Validate(dest)
+	}
+	return nil
+}
+
+func bindPathValues(c *Ctx, dest any) error {
+	params := map[string][]string{}
+	for _, p := range c.ps {
+		params[p.Key] = []string{p.Value}
+	}
+	if len(params) == 0 {
+		return nil
+	}
+	return bindData(dest, params, "param", nil)
+}
+
+// BindQueryParams binds query parameters to dest. Query params are mapped
+// onto struct fields tagged with the "query" struct tag.
+func BindQueryParams(c *Ctx, dest any) error {
+	if err := bindQueryParams(c, dest); err != nil {
+		return err
+	}
+	if c.engine.autoValidate && c.engine.validator != nil {
+		return c.engine.validator.Validate(dest)
+	}
+	return nil
+}
+
+func bindQueryParams(c *Ctx, dest any) error {
 	if c.Request.URL.RawQuery == "" {
 		return nil
 	}
-	if err := c.bindFields(dest, c.QueryParam, "query param", "query"); err != nil {
+	return bindData(dest, c.Request.URL.Query(), "query", nil)
+}
+
+// BindBody binds the request body to dest based on the Content-Type header.
+// Supported content types:
+//   - application/json
+//   - application/xml, text/xml
+//   - application/x-www-form-urlencoded
+//   - multipart/form-data
+//   - any type ending with +json or /json
+func BindBody(c *Ctx, dest any) (err error) {
+	if err = bindBody(c, dest); err != nil {
 		return err
 	}
 	if c.engine.autoValidate && c.engine.validator != nil {
@@ -211,169 +141,55 @@ func (c *Ctx) BindQueryParams(dest any) error {
 	return nil
 }
 
-// BindHeader binds HTTP request headers to a struct using `header` or `json` tags.
-//
-// Example:
-//
-//	type Headers struct {
-//	    UserID string `header:"X-User-Id"`
-//	    APIKey string `header:"X-Api-Key"`
-//	    Rate   int    `header:"X-Rate-Limit"`
-//	}
-func (c *Ctx) BindHeader(dest any) error {
-	if err := c.bindFields(dest,
-		func(name string) string { return c.Request.Header.Get(name) },
-		"header", "header",
-	); err != nil {
-		return err
-	}
-	if c.engine.autoValidate && c.engine.validator != nil {
-		return c.engine.validator.Validate(dest)
-	}
-	return nil
-}
-
-// BindForm parses URL-encoded or multipart form data into a struct.
-//
-// Uses the "form" tag as primary source, falling back to "json" then field name.
-// Automatically runs struct validation after binding unless validation was explicitly
-// disabled via the setup configuration.
-//
-// Example:
-//
-//	type LoginForm struct {
-//	    Email    string `form:"email" validate:"required,email"`
-//	    Password string `form:"password" validate:"required,min=8"`
-//	}
-func (c *Ctx) BindForm(dest any) error {
-	if c.Request.Form == nil {
-		if err := c.Request.ParseMultipartForm(32 << 20); err != nil {
-			if err := c.Request.ParseForm(); err != nil {
-				return fmt.Errorf("http: ParseForm error: %w", err)
-			}
-		}
-	}
-
-	rv, rt, err := checkPointerToStruct(dest)
-	if err != nil {
-		return err
-	}
-
-	if err := walkStructFields(rv, rt, func(field reflect.StructField, fv reflect.Value) error {
-		key := formTag(field)
-		if key == "" {
-			return nil
-		}
-		vals, ok := c.Request.Form[key]
-		if !ok || len(vals) == 0 {
-			return nil
-		}
-		if err := setFieldValue(fv, field.Type.Kind(), vals); err != nil {
-			return &FormError{Field: key, Err: err}
-		}
+func bindBody(c *Ctx, dest any) (err error) {
+	req := c.Request
+	if req.ContentLength == 0 {
 		return nil
-	}); err != nil {
-		return err
 	}
 
+	base, _, _ := strings.Cut(req.Header.Get("Content-Type"), ";")
+	mediatype := strings.TrimSpace(base)
+
+	switch mediatype {
+	case "application/json":
+		err = c.engine.JSONSerializer.Deserialize(c, dest)
+	case "application/xml", "text/xml":
+		err = c.engine.XMLSerializer.Deserialize(c, dest)
+	case "application/x-www-form-urlencoded":
+		var params map[string][]string
+		params, err = formValues(req)
+		if err == nil {
+			err = bindData(dest, params, "form", nil)
+		}
+	case "multipart/form-data":
+		var params *multipart.Form
+		params, err = multipartFormValues(req, c.engine.MaxMultipartMemory)
+		if err == nil {
+			err = bindData(dest, params.Value, "form", params.File)
+		}
+	default:
+		if strings.HasSuffix(mediatype, "+json") || strings.HasSuffix(mediatype, "/json") {
+			err = c.engine.JSONSerializer.Deserialize(c, dest)
+		} else {
+			return fmt.Errorf("BindBody: unsupported content type %q", mediatype)
+		}
+	}
+	return err
+}
+
+// BindHeaders binds HTTP request headers to dest. Headers are mapped onto
+// struct fields tagged with the "header" struct tag. Header names are
+// matched case-insensitively.
+func BindHeaders(c *Ctx, dest any) error {
+	if err := bindHeaders(c, dest); err != nil {
+		return err
+	}
 	if c.engine.autoValidate && c.engine.validator != nil {
 		return c.engine.validator.Validate(dest)
 	}
 	return nil
 }
 
-// checkPointerToStruct validates dest is a pointer to a struct and returns the
-// reflected value and type.
-func checkPointerToStruct(dest any) (reflect.Value, reflect.Type, error) {
-	rv := reflect.ValueOf(dest)
-	if rv.Kind() != reflect.Pointer || rv.Elem().Kind() != reflect.Struct {
-		return reflect.Value{}, nil, ErrInvalidBindTarget
-	}
-	rv = rv.Elem()
-	return rv, rv.Type(), nil
-}
-
-// setFieldValue safely converts raw string slices into the concrete target field types.
-func setFieldValue(fv reflect.Value, kind reflect.Kind, vals []string) error {
-	val := vals[0]
-
-	switch kind {
-	case reflect.String:
-		fv.SetString(val)
-	case reflect.Slice:
-		elemKind := fv.Type().Elem().Kind()
-		switch elemKind {
-		case reflect.String:
-			fv.Set(reflect.ValueOf(vals))
-		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-			slice := reflect.MakeSlice(fv.Type(), len(vals), len(vals))
-			for i, v := range vals {
-				n, err := strconv.ParseInt(v, 10, 64)
-				if err != nil {
-					return err
-				}
-				slice.Index(i).SetInt(n)
-			}
-			fv.Set(slice)
-		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-			slice := reflect.MakeSlice(fv.Type(), len(vals), len(vals))
-			for i, v := range vals {
-				n, err := strconv.ParseUint(v, 10, 64)
-				if err != nil {
-					return err
-				}
-				slice.Index(i).SetUint(n)
-			}
-			fv.Set(slice)
-		case reflect.Float32, reflect.Float64:
-			slice := reflect.MakeSlice(fv.Type(), len(vals), len(vals))
-			for i, v := range vals {
-				n, err := strconv.ParseFloat(v, 64)
-				if err != nil {
-					return err
-				}
-				slice.Index(i).SetFloat(n)
-			}
-			fv.Set(slice)
-		case reflect.Bool:
-			slice := reflect.MakeSlice(fv.Type(), len(vals), len(vals))
-			for i, v := range vals {
-				b, err := strconv.ParseBool(v)
-				if err != nil {
-					return err
-				}
-				slice.Index(i).SetBool(b)
-			}
-			fv.Set(slice)
-		default:
-			return fmt.Errorf("unsupported slice element type %v", elemKind)
-		}
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		n, err := strconv.ParseInt(val, 10, 64)
-		if err != nil {
-			return err
-		}
-		fv.SetInt(n)
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		n, err := strconv.ParseUint(val, 10, 64)
-		if err != nil {
-			return err
-		}
-		fv.SetUint(n)
-	case reflect.Float32, reflect.Float64:
-		n, err := strconv.ParseFloat(val, 64)
-		if err != nil {
-			return err
-		}
-		fv.SetFloat(n)
-	case reflect.Bool:
-		b, err := strconv.ParseBool(val)
-		if err != nil {
-			return err
-		}
-		fv.SetBool(b)
-	default:
-		return fmt.Errorf("unsupported bind type %v for field", kind)
-	}
-	return nil
+func bindHeaders(c *Ctx, dest any) error {
+	return bindData(dest, c.Request.Header, "header", nil)
 }

@@ -2,50 +2,59 @@ package zen
 
 import (
 	"encoding/json"
-	"fmt"
 
 	"github.com/Pavan-Silva/go-zen/internal/log"
 )
 
-// BindJSON parses the request body as JSON and decodes it into dest.
-// Uses json.NewDecoder which streams directly from the request body, avoiding
-// intermediate byte slice allocations.
-//
-// Automatically runs struct validation after decode if a Validator is configured.
-func (c *Ctx) BindJSON(dest any) error {
-	dec := json.NewDecoder(c.Request.Body)
-	if err := dec.Decode(dest); err != nil {
-		return fmt.Errorf("JSON decode: %w", err)
-	}
+// JSONSerializer is the interface for JSON encoding and decoding.
+// Implementations handle serializing Go values to JSON for responses
+// and deserializing JSON request bodies into Go values.
+type JSONSerializer interface {
+	Serialize(c *Ctx, v any, indent string) error
+	Deserialize(c *Ctx, v any) error
+}
 
-	if c.engine.autoValidate && c.engine.validator != nil {
-		return c.engine.validator.Validate(dest)
+type jsonSerializer struct{}
+
+func (jsonSerializer) Serialize(c *Ctx, v any, indent string) error {
+	enc := json.NewEncoder(c.Response)
+	if indent != "" {
+		enc.SetIndent("", indent)
 	}
-	return nil
+	return enc.Encode(v)
+}
+
+func (jsonSerializer) Deserialize(c *Ctx, v any) error {
+	return json.NewDecoder(c.Request.Body).Decode(v)
 }
 
 // JSON encodes data as JSON and streams it straight to the response writer.
-//
-// Sets the "Content-Type" header to "application/json" automatically.
-// Write errors are handled and logged safely via internal system loggers.
 func (c *Ctx) JSON(status int, data any) {
 	c.setContentType("application/json")
 	c.Response.WriteHeader(status)
 
-	if err := json.NewEncoder(c.Response).Encode(data); err != nil {
+	if err := c.engine.JSONSerializer.Serialize(c, data, ""); err != nil {
 		log.Error("HTTP: JSON encode error: %v", err)
 	}
 }
 
 // JSONPretty encodes data as indented JSON for human-readable responses.
-// Uses two-space indentation. For compact JSON, use JSON() instead.
 func (c *Ctx) JSONPretty(status int, data any) {
 	c.setContentType("application/json")
 	c.Response.WriteHeader(status)
 
-	enc := json.NewEncoder(c.Response)
-	enc.SetIndent("", "  ")
-	if err := enc.Encode(data); err != nil {
+	if err := c.engine.JSONSerializer.Serialize(c, data, "  "); err != nil {
 		log.Error("HTTP: JSON encode error: %v", err)
 	}
+}
+
+// BindJSON decodes the request body as JSON into dest.
+func (c *Ctx) BindJSON(dest any) error {
+	if err := c.engine.JSONSerializer.Deserialize(c, dest); err != nil {
+		return err
+	}
+	if c.engine.autoValidate && c.engine.validator != nil {
+		return c.engine.validator.Validate(dest)
+	}
+	return nil
 }
