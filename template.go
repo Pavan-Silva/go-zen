@@ -6,7 +6,7 @@ import (
 	"io/fs"
 	"path/filepath"
 
-	"github.com/Pavan-Silva/go-zen/logger"
+	"github.com/Pavan-Silva/go-zen/internal/log"
 )
 
 // Templates holds parsed HTML templates for rendering.
@@ -45,7 +45,7 @@ func (c *Ctx) Render(status int, tmpl *Templates, name string, data any) {
 	c.Response.WriteHeader(status)
 
 	if err := tmpl.tmpl.ExecuteTemplate(c.Response, filepath.Base(name), data); err != nil {
-		logger.Error("HTTP: template render error: %v", err)
+		log.Error("HTTP: template render error: %v", err)
 	}
 }
 

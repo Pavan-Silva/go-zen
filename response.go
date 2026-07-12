@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"path/filepath"
 
-	"github.com/Pavan-Silva/go-zen/logger"
+	"github.com/Pavan-Silva/go-zen/internal/log"
 )
 
 // setContentType sets the Content-Type header using direct map access,
@@ -22,8 +22,6 @@ func (c *Ctx) setContentType(ct string) {
 // HTML writes an HTML string directly to the response with the given HTTP status.
 // The response Content-Type header is automatically set to "text/html; charset=utf-8".
 //
-// Write errors are logged but not returned (they indicate connection issues).
-//
 // Example:
 //
 //	c.HTML(http.StatusOK, "<h1>Hello World</h1>")
@@ -31,13 +29,11 @@ func (c *Ctx) HTML(status int, html string) {
 	c.setContentType("text/html; charset=utf-8")
 	c.Response.WriteHeader(status)
 	if _, err := io.WriteString(c.Response, html); err != nil {
-		logger.Error("HTTP: HTML response write error: %v", err)
+		log.Error("HTTP: HTML response write error: %v", err)
 	}
 }
 
 // String writes a plain text string directly to the response with the given HTTP status.
-//
-// Write errors are logged but not returned (they indicate connection issues).
 //
 // Example:
 //
@@ -46,7 +42,7 @@ func (c *Ctx) String(status int, text string) {
 	c.setContentType("text/plain; charset=utf-8")
 	c.Response.WriteHeader(status)
 	if _, err := io.WriteString(c.Response, text); err != nil {
-		logger.Error("HTTP: string response write error: %v", err)
+		log.Error("HTTP: string response write error: %v", err)
 	}
 }
 
@@ -108,7 +104,6 @@ func (c *Ctx) Inline(filePath string) {
 
 // Blob writes a byte slice as the response body with the given content type.
 // The response Content-Type is set to the provided MIME type.
-// Write errors are logged but not returned (they indicate connection issues).
 //
 // Example:
 //
@@ -118,7 +113,7 @@ func (c *Ctx) Blob(status int, contentType string, data []byte) {
 	c.setContentType(contentType)
 	c.Response.WriteHeader(status)
 	if _, err := c.Response.Write(data); err != nil {
-		logger.Error("HTTP: blob response write error: %v", err)
+		log.Error("HTTP: blob response write error: %v", err)
 	}
 }
 
@@ -137,7 +132,7 @@ func (c *Ctx) Stream(status int, contentType string, body io.Reader) error {
 	c.setContentType(contentType)
 	c.Response.WriteHeader(status)
 	if _, err := io.Copy(c.Response, body); err != nil {
-		logger.Error("HTTP: response stream error: %v", err)
+		log.Error("HTTP: response stream error: %v", err)
 		return err
 	}
 	return nil

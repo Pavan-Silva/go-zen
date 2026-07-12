@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/Pavan-Silva/go-zen/logger"
+	"github.com/Pavan-Silva/go-zen/internal/log"
 )
 
 // BindJSON parses the request body as JSON and decodes it into dest.
@@ -33,7 +33,7 @@ func (c *Ctx) JSON(status int, data any) {
 	c.Response.WriteHeader(status)
 
 	if err := json.NewEncoder(c.Response).Encode(data); err != nil {
-		logger.Error("HTTP: JSON encode error: %v", err)
+		log.Error("HTTP: JSON encode error: %v", err)
 	}
 }
 
@@ -46,6 +46,6 @@ func (c *Ctx) JSONPretty(status int, data any) {
 	enc := json.NewEncoder(c.Response)
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(data); err != nil {
-		logger.Error("HTTP: JSON encode error: %v", err)
+		log.Error("HTTP: JSON encode error: %v", err)
 	}
 }

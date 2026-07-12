@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/Pavan-Silva/go-zen"
-	"github.com/Pavan-Silva/go-zen/logger"
+	"github.com/Pavan-Silva/go-zen/internal/log"
 )
 
 // TimeoutConfig holds configuration for the request timeout middleware.
@@ -51,11 +51,8 @@ func TimeoutWithConfig(config TimeoutConfig) zen.HandlerFunc {
 
 		c.Request = c.Request.WithContext(ctx)
 
-		logger.Debug("request timeout set",
-			"method", c.Request.Method,
-			"path", c.Request.URL.Path,
-			"duration", config.Duration,
-		)
+		log.Debug("request timeout set, method=%s path=%s duration=%s",
+			c.Request.Method, c.Request.URL.Path, config.Duration)
 
 		c.Next()
 	}

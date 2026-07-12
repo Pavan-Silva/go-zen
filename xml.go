@@ -4,7 +4,7 @@ import (
 	"encoding/xml"
 	"fmt"
 
-	"github.com/Pavan-Silva/go-zen/logger"
+	"github.com/Pavan-Silva/go-zen/internal/log"
 )
 
 // BindXML parses the request body as XML and decodes it into dest.
@@ -52,6 +52,6 @@ func (c *Ctx) XML(status int, data any) {
 	c.Response.WriteHeader(status)
 
 	if err := xml.NewEncoder(c.Response).Encode(data); err != nil {
-		logger.Error("HTTP: XML encode error: %v", err)
+		log.Error("HTTP: XML encode error: %v", err)
 	}
 }

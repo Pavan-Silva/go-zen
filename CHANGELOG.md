@@ -4,6 +4,9 @@
 
 ### Features
 
+- `BindPathParams`, `BindQueryParams`, `BindHeader` auto-validation — all 8 bind methods now validate when auto-validation is enabled
+- `c.Validate()` on `*Ctx` — explicit per-request validation, nil-safe when no validator is set
+- `e.Validate()` on `*Engine` — standalone validation for use outside request handlers
 - `ClientIP()` on `*Ctx` — checks `X-Forwarded-For` → `X-Real-IP` → `RemoteAddr`
 - `Params()` on `*Ctx` — returns all matched path params as `map[string]string`
 - `QueryParams()` on `*Ctx` — returns all query params as `map[string][]string`
@@ -17,6 +20,12 @@
 - `IsAjax()` on `*Ctx` — checks `X-Requested-With: XMLHttpRequest` header
 - `ContentType()` on `*Ctx` — returns parsed MIME content type without parameters
 - Testing utilities — `NewTestRequest()` and `NewTestRequestWithBody()`
+
+### Breaking
+
+- Removed package-level `zen.Validate()`, `zen.SetValidator()`, `zen.EnableAutoValidation()`, `zen.DefaultValidator()` — use per-instance equivalents on `*Engine` instead
+- Validator moved from `global/atomic.Pointer` to plain `Validator` field on `Engine` — match Echo's pattern, do not mutate after server start
+- All validation types and methods consolidated into `validate.go`
 
 ### Fixes
 

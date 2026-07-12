@@ -6,7 +6,7 @@ import (
 	"runtime/debug"
 
 	"github.com/Pavan-Silva/go-zen"
-	"github.com/Pavan-Silva/go-zen/logger"
+	"github.com/Pavan-Silva/go-zen/internal/log"
 )
 
 // Recover catches panics, logs the stack trace, and sends a 500 response.
@@ -20,16 +20,9 @@ import (
 func Recover(c *zen.Ctx) {
 	defer func() {
 		if err := recover(); err != nil {
-			stackBytes := debug.Stack()
-			stackTraceStr := zen.BytesToString(stackBytes)
-
-			logger.Error("HTTP panic recovered",
-				"error", err,
-				"method", c.Request.Method,
-				"path", c.Request.URL.Path,
-				"remote_ip", c.Request.RemoteAddr,
-				"stack", stackTraceStr,
-			)
+			stack := debug.Stack()
+			log.Error("HTTP panic recovered, error=%v method=%s path=%s remote_ip=%s\n%s",
+				err, c.Request.Method, c.Request.URL.Path, c.Request.RemoteAddr, stack)
 
 			c.Response.WriteHeader(http.StatusInternalServerError)
 

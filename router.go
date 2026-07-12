@@ -13,7 +13,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Pavan-Silva/go-zen/logger"
+	"github.com/Pavan-Silva/go-zen/internal/log"
 	"github.com/Pavan-Silva/go-zen/system"
 )
 
@@ -189,7 +189,7 @@ func (e *Engine) runServer(listen func() error) {
 	select {
 	case err := <-errCh:
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
-			logger.Error("Server error: %v", err)
+			log.Error("Server error: %v", err)
 		}
 		return
 	case <-quit:
@@ -205,6 +205,6 @@ func (e *Engine) gracefulShutdown() {
 	defer cancel()
 
 	if err := e.server.Shutdown(ctx); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		logger.Error("Server shutdown error: %v", err)
+		log.Error("Server shutdown error: %v", err)
 	}
 }
