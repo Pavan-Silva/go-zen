@@ -6,31 +6,33 @@ import (
 	"testing"
 )
 
-func TestDefaultValidator(t *testing.T) {
-	if getValidator() == nil {
-		t.Fatal("defaultValidator should not be nil")
-	}
+func newTestEngine() *Engine {
+	return New(":0")
 }
 
 func TestValidation_Required(t *testing.T) {
+	e := newTestEngine()
+
 	type S struct {
 		Name string `validate:"required"`
 	}
 
 	s := S{Name: ""}
-	err := Validate(&s)
+	err := e.Validate(&s)
 	if err == nil {
 		t.Fatal("expected validation error for empty required field")
 	}
 
 	s.Name = "John"
-	err = Validate(&s)
+	err = e.Validate(&s)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
 func TestValidation_Email(t *testing.T) {
+	e := newTestEngine()
+
 	type S struct {
 		Email string `validate:"email"`
 	}
@@ -48,7 +50,7 @@ func TestValidation_Email(t *testing.T) {
 
 	for _, tt := range tests {
 		s := S{Email: tt.email}
-		err := Validate(&s)
+		err := e.Validate(&s)
 		if tt.valid && err != nil {
 			t.Errorf("email %q should be valid, got error: %v", tt.email, err)
 		}
@@ -59,6 +61,8 @@ func TestValidation_Email(t *testing.T) {
 }
 
 func TestValidation_GTE(t *testing.T) {
+	e := newTestEngine()
+
 	type S struct {
 		Age int `validate:"gte=18"`
 	}
@@ -74,7 +78,7 @@ func TestValidation_GTE(t *testing.T) {
 
 	for _, tt := range tests {
 		s := S{Age: tt.age}
-		err := Validate(&s)
+		err := e.Validate(&s)
 		if tt.valid && err != nil {
 			t.Errorf("age %d should be valid, got error: %v", tt.age, err)
 		}
@@ -85,54 +89,60 @@ func TestValidation_GTE(t *testing.T) {
 }
 
 func TestValidate_NonStruct(t *testing.T) {
+	e := newTestEngine()
+
 	m := map[string]any{"key": "value"}
-	err := Validate(&m)
+	err := e.Validate(&m)
 	if err != nil {
 		t.Fatalf("non-struct should not error: %v", err)
 	}
 }
 
 func TestValidate_PointerToStruct(t *testing.T) {
+	e := newTestEngine()
+
 	type S struct {
 		Name string `validate:"required"`
 	}
 
-	err := Validate(&S{Name: "test"})
+	err := e.Validate(&S{Name: "test"})
 	if err != nil {
 		t.Fatalf("valid struct should pass: %v", err)
 	}
 
-	err = Validate(&S{Name: ""})
+	err = e.Validate(&S{Name: ""})
 	if err == nil {
 		t.Fatal("empty required field should fail")
 	}
 }
 
 func TestValidate_DirectStruct(t *testing.T) {
+	e := newTestEngine()
+
 	type S struct {
 		Name string `validate:"required"`
 	}
 
-	err := Validate(S{Name: "test"})
+	err := e.Validate(S{Name: "test"})
 	if err != nil {
 		t.Fatalf("valid struct should pass: %v", err)
 	}
 }
 
 func TestSetValidator_Custom(t *testing.T) {
-	original := getValidator()
-	t.Cleanup(func() { SetValidator(original) })
+	e := newTestEngine()
 
 	called := false
-	SetValidator(ValidatorFunc(func(i any) error {
+	v := Validator(ValidatorFunc(func(i any) error {
 		called = true
 		return nil
 	}))
+	e.SetValidator(v)
 
 	type S struct {
 		Name string
 	}
-	err := Validate(&S{})
+	err := e.Validate(&S{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -142,26 +152,23 @@ func TestSetValidator_Custom(t *testing.T) {
 }
 
 func TestSetValidator_Nil(t *testing.T) {
-	original := getValidator()
-	t.Cleanup(func() { SetValidator(original) })
-
-	SetValidator(nil)
+	e := newTestEngine()
+	e.SetValidator(nil)
 
 	type S struct {
 		Name string `validate:"required"`
 	}
-	err := Validate(&S{Name: ""})
+	err := e.Validate(&S{Name: ""})
 	if err != nil {
 		t.Fatal("nil validator should not validate")
 	}
 }
 
 func TestEnableAutoValidation(t *testing.T) {
-	EnableAutoValidation()
-	defer autoValidateEnabled.Store(false)
+	e := New(":0")
+	e.EnableAutoValidation()
 
-	r := New(":0")
-	r.POST("/test", func(c *Ctx) {
+	e.POST("/test", func(c *Ctx) {
 		var v struct {
 			Name string `validate:"required"`
 		}
@@ -175,20 +182,16 @@ func TestEnableAutoValidation(t *testing.T) {
 	body := strings.NewReader(`{"name":""}`)
 	req := httptest.NewRequest("POST", "/test", body)
 	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
+	e.ServeHTTP(w, req)
 
 	if w.Code != 400 {
 		t.Fatalf("auto-validation enabled: expected 400, got %d: %s", w.Code, w.Body.String())
 	}
 }
 
-type ValidatorFunc func(i any) error
-
-func (f ValidatorFunc) Validate(i any) error {
-	return f(i)
-}
-
 func BenchmarkValidation(b *testing.B) {
+	e := newTestEngine()
+
 	type S struct {
 		Name  string `validate:"required"`
 		Email string `validate:"email"`
@@ -198,9 +201,7 @@ func BenchmarkValidation(b *testing.B) {
 	s := S{Name: "John", Email: "john@example.com", Age: 30}
 
 	b.ReportAllocs()
-	
-	_ = getValidator()
 	for b.Loop() {
-		_ = Validate(&s)
+		_ = e.Validate(&s)
 	}
 }

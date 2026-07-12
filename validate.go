@@ -3,7 +3,6 @@ package zen
 import (
 	"reflect"
 	"strings"
-	"sync/atomic"
 
 	"github.com/go-playground/validator/v10"
 )
@@ -24,67 +23,17 @@ type Validator interface {
 	Validate(i any) error
 }
 
-// defaultValidator is the global validator instance.
-// Set a custom validator via SetValidator() at startup.
-var defaultValidator atomic.Pointer[Validator]
-
-func init() {
-	v := Validator(&defaultValidate{inst: newValidator()})
-	defaultValidator.Store(&v)
-}
-
-// autoValidate controls whether BindJSON/BindXML/BindForm automatically
-// call Validate after decoding. Disabled by default.
-var autoValidateEnabled atomic.Bool
-
 // defaultValidate is the built-in validator using go-playground/validator/v10.
 type defaultValidate struct {
 	inst *validator.Validate
 }
 
-// getValidator returns the current global validator.
-func getValidator() Validator {
-	p := defaultValidator.Load()
-	if p == nil {
-		return nil
-	}
-	return *p
-}
+// ValidatorFunc is a helper type to turn a plain function into a Validator.
+type ValidatorFunc func(i any) error
 
-// SetValidator sets a global validator for request validation.
-// Must be called at startup, before handling any requests.
-// Pass nil to disable validation entirely.
-func SetValidator(v Validator) {
-	if v == nil {
-		defaultValidator.Store(nil)
-		return
-	}
-	defaultValidator.Store(&v)
-}
-
-// EnableAutoValidation enables automatic Validate() calls after
-// BindJSON, BindXML, and BindForm. Must be called at startup.
-func EnableAutoValidation() {
-	autoValidateEnabled.Store(true)
-}
-
-// autoValidateOn returns whether auto-validation is enabled.
-func autoValidateOn() bool {
-	return autoValidateEnabled.Load()
-}
-
-// DefaultValidator returns the underlying go-playground/validator/v10 instance
-// when using the default built-in validator, or nil if a custom validator is set.
-// Use this to register custom validation tags:
-//
-//	zen.DefaultValidator().RegisterValidation("is-even", func(fl validator.FieldLevel) bool {
-//	    return fl.Field().Int()%2 == 0
-//	})
-func DefaultValidator() *validator.Validate {
-	if dv, ok := getValidator().(*defaultValidate); ok {
-		return dv.inst
-	}
-	return nil
+// Validate implements the Validator interface for ValidatorFunc.
+func (f ValidatorFunc) Validate(i any) error {
+	return f(i)
 }
 
 // Validate implements the Validator interface for defaultValidate.
@@ -118,12 +67,50 @@ func newValidator() *validator.Validate {
 	return inst
 }
 
-// Validate runs struct validation on dest using the configured Validator.
-// Call this explicitly after BindJSON, BindXML, or BindForm.
-func Validate(dest any) error {
-	v := getValidator()
-	if v == nil {
+// --- Engine validation methods ---
+
+// SetValidator sets a custom validator for request validation on this engine.
+// Pass nil to disable validation entirely.
+func (e *Engine) SetValidator(v Validator) {
+	e.validator = v
+}
+
+// EnableAutoValidation enables automatic Validate() calls after
+// BindJSON, BindXML, and BindForm for this engine.
+func (e *Engine) EnableAutoValidation() {
+	e.autoValidate = true
+}
+
+// Validate runs struct validation on dest using the engine's configured validator.
+// Returns nil if no validator is set (validation is opt-in).
+func (e *Engine) Validate(dest any) error {
+	if e.validator == nil {
 		return nil
 	}
-	return v.Validate(dest)
+	return e.validator.Validate(dest)
+}
+
+// DefaultValidator returns the underlying go-playground/validator/v10 instance
+// when using the default built-in validator, or nil if a custom validator is set.
+// Use this to register custom validation tags:
+//
+//	e.DefaultValidator().RegisterValidation("is-even", func(fl validator.FieldLevel) bool {
+//	    return fl.Field().Int()%2 == 0
+//	})
+func (e *Engine) DefaultValidator() *validator.Validate {
+	if dv, ok := e.validator.(*defaultValidate); ok {
+		return dv.inst
+	}
+	return nil
+}
+
+// --- Ctx validation ---
+
+// Validate runs struct validation on dest using the engine's configured validator.
+// Returns nil if no validator is set (validation is opt-in).
+func (c *Ctx) Validate(dest any) error {
+	if c.engine.validator == nil {
+		return nil
+	}
+	return c.engine.validator.Validate(dest)
 }

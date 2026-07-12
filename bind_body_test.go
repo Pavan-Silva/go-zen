@@ -3,6 +3,7 @@ package zen
 import (
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 )
@@ -436,5 +437,78 @@ func TestBind_WithPathAndQuery(t *testing.T) {
 	}
 	if !strings.Contains(w.Body.String(), "42") || !strings.Contains(w.Body.String(), "test") {
 		t.Fatalf("body should contain id and name: %s", w.Body.String())
+	}
+}
+
+type baseParams struct {
+	ID string `param:"id"`
+}
+
+type extendedParams struct {
+	baseParams
+	Name string `query:"name"`
+}
+
+func TestBind_EmbeddedStructParams(t *testing.T) {
+	r := New(":0")
+	r.GET("/items/{id}", func(c *Ctx) {
+		var p extendedParams
+		if err := c.BindPathParams(&p); err != nil {
+			c.Error(400, err.Error())
+			return
+		}
+		if err := c.BindQueryParams(&p); err != nil {
+			c.Error(400, err.Error())
+			return
+		}
+		c.JSON(200, p)
+	})
+
+	req := httptest.NewRequest("GET", "/items/42?name=test", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 200 {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "42") || !strings.Contains(w.Body.String(), "test") {
+		t.Fatalf("body should contain id and name: %s", w.Body.String())
+	}
+}
+
+type baseForm struct {
+	Email string `form:"email"`
+}
+
+type extendedForm struct {
+	baseForm
+	Name string `form:"name"`
+}
+
+func TestBindForm_EmbeddedStruct(t *testing.T) {
+	r := New(":0")
+	var captured extendedForm
+	r.POST("/form", func(c *Ctx) {
+		if err := c.BindForm(&captured); err != nil {
+			c.Error(400, err.Error())
+			return
+		}
+		c.JSON(200, captured)
+	})
+
+	data := url.Values{}
+	data.Set("email", "john@example.com")
+	data.Set("name", "John")
+
+	req := httptest.NewRequest("POST", "/form", strings.NewReader(data.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 200 {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	if captured.Email != "john@example.com" || captured.Name != "John" {
+		t.Fatalf("got %+v, want email=john@example.com name=John", captured)
 	}
 }

@@ -18,8 +18,8 @@ func (c *Ctx) BindJSON(dest any) error {
 		return fmt.Errorf("JSON decode: %w", err)
 	}
 
-	if autoValidateOn() {
-		return Validate(dest)
+	if c.engine.autoValidate && c.engine.validator != nil {
+		return c.engine.validator.Validate(dest)
 	}
 	return nil
 }

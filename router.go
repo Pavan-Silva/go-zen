@@ -45,6 +45,8 @@ type Engine struct {
 	pool            sync.Pool
 	server          *http.Server
 	shutdownTimeout time.Duration
+	validator       Validator
+	autoValidate    bool
 }
 
 // New creates an Engine with the given listen address and optional custom Config.
@@ -60,6 +62,8 @@ func New(addr string, config ...Config) *Engine {
 		router:          newRadixRouter(),
 		shutdownTimeout: cfg.ShutdownTimeout,
 	}
+
+	e.validator = Validator(&defaultValidate{inst: newValidator()})
 
 	if e.shutdownTimeout == 0 {
 		e.shutdownTimeout = 5 * time.Second
@@ -89,7 +93,7 @@ func New(addr string, config ...Config) *Engine {
 // ServeHTTP implements the http.Handler interface using the radix tree router.
 func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	c := e.pool.Get().(*Ctx)
-	c.reset(w, r)
+	c.reset(w, r, e)
 
 	path := r.URL.Path
 	if r.URL.RawPath != "" {

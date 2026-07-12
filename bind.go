@@ -122,53 +122,79 @@ func headerTag(field reflect.StructField) string {
 	return http.CanonicalHeaderKey(field.Name)
 }
 
-// bindFields iterates over exported struct fields and applies a getter using the
-// tag name from one of the given tag keys.
-func (c *Ctx) bindFields(dest any, getter func(string) string, errPrefix string, tagKeys ...string) error {
-	rv := reflect.ValueOf(dest)
-	if rv.Kind() != reflect.Pointer || rv.Elem().Kind() != reflect.Struct {
-		return ErrInvalidBindTarget
-	}
-
-	rv = rv.Elem()
-	rt := rv.Type()
-
+// walkStructFields iterates exported fields of a struct, recursing into embedded
+// structs. For each leaf field it calls fn with the field info and reflected value.
+func walkStructFields(rv reflect.Value, rt reflect.Type, fn func(reflect.StructField, reflect.Value) error) error {
 	for i := range rt.NumField() {
 		field := rt.Field(i)
+		fv := rv.Field(i)
+
+		if field.Anonymous {
+			if fv.Kind() == reflect.Struct {
+				if err := walkStructFields(fv, fv.Type(), fn); err != nil {
+					return err
+				}
+			}
+			continue
+		}
+
 		if !field.IsExported() {
 			continue
 		}
 
-		var name string
-		switch tagKeys[0] {
-		case "param":
-			name = paramTag(field)
-		case "query":
-			name = queryTag(field)
-		case "header":
-			name = headerTag(field)
-		default:
-			name = tagVal(field, tagKeys...)
-			if name == "" {
-				continue
-			}
-		}
-
-		fv := rv.Field(i)
-		val := getter(name)
-		if val == "" {
-			continue
-		}
-		if err := setFieldValue(fv, field.Type.Kind(), []string{val}); err != nil {
-			return fmt.Errorf("%s %q: %w", errPrefix, name, err)
+		if err := fn(field, fv); err != nil {
+			return err
 		}
 	}
 	return nil
 }
 
+// bindFields iterates over struct fields and applies a getter using the
+// tag name from one of the given tag keys.
+func (c *Ctx) bindFields(dest any, getter func(string) string, errPrefix string, tagKeys ...string) error {
+	rv, rt, err := checkPointerToStruct(dest)
+	if err != nil {
+		return err
+	}
+
+	return walkStructFields(rv, rt, func(field reflect.StructField, fv reflect.Value) error {
+		var name string
+		if len(tagKeys) > 0 {
+			switch tagKeys[0] {
+			case "param":
+				name = paramTag(field)
+			case "query":
+				name = queryTag(field)
+			case "header":
+				name = headerTag(field)
+			default:
+				name = tagVal(field, tagKeys[0])
+				if name == "" {
+					return nil
+				}
+			}
+		}
+
+		val := getter(name)
+		if val == "" {
+			return nil
+		}
+		if err := setFieldValue(fv, field.Type.Kind(), []string{val}); err != nil {
+			return fmt.Errorf("%s %q: %w", errPrefix, name, err)
+		}
+		return nil
+	})
+}
+
 // BindPathParams extracts route wildcards using native Go 1.22+ request context maps.
 func (c *Ctx) BindPathParams(dest any) error {
-	return c.bindFields(dest, c.Param, "path param", "param")
+	if err := c.bindFields(dest, c.Param, "path param", "param"); err != nil {
+		return err
+	}
+	if c.engine.autoValidate && c.engine.validator != nil {
+		return c.engine.validator.Validate(dest)
+	}
+	return nil
 }
 
 // BindQueryParams parses query parameters into dest struct fields.
@@ -176,7 +202,13 @@ func (c *Ctx) BindQueryParams(dest any) error {
 	if c.Request.URL.RawQuery == "" {
 		return nil
 	}
-	return c.bindFields(dest, c.QueryParam, "query param", "query")
+	if err := c.bindFields(dest, c.QueryParam, "query param", "query"); err != nil {
+		return err
+	}
+	if c.engine.autoValidate && c.engine.validator != nil {
+		return c.engine.validator.Validate(dest)
+	}
+	return nil
 }
 
 // BindHeader binds HTTP request headers to a struct using `header` or `json` tags.
@@ -189,10 +221,16 @@ func (c *Ctx) BindQueryParams(dest any) error {
 //	    Rate   int    `header:"X-Rate-Limit"`
 //	}
 func (c *Ctx) BindHeader(dest any) error {
-	return c.bindFields(dest,
+	if err := c.bindFields(dest,
 		func(name string) string { return c.Request.Header.Get(name) },
 		"header", "header",
-	)
+	); err != nil {
+		return err
+	}
+	if c.engine.autoValidate && c.engine.validator != nil {
+		return c.engine.validator.Validate(dest)
+	}
+	return nil
 }
 
 // BindForm parses URL-encoded or multipart form data into a struct.
@@ -209,8 +247,10 @@ func (c *Ctx) BindHeader(dest any) error {
 //	}
 func (c *Ctx) BindForm(dest any) error {
 	if c.Request.Form == nil {
-		if err := c.Request.ParseForm(); err != nil {
-			return fmt.Errorf("http: ParseForm error: %w", err)
+		if err := c.Request.ParseMultipartForm(32 << 20); err != nil {
+			if err := c.Request.ParseForm(); err != nil {
+				return fmt.Errorf("http: ParseForm error: %w", err)
+			}
 		}
 	}
 
@@ -219,29 +259,25 @@ func (c *Ctx) BindForm(dest any) error {
 		return err
 	}
 
-	for i := range rt.NumField() {
-		field := rt.Field(i)
-		if !field.IsExported() {
-			continue
-		}
-
+	if err := walkStructFields(rv, rt, func(field reflect.StructField, fv reflect.Value) error {
 		key := formTag(field)
 		if key == "" {
-			continue
+			return nil
 		}
 		vals, ok := c.Request.Form[key]
 		if !ok || len(vals) == 0 {
-			continue
+			return nil
 		}
-
-		fv := rv.Field(i)
 		if err := setFieldValue(fv, field.Type.Kind(), vals); err != nil {
 			return &FormError{Field: key, Err: err}
 		}
+		return nil
+	}); err != nil {
+		return err
 	}
 
-	if autoValidateOn() {
-		return Validate(dest)
+	if c.engine.autoValidate && c.engine.validator != nil {
+		return c.engine.validator.Validate(dest)
 	}
 	return nil
 }

@@ -45,7 +45,7 @@ func TestContext_Reset(t *testing.T) {
 	c.Set("a", 1)
 	c.Set("b", 2)
 
-	c.reset(nil, nil)
+	c.reset(nil, nil, nil)
 
 	if _, ok := c.Get("a"); ok {
 		t.Fatal("a should not exist after reset")
@@ -132,17 +132,17 @@ func TestContextPool_Reuse(t *testing.T) {
 	r := httptest.NewRequest("GET", "/", nil)
 
 	c1 := e.pool.Get().(*Ctx)
-	c1.reset(w, r)
+	c1.reset(w, r, e)
 	c1.Set("temp", "value")
-	c1.reset(nil, nil)
+	c1.reset(nil, nil, e)
 	e.pool.Put(c1)
 
 	c2 := e.pool.Get().(*Ctx)
-	c2.reset(w, r)
+	c2.reset(w, r, e)
 	if _, ok := c2.Get("temp"); ok {
 		t.Fatal("pooled ctx should not leak data from previous request")
 	}
-	c2.reset(nil, nil)
+	c2.reset(nil, nil, e)
 	e.pool.Put(c2)
 }
 

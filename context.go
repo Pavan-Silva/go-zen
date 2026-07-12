@@ -31,12 +31,14 @@ type Ctx struct {
 	next         HandlerFunc
 	ps           params
 	skippedNodes []skippedNode
+	engine       *Engine
 }
 
 // reset reinitializes Ctx for the given request and response.
-func (c *Ctx) reset(w http.ResponseWriter, r *http.Request) {
+func (c *Ctx) reset(w http.ResponseWriter, r *http.Request, e *Engine) {
 	c.Response = w
 	c.Request = r
+	c.engine = e
 	c.next = nil
 	c.ps = c.ps[:0]
 	c.skippedNodes = c.skippedNodes[:0]

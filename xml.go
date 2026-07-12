@@ -28,8 +28,8 @@ func (c *Ctx) BindXML(dest any) error {
 		return fmt.Errorf("XML decode: %w", err)
 	}
 
-	if autoValidateOn() {
-		return Validate(dest)
+	if c.engine.autoValidate && c.engine.validator != nil {
+		return c.engine.validator.Validate(dest)
 	}
 	return nil
 }

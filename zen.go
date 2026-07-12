@@ -37,7 +37,7 @@
 //	    c.Error(400, "invalid request")
 //	    return
 //	}
-//	if err := zen.Validate(&req); err != nil {
+//	if err := c.Validate(&req); err != nil {
 //	    c.Error(400, err.Error())
 //	    return
 //	}
