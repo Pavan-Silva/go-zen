@@ -52,10 +52,19 @@ type InMemorySessionStore struct {
 
 // NewInMemorySessionStore creates a new in-memory session store.
 func NewInMemorySessionStore(ttl time.Duration) *InMemorySessionStore {
-	return &InMemorySessionStore{
+	store := &InMemorySessionStore{
 		sessions: make(map[string]sessionEntry),
 		ttl:      ttl,
 	}
+	if ttl > 0 {
+		go func() {
+			ticker := time.NewTicker(time.Minute)
+			for range ticker.C {
+				store.CleanupExpired()
+			}
+		}()
+	}
+	return store
 }
 
 // Get retrieves a session by ID.

@@ -131,8 +131,8 @@ func bindQueryParams(c *Ctx, dest any) error {
 //   - application/x-www-form-urlencoded
 //   - multipart/form-data
 //   - any type ending with +json or /json
-func BindBody(c *Ctx, dest any) (err error) {
-	if err = bindBody(c, dest); err != nil {
+func BindBody(c *Ctx, dest any) error {
+	if err := bindBody(c, dest); err != nil {
 		return err
 	}
 	if c.engine.autoValidate && c.engine.validator != nil {
@@ -141,14 +141,15 @@ func BindBody(c *Ctx, dest any) (err error) {
 	return nil
 }
 
-func bindBody(c *Ctx, dest any) (err error) {
+func bindBody(c *Ctx, dest any) error {
+	var err error
 	req := c.Request
-	if req.ContentLength == 0 {
-		return nil
-	}
 
 	base, _, _ := strings.Cut(req.Header.Get("Content-Type"), ";")
 	mediatype := strings.TrimSpace(base)
+	if mediatype == "" {
+		return nil
+	}
 
 	switch mediatype {
 	case "application/json":

@@ -28,6 +28,13 @@ var rwPool = sync.Pool{
 	New: func() any { return &responseWriter{} },
 }
 
+var logBufPool = sync.Pool{
+	New: func() any {
+		b := make([]byte, 0, 256)
+		return &b
+	},
+}
+
 // Logger logs HTTP requests with method, path, status code, and response time.
 func Logger(c *zen.Ctx) {
 	start := time.Now()
@@ -45,7 +52,8 @@ func Logger(c *zen.Ctx) {
 	method := c.Request.Method
 	path := c.Request.URL.Path
 
-	buf := make([]byte, 0, 200)
+	bufPtr := logBufPool.Get().(*[]byte)
+	buf := (*bufPtr)[:0]
 
 	buf = append(buf, "[ZEN] "...)
 	buf = start.AppendFormat(buf, "2006/01/02 - 15:04:05")
@@ -73,6 +81,9 @@ func Logger(c *zen.Ctx) {
 	buf = append(buf, '\n')
 
 	_, _ = os.Stdout.Write(buf)
+
+	*bufPtr = buf
+	logBufPool.Put(bufPtr)
 
 	rw.ResponseWriter = nil
 	rwPool.Put(rw)

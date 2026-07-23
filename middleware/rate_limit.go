@@ -2,12 +2,15 @@ package middleware
 
 import (
 	"math"
+	"net"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/Pavan-Silva/go-zen"
+	"github.com/Pavan-Silva/go-zen/internal/bytesconv"
 	"golang.org/x/time/rate"
 )
 
@@ -54,14 +57,20 @@ func RateLimiterWithConfig(config RateLimiterConfig) zen.HandlerFunc {
 	}
 	if config.KeyFunc == nil {
 		config.KeyFunc = func(r *http.Request) string {
-			// Extract client IP efficiently
-			if ip := r.Header["X-Forwarded-For"]; len(ip) > 0 {
-				return ip[0]
+			if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
+				if before, _, ok := strings.Cut(fwd, ","); ok {
+					return strings.TrimSpace(before)
+				}
+				return strings.TrimSpace(fwd)
 			}
-			if ip := r.Header["X-Real-Ip"]; len(ip) > 0 {
-				return ip[0]
+			if realIP := r.Header.Get("X-Real-IP"); realIP != "" {
+				return strings.TrimSpace(realIP)
 			}
-			return r.RemoteAddr
+			host, _, err := net.SplitHostPort(r.RemoteAddr)
+			if err != nil {
+				return r.RemoteAddr
+			}
+			return host
 		}
 	}
 
@@ -140,7 +149,7 @@ func RateLimiterWithConfig(config RateLimiterConfig) zen.HandlerFunc {
 
 		if !pkl.limiter.Allow() {
 			c.Response.WriteHeader(http.StatusTooManyRequests)
-			_, _ = c.Response.Write(zen.StringToBytes("Rate limit exceeded"))
+			_, _ = c.Response.Write(bytesconv.StringToBytes("Rate limit exceeded"))
 			return
 		}
 

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/Pavan-Silva/go-zen"
+	"reflect"
 )
 
 type User struct {
@@ -443,5 +444,39 @@ func TestContextPoolIntegration(t *testing.T) {
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", w.Code)
+	}
+}
+
+type Grandparent struct {
+	Grandpa string `json:"grandpa"`
+}
+
+type Parent struct {
+	Grandparent
+	Dad string `json:"dad"`
+}
+
+type Child struct {
+	Parent
+	Kid string `json:"kid"`
+}
+
+func TestMergeInlineFieldsRecursive(t *testing.T) {
+	sb := newSchemaBuilder()
+	schema := sb.inlineStruct(reflect.TypeOf(Child{}))
+
+	props, ok := schema["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected properties to be map[string]any")
+	}
+
+	if _, ok := props["kid"]; !ok {
+		t.Errorf("missing kid property")
+	}
+	if _, ok := props["dad"]; !ok {
+		t.Errorf("missing dad property")
+	}
+	if _, ok := props["grandpa"]; !ok {
+		t.Errorf("missing grandpa property, nested embedded structs are not merged correctly")
 	}
 }

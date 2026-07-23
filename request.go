@@ -4,8 +4,18 @@ import (
 	"io"
 	"mime"
 	"net"
+	"net/url"
 	"strings"
 )
+
+// queryParams returns the cached parsed query parameters from the request URL,
+// initializing the cache on first access.
+func (c *Ctx) queryParams() url.Values {
+	if c.queryCache == nil {
+		c.queryCache = c.Request.URL.Query()
+	}
+	return c.queryCache
+}
 
 // QueryParam returns the first value of a query parameter from the request URL.
 // Returns an empty string if the parameter is not present.
@@ -15,7 +25,7 @@ import (
 //	page := c.QueryParam("page")      // GET /posts?page=2 -> "2"
 //	search := c.QueryParam("q")       // GET /posts?q=golang-> "golang"
 func (c *Ctx) QueryParam(key string) string {
-	return c.Request.URL.Query().Get(key)
+	return c.queryParams().Get(key)
 }
 
 // Param returns the URL path parameter for the given key.
@@ -32,7 +42,7 @@ func (c *Ctx) Param(key string) string {
 // QueryParams returns all query parameters from the request URL as a map.
 // Each key maps to a slice of values (e.g. ?a=1&a=2 -> {"a": ["1", "2"]}).
 func (c *Ctx) QueryParams() map[string][]string {
-	return c.Request.URL.Query()
+	return c.queryParams()
 }
 
 // DefaultQuery returns the query parameter value for the given key, falling
@@ -77,14 +87,14 @@ func (c *Ctx) Params() map[string]string {
 // ClientIP returns the client's IP address by checking X-Forwarded-For and
 // X-Real-IP headers before falling back to the remote address.
 func (c *Ctx) ClientIP() string {
-	if fwd := c.Request.Header["X-Forwarded-For"]; len(fwd) > 0 {
-		if before, _, ok := strings.Cut(fwd[0], ","); ok {
+	if fwd := c.Header("X-Forwarded-For"); fwd != "" {
+		if before, _, ok := strings.Cut(fwd, ","); ok {
 			return strings.TrimSpace(before)
 		}
-		return strings.TrimSpace(fwd[0])
+		return strings.TrimSpace(fwd)
 	}
-	if realIP := c.Request.Header["X-Real-Ip"]; len(realIP) > 0 {
-		return strings.TrimSpace(realIP[0])
+	if realIP := c.Header("X-Real-IP"); realIP != "" {
+		return strings.TrimSpace(realIP)
 	}
 	host, _, err := net.SplitHostPort(c.Request.RemoteAddr)
 	if err != nil {

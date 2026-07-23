@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/Pavan-Silva/go-zen"
+	"github.com/Pavan-Silva/go-zen/internal/bytesconv"
 )
 
 // CORSConfig holds CORS middleware configuration.
@@ -73,7 +74,7 @@ func CORS(config CORSConfig) zen.HandlerFunc {
 			if _, allowed := allowedOriginsMap[origin]; !allowed {
 				// Abort with forbidden status.
 				c.Response.WriteHeader(http.StatusForbidden)
-				_, _ = c.Response.Write(zen.StringToBytes("CORS: Origin Disallowed"))
+				_, _ = c.Response.Write(bytesconv.StringToBytes("CORS: Origin Disallowed"))
 				return
 			}
 		}

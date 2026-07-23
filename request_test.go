@@ -175,3 +175,45 @@ func TestHeaderXRequestID(t *testing.T) {
 		t.Fatalf("HeaderXRequestID = %q, want %q", HeaderXRequestID, "X-Request-ID")
 	}
 }
+
+func TestQueryParam_Caching(t *testing.T) {
+	r := httptest.NewRequest("GET", "/test?a=1&b=2", nil)
+	c := &Ctx{Request: r}
+
+	if c.queryCache != nil {
+		t.Fatal("queryCache should initially be nil")
+	}
+
+	a1 := c.QueryParam("a")
+	if a1 != "1" {
+		t.Fatalf("a = %q, want 1", a1)
+	}
+
+	if c.queryCache == nil {
+		t.Fatal("queryCache should be populated after first access")
+	}
+
+	b1 := c.QueryParam("b")
+	if b1 != "2" {
+		t.Fatalf("b = %q, want 2", b1)
+	}
+
+	// Reset should clear cache
+	c.reset(nil, nil, nil)
+	if c.queryCache != nil {
+		t.Fatal("queryCache should be cleared after reset")
+	}
+}
+
+func BenchmarkQueryParam_Cached(b *testing.B) {
+	r := httptest.NewRequest("GET", "/test?a=1&b=2&c=3&d=4", nil)
+	c := &Ctx{Request: r}
+
+	b.ReportAllocs()
+	for b.Loop() {
+		_ = c.QueryParam("a")
+		_ = c.QueryParam("b")
+		_ = c.QueryParam("c")
+		_ = c.QueryParam("d")
+	}
+}

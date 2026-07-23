@@ -42,14 +42,14 @@ func bindDataValue(typ reflect.Type, val reflect.Value, data map[string][]string
 				val.Set(reflect.MakeMap(typ))
 			}
 			for k, v := range data {
-				val.SetMapIndex(reflect.ValueOf(k), reflect.ValueOf(v[0]))
+				val.SetMapIndex(reflect.ValueOf(k), reflect.ValueOf(strings.Join(v, ",")))
 			}
 		case reflect.Interface:
 			if val.IsNil() {
 				val.Set(reflect.MakeMap(typ))
 			}
 			for k, v := range data {
-				val.SetMapIndex(reflect.ValueOf(k), reflect.ValueOf(v[0]))
+				val.SetMapIndex(reflect.ValueOf(k), reflect.ValueOf(strings.Join(v, ",")))
 			}
 		case reflect.Slice:
 			if typ.Elem().Elem().Kind() != reflect.String {
@@ -83,13 +83,13 @@ func bindDataValue(typ reflect.Type, val reflect.Value, data map[string][]string
 		formatTag := sf.Tag.Get("format")
 
 		var inputFieldName string
-		var hasExplicitTag bool
+		var hasBindingName bool
 		if explicitTag != "" {
 			inputFieldName = explicitTag
-			hasExplicitTag = true
+			hasBindingName = true
 		} else if jsonName != "" {
 			inputFieldName = jsonName
-			hasExplicitTag = true
+			hasBindingName = true
 		} else {
 			inputFieldName = sf.Name
 		}
@@ -100,7 +100,7 @@ func bindDataValue(typ reflect.Type, val reflect.Value, data map[string][]string
 			realKind = structField.Type().Elem().Kind()
 		}
 
-		if sf.Anonymous && realKind == reflect.Struct && !hasExplicitTag {
+		if sf.Anonymous && realKind == reflect.Struct && !hasBindingName {
 			if structField.Kind() == reflect.Pointer {
 				if structField.IsNil() {
 					if structField.CanSet() {
@@ -115,6 +115,9 @@ func bindDataValue(typ reflect.Type, val reflect.Value, data map[string][]string
 				if _, ok := structField.Addr().Interface().(BindUnmarshaler); ok {
 					continue
 				}
+				if _, ok := structField.Addr().Interface().(BindMultipleUnmarshaler); ok {
+					continue
+				}
 				if err := bindDataValue(structField.Type(), structField, data, tag, dataFiles); err != nil {
 					return err
 				}
@@ -122,7 +125,7 @@ func bindDataValue(typ reflect.Type, val reflect.Value, data map[string][]string
 			continue
 		}
 
-		if sf.Anonymous && realKind == reflect.Struct && hasExplicitTag {
+		if sf.Anonymous && realKind == reflect.Struct && hasBindingName {
 			return errors.New("query/param/form/header tags are not allowed with anonymous struct field")
 		}
 
@@ -256,7 +259,20 @@ func bindDataValue(typ reflect.Type, val reflect.Value, data map[string][]string
 			if structField.IsNil() {
 				structField.Set(reflect.MakeMap(mt))
 			}
-			structField.SetMapIndex(reflect.ValueOf(inputFieldName), reflect.ValueOf(inputValue[0]))
+			elemKind := mt.Elem().Kind()
+			switch elemKind {
+			case reflect.String:
+				structField.SetMapIndex(reflect.ValueOf(inputFieldName), reflect.ValueOf(strings.Join(inputValue, ",")))
+			case reflect.Interface:
+				structField.SetMapIndex(reflect.ValueOf(inputFieldName), reflect.ValueOf(strings.Join(inputValue, ",")))
+			case reflect.Slice:
+				if mt.Elem().Elem().Kind() != reflect.String {
+					return fmt.Errorf("unsupported map slice element type %s", mt.Elem().Elem().String())
+				}
+				structField.SetMapIndex(reflect.ValueOf(inputFieldName), reflect.ValueOf(inputValue))
+			default:
+				return fmt.Errorf("unsupported map value type %s", mt.Elem().String())
+			}
 			continue
 		}
 

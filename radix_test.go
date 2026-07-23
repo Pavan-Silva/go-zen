@@ -101,9 +101,9 @@ func TestRadix_MultiplePathParamEdgeCases(t *testing.T) {
 	r.add("GET", "/:a/:b/:c", h)
 
 	tests := []struct {
-		path   string
-		want   []string
-		match  bool
+		path  string
+		want  []string
+		match bool
 	}{
 		{"/x/y/z", []string{"x", "y", "z"}, true},
 		{"/a/b/c", []string{"a", "b", "c"}, true},
@@ -507,9 +507,9 @@ func TestRadix_MixedStaticAndParam(t *testing.T) {
 	r.add("GET", "/api/health/db", h)
 
 	tests := []struct {
-		path   string
-		match  bool
-		param  string
+		path  string
+		match bool
+		param string
 	}{
 		{"/api/health", true, ""},
 		{"/api/health/db", true, ""},
@@ -864,8 +864,8 @@ func TestRadix_DifferentMethodsSamePath(t *testing.T) {
 
 func TestRadix_EdgeCaseRouteConflicts(t *testing.T) {
 	tests := []struct {
-		name    string
-		routes  []string
+		name      string
+		routes    []string
 		wantPanic bool
 	}{
 		{
@@ -897,9 +897,9 @@ func TestRadix_EdgeCaseRouteConflicts(t *testing.T) {
 
 func TestRadix_WildcardConflict(t *testing.T) {
 	tests := []struct {
-		name       string
-		first      string
-		second     string
+		name      string
+		first     string
+		second    string
 		wantPanic bool
 	}{
 		{
@@ -940,12 +940,12 @@ func TestRadix_PanicOnInvalidPatterns(t *testing.T) {
 		path  string
 		panic bool
 	}{
-		{"/users/:id/posts/:id", false},    // duplicate name is allowed
-		{"/users/:", true},                   // empty param name
-		{"/users/:id/:id2", false},           // two params in same segment - not allowed
-		{"/users/:123", false},               // numeric param name
-		{"/users/*", true},                   // empty catch-all name
-		{"/users/*path/extra", true},         // catch-all not at end
+		{"/users/:id/posts/:id", false}, // duplicate name is allowed
+		{"/users/:", true},              // empty param name
+		{"/users/:id/:id2", false},      // two params in same segment - not allowed
+		{"/users/:123", false},          // numeric param name
+		{"/users/*", true},              // empty catch-all name
+		{"/users/*path/extra", true},    // catch-all not at end
 	}
 
 	for _, tt := range tests {

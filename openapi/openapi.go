@@ -13,15 +13,15 @@ import (
 
 // Config configures the OpenAPI spec generation and UI.
 type Config struct {
-	Title           string                    // API title (required).
-	Version         string                    // API version (required).
-	Description     string                    // Optional API description.
-	SpecPath        string                    // Path to serve spec JSON (default "/openapi.json").
-	DocPath         string                    // Path to serve docs UI (default "/docs").
-	DisableUI       bool                      // When true, no documentation UI is served.
-	SecuritySchemes map[string]SecurityScheme // Security schemes for components/securitySchemes.
-	DefaultSecurity []map[string][]string     // Default security requirements applied to all routes.
-	SwaggerUIOptions map[string]any           // Extra SwaggerUI init options (e.g. "persistAuthorizations": true).
+	Title            string                    // API title (required).
+	Version          string                    // API version (required).
+	Description      string                    // Optional API description.
+	SpecPath         string                    // Path to serve spec JSON (default "/openapi.json").
+	DocPath          string                    // Path to serve docs UI (default "/docs").
+	DisableUI        bool                      // When true, no documentation UI is served.
+	SecuritySchemes  map[string]SecurityScheme // Security schemes for components/securitySchemes.
+	DefaultSecurity  []map[string][]string     // Default security requirements applied to all routes.
+	SwaggerUIOptions map[string]any            // Extra SwaggerUI init options (e.g. "persistAuthorizations": true).
 }
 
 // RouteInfo holds OpenAPI metadata for a route.

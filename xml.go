@@ -44,4 +44,3 @@ func (c *Ctx) BindXML(dest any) error {
 	}
 	return nil
 }
-

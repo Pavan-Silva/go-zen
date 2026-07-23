@@ -206,7 +206,7 @@ func BenchmarkGroup(b *testing.B) {
 	})
 
 	b.ReportAllocs()
-	
+
 	for b.Loop() {
 		req := httptest.NewRequest("GET", "/api/users/list", nil)
 		w := httptest.NewRecorder()

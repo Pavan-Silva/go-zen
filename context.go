@@ -4,6 +4,7 @@ import (
 	"context"
 	"maps"
 	"net/http"
+	"net/url"
 	"sync"
 )
 
@@ -32,6 +33,7 @@ type Ctx struct {
 	ps           params
 	skippedNodes []skippedNode
 	engine       *Engine
+	queryCache   url.Values
 }
 
 // reset reinitializes Ctx for the given request and response.
@@ -42,6 +44,7 @@ func (c *Ctx) reset(w http.ResponseWriter, r *http.Request, e *Engine) {
 	c.next = nil
 	c.ps = c.ps[:0]
 	c.skippedNodes = c.skippedNodes[:0]
+	c.queryCache = nil
 	if c.store != nil {
 		clear(c.store)
 	}

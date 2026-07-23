@@ -135,6 +135,11 @@ func (sb *schemaBuilder) mergeInlineFields(schema map[string]any, t reflect.Type
 			continue
 		}
 
+		if f.Anonymous && f.Type.Kind() == reflect.Struct {
+			sb.mergeInlineFields(schema, f.Type)
+			continue
+		}
+
 		name, prop := sb.fieldToProperty(f)
 		if name == "" {
 			continue

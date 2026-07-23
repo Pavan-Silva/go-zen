@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/Pavan-Silva/go-zen/internal/log"
-	"github.com/Pavan-Silva/go-zen/system"
+	"github.com/Pavan-Silva/go-zen/internal/system"
 )
 
 var _ http.Handler = (*Engine)(nil)
@@ -41,14 +41,14 @@ func DefaultConfig() Config {
 // and owns the radix tree router and the http.Server.
 type Engine struct {
 	RouterGroup
-	router              *radixRouter
-	pool                sync.Pool
-	server              *http.Server
-	shutdownTimeout     time.Duration
-	validator           Validator
-	autoValidate        bool
-	JSONSerializer      JSONSerializer
-	XMLSerializer       XMLSerializer
+	router             *radixRouter
+	pool               sync.Pool
+	server             *http.Server
+	shutdownTimeout    time.Duration
+	validator          Validator
+	autoValidate       bool
+	JSONSerializer     JSONSerializer
+	XMLSerializer      XMLSerializer
 	MaxMultipartMemory int64
 }
 
@@ -62,10 +62,10 @@ func New(addr string, config ...Config) *Engine {
 	}
 
 	e := &Engine{
-		router:              newRadixRouter(),
-		shutdownTimeout:     cfg.ShutdownTimeout,
-		JSONSerializer:      jsonSerializer{},
-		XMLSerializer:       xmlSerializer{},
+		router:             newRadixRouter(),
+		shutdownTimeout:    cfg.ShutdownTimeout,
+		JSONSerializer:     jsonSerializer{},
+		XMLSerializer:      xmlSerializer{},
 		MaxMultipartMemory: 32 << 20,
 	}
 

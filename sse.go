@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+
+	"github.com/Pavan-Silva/go-zen/internal/bytesconv"
 )
 
 const sseContentType = "text/event-stream; charset=utf-8"
@@ -78,7 +80,7 @@ func (c *Ctx) SSEvent(event string, data any) error {
 func (c *Ctx) writeSSEData(w http.ResponseWriter, data any) error {
 	switch value := data.(type) {
 	case string:
-		return writeBytesSSE(w, StringToBytes(value))
+		return writeBytesSSE(w, bytesconv.StringToBytes(value))
 	case []byte:
 		return writeBytesSSE(w, value)
 	default:

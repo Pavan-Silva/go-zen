@@ -6,6 +6,7 @@ import (
 	"runtime/debug"
 
 	"github.com/Pavan-Silva/go-zen"
+	"github.com/Pavan-Silva/go-zen/internal/bytesconv"
 	"github.com/Pavan-Silva/go-zen/internal/log"
 )
 
@@ -26,7 +27,7 @@ func Recover(c *zen.Ctx) {
 
 			c.Response.WriteHeader(http.StatusInternalServerError)
 
-			_, _ = c.Response.Write(zen.StringToBytes(http.StatusText(http.StatusInternalServerError)))
+			_, _ = c.Response.Write(bytesconv.StringToBytes(http.StatusText(http.StatusInternalServerError)))
 		}
 	}()
 

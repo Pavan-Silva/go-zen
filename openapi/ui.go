@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/Pavan-Silva/go-zen/system"
+	"github.com/Pavan-Silva/go-zen/internal/system"
 )
 
 const fallbackUIHTML = `<!doctype html>
