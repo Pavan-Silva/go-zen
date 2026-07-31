@@ -380,3 +380,32 @@ func TestBind_HeaderCanonicalOptimization(t *testing.T) {
 		t.Fatalf("unexpected header bind result: %s", actual)
 	}
 }
+
+// A self-referencing struct must return a depth error instead of overflowing the stack.
+func TestBind_SelfReferencingStructReturnsError(t *testing.T) {
+	type Node struct {
+		Name string `query:"name"`
+		Next *Node  `query:"next"`
+	}
+
+	r := New(":0")
+	r.GET("/test", func(c *Ctx) {
+		var node Node
+		if err := BindQueryParams(c, &node); err != nil {
+			c.String(http.StatusBadRequest, "bind error: "+err.Error())
+			return
+		}
+		c.String(http.StatusOK, "ok")
+	})
+
+	req := httptest.NewRequest("GET", "/test?next=child&name=root", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "recursion depth") {
+		t.Fatalf("body = %q, want a recursion depth error", w.Body.String())
+	}
+}

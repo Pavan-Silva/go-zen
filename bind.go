@@ -33,7 +33,7 @@ import (
 
 // ErrInvalidBindTarget is returned when the bind destination is not a pointer
 // to a struct or map.
-var ErrInvalidBindTarget = errors.New("http: bind dest must be a pointer to a struct")
+var ErrInvalidBindTarget = errors.New("http: bind dest must be a pointer to a struct or map")
 
 // FormError represents a form binding error for a specific field.
 type FormError struct {
@@ -85,6 +85,9 @@ func (c *Ctx) Bind(dest any) error {
 // extracted from the route pattern and mapped onto struct fields tagged
 // with the "param" struct tag.
 func BindPathValues(c *Ctx, dest any) error {
+	if c == nil {
+		return ErrInvalidBindTarget
+	}
 	if err := bindPathValues(c, dest); err != nil {
 		return err
 	}
@@ -95,12 +98,12 @@ func BindPathValues(c *Ctx, dest any) error {
 }
 
 func bindPathValues(c *Ctx, dest any) error {
-	params := map[string][]string{}
+	if len(c.ps) == 0 {
+		return nil
+	}
+	params := make(map[string][]string, len(c.ps))
 	for _, p := range c.ps {
 		params[p.Key] = []string{p.Value}
-	}
-	if len(params) == 0 {
-		return nil
 	}
 	return bindData(dest, params, "param", nil)
 }
@@ -108,6 +111,9 @@ func bindPathValues(c *Ctx, dest any) error {
 // BindQueryParams binds query parameters to dest. Query params are mapped
 // onto struct fields tagged with the "query" struct tag.
 func BindQueryParams(c *Ctx, dest any) error {
+	if c == nil {
+		return ErrInvalidBindTarget
+	}
 	if err := bindQueryParams(c, dest); err != nil {
 		return err
 	}
@@ -132,6 +138,9 @@ func bindQueryParams(c *Ctx, dest any) error {
 //   - multipart/form-data
 //   - any type ending with +json or /json
 func BindBody(c *Ctx, dest any) error {
+	if c == nil {
+		return ErrInvalidBindTarget
+	}
 	if err := bindBody(c, dest); err != nil {
 		return err
 	}
@@ -182,6 +191,9 @@ func bindBody(c *Ctx, dest any) error {
 // struct fields tagged with the "header" struct tag. Header names are
 // matched case-insensitively.
 func BindHeaders(c *Ctx, dest any) error {
+	if c == nil {
+		return ErrInvalidBindTarget
+	}
 	if err := bindHeaders(c, dest); err != nil {
 		return err
 	}

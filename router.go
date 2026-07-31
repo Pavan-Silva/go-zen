@@ -50,6 +50,11 @@ type Engine struct {
 	JSONSerializer     JSONSerializer
 	XMLSerializer      XMLSerializer
 	MaxMultipartMemory int64
+	noRoute            []HandlerFunc
+	noMethod           []HandlerFunc
+	noRouteChain       HandlerFunc
+	noMethodChain      HandlerFunc
+	tsrChain           HandlerFunc
 }
 
 // New creates an Engine with the given listen address and optional custom Config.
@@ -82,6 +87,7 @@ func New(addr string, config ...Config) *Engine {
 		}
 	}
 	e.RouterGroup = RouterGroup{prefix: "", engine: e, middleware: nil}
+	e.rebuildNoRouteChains()
 
 	e.server = &http.Server{
 		Addr:              addr,
@@ -98,7 +104,12 @@ func New(addr string, config ...Config) *Engine {
 
 // ServeHTTP implements the http.Handler interface using the radix tree router.
 func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	c := e.pool.Get().(*Ctx)
+	v := e.pool.Get()
+	c, ok := v.(*Ctx)
+	if !ok {
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
 	c.reset(w, r, e)
 
 	path := r.URL.Path
@@ -108,25 +119,82 @@ func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	result := e.router.find(r.Method, path, &c.ps, &c.skippedNodes)
 
-	if result.handlers != nil {
+	if len(result.handlers) > 0 {
 		result.handlers[0](c)
 	} else if result.tsr {
-		path = r.URL.Path
+		e.tsrChain(c)
+	} else if result.allowedMethod != "" {
+		c.Response.Header().Set("Allow", result.allowedMethod)
+		e.noMethodChain(c)
+	} else {
+		e.noRouteChain(c)
+	}
+
+	e.pool.Put(c)
+}
+
+// NoRoute registers handlers that run when no route matches the request.
+// They replace the default 404 response and run after the root middleware
+// chain. Handlers are responsible for writing the response.
+func (e *Engine) NoRoute(handlers ...HandlerFunc) {
+	if len(handlers) == 0 {
+		panic("zen: NoRoute requires at least one handler")
+	}
+	e.noRoute = handlers
+	e.rebuildNoRouteChains()
+}
+
+// NoMethod registers handlers that run when a path matches but the request
+// method does not. They replace the default 405 response and run after the
+// root middleware chain. The Allow header is set before they run.
+func (e *Engine) NoMethod(handlers ...HandlerFunc) {
+	if len(handlers) == 0 {
+		panic("zen: NoMethod requires at least one handler")
+	}
+	e.noMethod = handlers
+	e.rebuildNoRouteChains()
+}
+
+// rebuildNoRouteChains compiles the 404, 405, and trailing-slash-redirect
+// handler chains from the current root middleware and any NoRoute/NoMethod
+// overrides. Called whenever the root middleware list or overrides change.
+func (e *Engine) rebuildNoRouteChains() {
+	base := e.RouterGroup.middleware
+
+	default404 := func(c *Ctx) {
+		c.Response.WriteHeader(http.StatusNotFound)
+		_, _ = c.Response.Write([]byte("404 page not found\n"))
+	}
+	default405 := func(c *Ctx) {
+		c.Response.WriteHeader(http.StatusMethodNotAllowed)
+		_, _ = c.Response.Write([]byte("405 method not allowed\n"))
+	}
+	defaultTSR := func(c *Ctx) {
+		path := c.Request.URL.Path
 		if path[len(path)-1] == '/' {
 			path = path[:len(path)-1]
 		} else {
 			path = path + "/"
 		}
-		http.Redirect(w, r, path, http.StatusMovedPermanently)
-	} else if result.allowedMethod != "" {
-		w.Header().Set("Allow", result.allowedMethod)
-		http.Error(w, "405 method not allowed\n", http.StatusMethodNotAllowed)
-	} else {
-		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte("404 page not found\n"))
+		http.Redirect(c.Response, c.Request, path, http.StatusMovedPermanently)
 	}
 
-	e.pool.Put(c)
+	e.noRouteChain = compileChainWithFallback(base, e.noRoute, default404)
+	e.noMethodChain = compileChainWithFallback(base, e.noMethod, default405)
+	e.tsrChain = compileChainWithFallback(base, nil, defaultTSR)
+}
+
+// compileChainWithFallback compiles a chain of root middleware plus optional
+// override handlers. When no override handlers are provided, the fallback
+// handler (the default 404/405/redirect) is appended as the terminal element.
+func compileChainWithFallback(base, extra []HandlerFunc, fallback HandlerFunc) HandlerFunc {
+	chain := make([]HandlerFunc, 0, len(base)+len(extra)+1)
+	chain = append(chain, base...)
+	chain = append(chain, extra...)
+	if len(extra) == 0 {
+		chain = append(chain, fallback)
+	}
+	return compileChain(chain)
 }
 
 // File serves a single file at the given path pattern via http.ServeFile.

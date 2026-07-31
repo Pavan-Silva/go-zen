@@ -43,6 +43,7 @@ func Logger(c *zen.Ctx) {
 	rw.ResponseWriter = c.Response
 	rw.status = http.StatusOK
 	rw.written = 0
+	rw.wrote = false
 
 	c.Response = rw
 
@@ -94,9 +95,14 @@ type responseWriter struct {
 	http.ResponseWriter
 	status  int
 	written int
+	wrote   bool
 }
 
 func (rw *responseWriter) WriteHeader(status int) {
+	if rw.wrote {
+		return
+	}
+	rw.wrote = true
 	rw.status = status
 	rw.ResponseWriter.WriteHeader(status)
 }
@@ -104,7 +110,14 @@ func (rw *responseWriter) WriteHeader(status int) {
 func (rw *responseWriter) Write(b []byte) (int, error) {
 	n, err := rw.ResponseWriter.Write(b)
 	rw.written += n
+	rw.wrote = true
 	return n, err
+}
+
+// Unwrap exposes the underlying http.ResponseWriter so that
+// http.ResponseController can reach it (SetWriteDeadline, EnableFullDuplex, ...).
+func (rw *responseWriter) Unwrap() http.ResponseWriter {
+	return rw.ResponseWriter
 }
 
 // Flush implements http.Flusher.

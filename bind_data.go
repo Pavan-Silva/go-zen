@@ -10,6 +10,12 @@ import (
 	"strings"
 )
 
+// maxBindDepth bounds how deep bindDataValue recurses into nested struct
+// fields. Without it, a self-referencing struct (e.g. type Node struct {
+// Next *Node }) would recurse indefinitely and crash the process with a stack
+// overflow.
+const maxBindDepth = 64
+
 func bindData(destination any, data map[string][]string, tag string, dataFiles map[string][]*multipart.FileHeader) error {
 	if destination == nil {
 		return ErrInvalidBindTarget
@@ -25,10 +31,13 @@ func bindData(destination any, data map[string][]string, tag string, dataFiles m
 	if len(data) == 0 && len(dataFiles) == 0 {
 		return nil
 	}
-	return bindDataValue(typ, v.Elem(), data, tag, dataFiles)
+	return bindDataValue(typ, v.Elem(), data, tag, dataFiles, 0)
 }
 
-func bindDataValue(typ reflect.Type, val reflect.Value, data map[string][]string, tag string, dataFiles map[string][]*multipart.FileHeader) error {
+func bindDataValue(typ reflect.Type, val reflect.Value, data map[string][]string, tag string, dataFiles map[string][]*multipart.FileHeader, depth int) error {
+	if depth > maxBindDepth {
+		return fmt.Errorf("binding exceeded maximum recursion depth of %d (circular reference?)", maxBindDepth)
+	}
 	hasFiles := len(dataFiles) > 0
 
 	if typ.Kind() == reflect.Map {
@@ -68,9 +77,6 @@ func bindDataValue(typ reflect.Type, val reflect.Value, data map[string][]string
 	}
 
 	if typ.Kind() != reflect.Struct {
-		if tag == "param" || tag == "query" || tag == "header" {
-			return nil
-		}
 		return errors.New("binding element must be a struct")
 	}
 
@@ -118,7 +124,7 @@ func bindDataValue(typ reflect.Type, val reflect.Value, data map[string][]string
 				if _, ok := structField.Addr().Interface().(BindMultipleUnmarshaler); ok {
 					continue
 				}
-				if err := bindDataValue(structField.Type(), structField, data, tag, dataFiles); err != nil {
+				if err := bindDataValue(structField.Type(), structField, data, tag, dataFiles, depth+1); err != nil {
 					return err
 				}
 			}
@@ -159,7 +165,7 @@ func bindDataValue(typ reflect.Type, val reflect.Value, data map[string][]string
 					tempField = tempField.Elem()
 				}
 				if tempField.CanSet() {
-					if err := bindDataValue(tempField.Type(), tempField, data, tag, dataFiles); err != nil {
+					if err := bindDataValue(tempField.Type(), tempField, data, tag, dataFiles, depth+1); err != nil {
 						return err
 					}
 				}
@@ -200,6 +206,10 @@ func bindDataValue(typ reflect.Type, val reflect.Value, data map[string][]string
 		}
 
 		if !exists {
+			continue
+		}
+
+		if len(inputValue) == 0 {
 			continue
 		}
 

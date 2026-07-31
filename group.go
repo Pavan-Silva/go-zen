@@ -1,6 +1,7 @@
 package zen
 
 import (
+	"context"
 	"net/http"
 	"strings"
 )
@@ -16,6 +17,10 @@ type RouterGroup struct {
 // Use appends middleware to the group. Middleware runs for every route registered on this group.
 func (g *RouterGroup) Use(middleware ...HandlerFunc) {
 	g.middleware = append(g.middleware, middleware...)
+	if g.engine != nil && g.prefix == "" {
+		// Root-group middleware also feeds the 404/405/TSR chains.
+		g.engine.rebuildNoRouteChains()
+	}
 }
 
 // Group creates a child group with an additional path prefix and optional middleware.
@@ -38,10 +43,14 @@ func (g *RouterGroup) Group(prefix string, middleware ...HandlerFunc) *RouterGro
 // The pattern uses Go 1.22+ ServeMux syntax ({param}, {path...}) which is
 // automatically converted to the router's native syntax (:param, *path).
 // The group prefix is prepended to the path automatically.
+//
+// The raw handler can recover the current Ctx from the request with
+// FromRequest (and must not retain it beyond the request lifetime).
 func (g *RouterGroup) HandleRaw(pattern string, handler http.Handler) {
 	method, path := convertServeMuxPattern(pattern)
 	g.registerRoute(method, g.prefix+path, []HandlerFunc{func(c *Ctx) {
-		handler.ServeHTTP(c.Response, c.Request)
+		req := c.Request.WithContext(context.WithValue(c.Request.Context(), zenCtxKey{}, c))
+		handler.ServeHTTP(c.Response, req)
 	}})
 }
 
@@ -86,6 +95,9 @@ func (g *RouterGroup) OPTIONS(path string, handlers ...HandlerFunc) {
 
 // registerRoute registers a route with the given method, path, and handlers.
 func (g *RouterGroup) registerRoute(method, fullPath string, handlers []HandlerFunc) {
+	if method == "" {
+		panic("zen: route registered without an HTTP method (use the \"METHOD /path\" pattern, e.g. \"GET /hello\")")
+	}
 	if len(handlers) == 0 {
 		panic("zen: route registered with zero handlers")
 	}
@@ -101,6 +113,12 @@ func (g *RouterGroup) registerRoute(method, fullPath string, handlers []HandlerF
 	copy(chain[len(g.middleware):], routeMiddleware)
 	chain[totalLen-1] = handler
 
+	g.engine.router.add(method, convertPath(fullPath), []HandlerFunc{compileChain(chain)})
+}
+
+// compileChain builds a nested closure chain where each middleware forwards to
+// the next via the Ctx.next field. The final element runs last.
+func compileChain(chain []HandlerFunc) HandlerFunc {
 	var finalHandler = chain[len(chain)-1]
 
 	// Compile the chain backwards into a nested closure chain
@@ -114,7 +132,7 @@ func (g *RouterGroup) registerRoute(method, fullPath string, handlers []HandlerF
 		}
 	}
 
-	g.engine.router.add(method, convertPath(fullPath), []HandlerFunc{finalHandler})
+	return finalHandler
 }
 
 // ensureLeadingSlash adds a leading slash (if absent) and strips a trailing slash.

@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Pavan-Silva/go-zen"
@@ -32,7 +33,7 @@ func DefaultRateLimiterConfig() RateLimiterConfig {
 
 type perKeyLimiter struct {
 	limiter  *rate.Limiter
-	lastSeen time.Time
+	lastSeen atomic.Int64 // unix nanoseconds of last request; read/written without the shard lock
 }
 
 const shardCount = 64
@@ -55,7 +56,12 @@ func RateLimiterWithConfig(config RateLimiterConfig) zen.HandlerFunc {
 	if config.Limit == 0 {
 		config.Limit = 100
 	}
+	if config.Limit < 0 {
+		config.Limit = 100
+	}
 	if config.KeyFunc == nil {
+		// Note: trusting X-Forwarded-For/X-Real-IP means a client can spoof its
+		// own rate-limit key when no trusted proxy strips those headers.
 		config.KeyFunc = func(r *http.Request) string {
 			if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
 				if before, _, ok := strings.Cut(fwd, ","); ok {
@@ -93,12 +99,12 @@ func RateLimiterWithConfig(config RateLimiterConfig) zen.HandlerFunc {
 	go func() {
 		ticker := time.NewTicker(time.Minute)
 		for range ticker.C {
-			now := time.Now()
+			cutoff := time.Now().Add(-2 * config.Duration).UnixNano()
 			for i := range shardCount {
 				shard := shards[i]
 				shard.mu.Lock()
 				for k, v := range shard.limiters {
-					if now.After(v.lastSeen.Add(2 * config.Duration)) {
+					if v.lastSeen.Load() < cutoff {
 						delete(shard.limiters, k)
 					}
 				}
@@ -143,9 +149,7 @@ func RateLimiterWithConfig(config RateLimiterConfig) zen.HandlerFunc {
 			shard.mu.Unlock()
 		}
 
-		shard.mu.Lock()
-		pkl.lastSeen = time.Now()
-		shard.mu.Unlock()
+		pkl.lastSeen.Store(time.Now().UnixNano())
 
 		if !pkl.limiter.Allow() {
 			c.Response.WriteHeader(http.StatusTooManyRequests)

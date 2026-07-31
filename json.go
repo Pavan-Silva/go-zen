@@ -25,6 +25,9 @@ func (jsonSerializer) Serialize(c *Ctx, v any, indent string) error {
 }
 
 func (jsonSerializer) Deserialize(c *Ctx, v any) error {
+	if c.Request.Body == nil {
+		return nil
+	}
 	return json.NewDecoder(c.Request.Body).Decode(v)
 }
 

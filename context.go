@@ -45,9 +45,11 @@ func (c *Ctx) reset(w http.ResponseWriter, r *http.Request, e *Engine) {
 	c.ps = c.ps[:0]
 	c.skippedNodes = c.skippedNodes[:0]
 	c.queryCache = nil
+	c.mu.Lock()
 	if c.store != nil {
 		clear(c.store)
 	}
+	c.mu.Unlock()
 }
 
 // Next calls the next handler in the chain.
@@ -81,11 +83,11 @@ func (c *Ctx) Get(key string) (any, bool) {
 
 // Keys returns a copy of all key-value entries in the store.
 func (c *Ctx) Keys() map[string]any {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	if c.store == nil {
 		return nil
 	}
-	c.mu.RLock()
-	defer c.mu.RUnlock()
 	if len(c.store) == 0 {
 		return nil
 	}
@@ -99,6 +101,11 @@ func (c *Ctx) Copy() *Ctx {
 	cp := &Ctx{
 		Response: c.Response,
 		Request:  c.Request,
+		engine:   c.engine,
+	}
+	if len(c.ps) > 0 {
+		cp.ps = make(params, len(c.ps))
+		copy(cp.ps, c.ps)
 	}
 	c.mu.RLock()
 	if len(c.store) > 0 {

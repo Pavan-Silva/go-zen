@@ -3,6 +3,7 @@ package zen
 import (
 	"io"
 	"net/http"
+	"net/url"
 	"path/filepath"
 
 	"github.com/Pavan-Silva/go-zen/internal/log"
@@ -87,7 +88,7 @@ func (c *Ctx) Attachment(filePath, attachmentName string) {
 		attachmentName = filepath.Base(filePath)
 	}
 
-	c.Response.Header().Set("Content-Disposition", "attachment; filename=\""+attachmentName+"\"")
+	c.Response.Header().Set("Content-Disposition", `attachment; filename="`+url.PathEscape(attachmentName)+`"`)
 	http.ServeFile(c.Response, c.Request, filePath)
 }
 

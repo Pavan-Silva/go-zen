@@ -6,14 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/golang-jwt/jwt/v5"
 )
 
-// errOIDCJWTVerificationSkipped is a sentinel error indicating JWT verification
-// was intentionally skipped because no verification key is configured.
-var errOIDCJWTVerificationSkipped = errors.New("jwt verification not configured for OIDC access tokens; set SkipTokenVerification=true if using opaque tokens")
+// ErrOIDCKeyFuncNotConfigured is returned when SkipTokenVerification is false
+// but no KeyFunc has been configured to verify access token signatures.
+var ErrOIDCKeyFuncNotConfigured = errors.New("oidc: SkipTokenVerification is false but no KeyFunc is configured; set SkipTokenVerification=true to use opaque tokens or provide KeyFunc")
 
 // OIDCUserInfo represents the user information returned by the userinfo endpoint.
 type OIDCUserInfo struct {
@@ -36,6 +35,7 @@ type OIDCAuth struct {
 	HTTPClient            *http.Client                     // HTTP client for userinfo requests.
 	ClaimsFunc            func(claims jwt.MapClaims) *User // Optional function to map JWT claims to a User struct.
 	SkipTokenVerification bool                             // When true, skips JWT signature verification of the access token.
+	KeyFunc               jwt.Keyfunc                      // Verification key for access token signatures. Required when SkipTokenVerification is false.
 }
 
 // Authenticate validates the access token by calling the userinfo endpoint.
@@ -59,13 +59,12 @@ func (o *OIDCAuth) Authenticate(r *http.Request) (*User, error) {
 		return nil, err
 	}
 
-	if !o.SkipTokenVerification && strings.Count(token, ".") == 2 {
-		if _, err := jwt.Parse(token, func(t *jwt.Token) (any, error) {
-			return nil, errOIDCJWTVerificationSkipped
-		}); err != nil {
-			if !errors.Is(err, errOIDCJWTVerificationSkipped) {
-				return nil, fmt.Errorf("access token verification failed: %w", err)
-			}
+	if !o.SkipTokenVerification {
+		if o.KeyFunc == nil {
+			return nil, ErrOIDCKeyFuncNotConfigured
+		}
+		if _, err := jwt.Parse(token, o.KeyFunc); err != nil {
+			return nil, fmt.Errorf("access token verification failed: %w", err)
 		}
 	}
 

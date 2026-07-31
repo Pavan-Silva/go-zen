@@ -4,6 +4,7 @@ import (
 	"compress/gzip"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -366,6 +367,175 @@ func TestCompress_Level(t *testing.T) {
 	}
 	if w.Header().Get("Content-Encoding") != "gzip" {
 		t.Fatal("Content-Encoding should be gzip")
+	}
+}
+
+// A panic with Recover + Compress must produce a real 500, not an empty 200.
+func TestCompress_RecoverPanic(t *testing.T) {
+	r := zen.New(":0")
+	r.Use(Recover, Compress())
+	r.GET("/boom", func(c *zen.Ctx) {
+		panic("kaboom")
+	})
+
+	req := httptest.NewRequest("GET", "/boom", nil)
+	req.Header.Set("Accept-Encoding", "gzip")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 500 {
+		t.Fatalf("status = %d, want 500", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), "Internal Server Error") {
+		t.Fatalf("body = %q, want it to contain the 500 message", w.Body.String())
+	}
+}
+
+// The first WriteHeader must win, matching the http.ResponseWriter contract.
+func TestCompress_WriteHeaderFirstWins(t *testing.T) {
+	r := zen.New(":0")
+	r.Use(Compress())
+	r.GET("/twice", func(c *zen.Ctx) {
+		c.Response.WriteHeader(404)
+		c.Response.WriteHeader(200)
+		_, _ = c.Response.Write([]byte("body"))
+	})
+
+	req := httptest.NewRequest("GET", "/twice", nil)
+	req.Header.Set("Accept-Encoding", "gzip")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 404 {
+		t.Fatalf("status = %d, want 404 (first WriteHeader must win)", w.Code)
+	}
+	if w.Body.String() != "body" {
+		t.Fatalf("body = %q, want %q", w.Body.String(), "body")
+	}
+}
+
+// Small SSE events must be delivered on Flush even when below the 1 KB
+// compression threshold, not withheld until the response completes.
+func TestCompress_SSEStreams(t *testing.T) {
+	r := zen.New(":0")
+	r.Use(Compress())
+	r.GET("/events", func(c *zen.Ctx) {
+		_ = c.SSEvent("msg", "first")
+		_ = c.SSEvent("msg", "second")
+	})
+
+	req := httptest.NewRequest("GET", "/events", nil)
+	req.Header.Set("Accept-Encoding", "gzip")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 200 {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	if w.Header().Get("Content-Encoding") == "gzip" {
+		t.Fatal("streaming response should not be gzip compressed")
+	}
+	body := w.Body.String()
+	if !strings.Contains(body, "event: msg") || !strings.Contains(body, "first") || !strings.Contains(body, "second") {
+		t.Fatalf("body = %q, want both SSE events delivered", body)
+	}
+}
+
+// Compress must append to an existing Vary header, not overwrite it.
+func TestCompress_VaryAppend(t *testing.T) {
+	r := zen.New(":0")
+	r.Use(Compress())
+	r.GET("/api", func(c *zen.Ctx) {
+		c.Response.Header().Set("Vary", "Origin")
+		c.String(200, strings.Repeat("x", 2048))
+	})
+
+	req := httptest.NewRequest("GET", "/api", nil)
+	req.Header.Set("Accept-Encoding", "gzip")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	vals := w.Header().Values("Vary")
+	if !slices.Contains(vals, "Origin") || !slices.Contains(vals, "Accept-Encoding") {
+		t.Fatalf("Vary = %v, want both Origin and Accept-Encoding", vals)
+	}
+}
+
+func TestLogger_SingleWriteHeader(t *testing.T) {
+	r := zen.New(":0")
+	r.Use(Logger)
+	r.GET("/twice", func(c *zen.Ctx) {
+		c.Response.WriteHeader(404)
+		c.Response.WriteHeader(200)
+	})
+
+	req := httptest.NewRequest("GET", "/twice", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 404 {
+		t.Fatalf("status = %d, want 404 (first WriteHeader must win)", w.Code)
+	}
+}
+
+func TestRateLimiter_NegativeLimit(t *testing.T) {
+	cfg := DefaultRateLimiterConfig()
+	cfg.Limit = -5
+	cfg.Duration = time.Hour
+
+	r := zen.New(":0")
+	r.Use(RateLimiterWithConfig(cfg))
+	r.GET("/api", func(c *zen.Ctx) {
+		c.String(200, "ok")
+	})
+
+	req := httptest.NewRequest("GET", "/api", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 200 {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+}
+
+func TestTimeout_Enforces504(t *testing.T) {
+	r := zen.New(":0")
+	r.Use(Timeout(50 * time.Millisecond))
+	r.GET("/slow", func(c *zen.Ctx) {
+		time.Sleep(200 * time.Millisecond)
+		c.String(200, "too late")
+	})
+
+	req := httptest.NewRequest("GET", "/slow", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 504 {
+		t.Fatalf("status = %d, want 504", w.Code)
+	}
+	if w.Body.String() != "" {
+		t.Fatalf("body = %q, want empty (late writes must be discarded)", w.Body.String())
+	}
+}
+
+func TestTimeout_WriteAfterTimeoutDiscarded(t *testing.T) {
+	r := zen.New(":0")
+	r.Use(Timeout(50 * time.Millisecond))
+	r.GET("/slow", func(c *zen.Ctx) {
+		time.Sleep(200 * time.Millisecond)
+		_, _ = c.Response.Write([]byte("late"))
+	})
+
+	req := httptest.NewRequest("GET", "/slow", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 504 {
+		t.Fatalf("status = %d, want 504", w.Code)
+	}
+	if strings.Contains(w.Body.String(), "late") {
+		t.Fatalf("body = %q, late write should have been discarded", w.Body.String())
 	}
 }
 

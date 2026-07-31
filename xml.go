@@ -21,6 +21,9 @@ func (xmlSerializer) Serialize(c *Ctx, v any) error {
 }
 
 func (xmlSerializer) Deserialize(c *Ctx, v any) error {
+	if c.Request.Body == nil {
+		return nil
+	}
 	return xml.NewDecoder(c.Request.Body).Decode(v)
 }
 

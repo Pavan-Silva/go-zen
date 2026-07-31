@@ -2,6 +2,7 @@ package auth
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -37,9 +38,10 @@ func TestOIDCAuth_Success(t *testing.T) {
 	defer userinfoServer.Close()
 
 	auth := &OIDCAuth{
-		Issuer:           "https://accounts.example.com",
-		ClientID:         "my-client",
-		UserInfoEndpoint: userinfoServer.URL,
+		Issuer:                "https://accounts.example.com",
+		ClientID:              "my-client",
+		UserInfoEndpoint:      userinfoServer.URL,
+		SkipTokenVerification: true,
 	}
 
 	req := httptest.NewRequest("GET", "/", nil)
@@ -86,7 +88,8 @@ func TestOIDCAuth_UserInfoFails(t *testing.T) {
 	defer userinfoServer.Close()
 
 	auth := &OIDCAuth{
-		UserInfoEndpoint: userinfoServer.URL,
+		UserInfoEndpoint:      userinfoServer.URL,
+		SkipTokenVerification: true,
 	}
 
 	req := httptest.NewRequest("GET", "/", nil)
@@ -109,8 +112,9 @@ func TestOIDCAuth_DefaultEndpoint(t *testing.T) {
 	defer userinfoServer.Close()
 
 	auth := &OIDCAuth{
-		Issuer:           userinfoServer.URL,
-		UserInfoEndpoint: "",
+		Issuer:                userinfoServer.URL,
+		UserInfoEndpoint:      "",
+		SkipTokenVerification: true,
 	}
 
 	req := httptest.NewRequest("GET", "/", nil)
@@ -139,7 +143,8 @@ func TestOIDCAuth_CustomClaimsFunc(t *testing.T) {
 	defer userinfoServer.Close()
 
 	auth := &OIDCAuth{
-		UserInfoEndpoint: userinfoServer.URL,
+		UserInfoEndpoint:      userinfoServer.URL,
+		SkipTokenVerification: true,
 		ClaimsFunc: func(claims jwt.MapClaims) *User {
 			return &User{
 				ID:       "oidc-" + claims["sub"].(string),
@@ -157,6 +162,73 @@ func TestOIDCAuth_CustomClaimsFunc(t *testing.T) {
 	}
 	if user.ID != "oidc-user-1" {
 		t.Fatalf("user.ID = %q, want %q", user.ID, "oidc-user-1")
+	}
+}
+
+func TestOIDCAuth_VerificationFailsClosedWithoutKeyFunc(t *testing.T) {
+	auth := &OIDCAuth{
+		UserInfoEndpoint: "http://example.com/userinfo",
+	}
+
+	req := httptest.NewRequest("GET", "/", nil)
+	req.Header.Set("Authorization", "Bearer any-token")
+
+	if _, err := auth.Authenticate(req); err == nil {
+		t.Fatal("expected error when SkipTokenVerification is false and no KeyFunc is configured")
+	} else if !errors.Is(err, ErrOIDCKeyFuncNotConfigured) {
+		t.Fatalf("error = %v, want ErrOIDCKeyFuncNotConfigured", err)
+	}
+}
+
+func TestOIDCAuth_VerificationRejectsForgedToken(t *testing.T) {
+	auth := &OIDCAuth{
+		UserInfoEndpoint: "http://example.com/userinfo",
+		KeyFunc: func(t *jwt.Token) (any, error) {
+			return []byte("secret"), nil
+		},
+	}
+
+	req := httptest.NewRequest("GET", "/", nil)
+	req.Header.Set("Authorization", "Bearer not-a-real-signature")
+
+	if _, err := auth.Authenticate(req); err == nil {
+		t.Fatal("expected forged token to be rejected")
+	}
+}
+
+func TestOIDCAuth_VerificationAcceptsValidToken(t *testing.T) {
+	userinfoServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		info := OIDCUserInfo{Sub: "user-1"}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(info)
+	}))
+	defer userinfoServer.Close()
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"sub": "user-1",
+		"iss": "https://accounts.example.com",
+	})
+	signed, err := token.SignedString([]byte("secret"))
+	if err != nil {
+		t.Fatalf("SignedString() error = %v", err)
+	}
+
+	auth := &OIDCAuth{
+		UserInfoEndpoint: userinfoServer.URL,
+		KeyFunc: func(t *jwt.Token) (any, error) {
+			return []byte("secret"), nil
+		},
+	}
+
+	req := httptest.NewRequest("GET", "/", nil)
+	req.Header.Set("Authorization", "Bearer "+signed)
+
+	user, err := auth.Authenticate(req)
+	if err != nil {
+		t.Fatalf("Authenticate() error = %v", err)
+	}
+	if user.ID != "user-1" {
+		t.Fatalf("user.ID = %q, want %q", user.ID, "user-1")
 	}
 }
 

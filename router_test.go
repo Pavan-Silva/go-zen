@@ -194,6 +194,30 @@ func TestRouter_HandleRaw(t *testing.T) {
 	}
 }
 
+// FromRequest must resolve the live Ctx inside a raw handler.
+func TestRouter_HandleRawFromRequest(t *testing.T) {
+	r := New(":0")
+	r.HandleRaw("GET /raw/{name}", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c, ok := FromRequest(r)
+		if !ok {
+			http.Error(w, "no ctx", http.StatusInternalServerError)
+			return
+		}
+		c.String(200, c.Param("name"))
+	}))
+
+	req := httptest.NewRequest("GET", "/raw/john", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 200 {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	if w.Body.String() != "john" {
+		t.Fatalf("body = %q, want %q", w.Body.String(), "john")
+	}
+}
+
 func TestRouter_File(t *testing.T) {
 	tmp := t.TempDir()
 	path := filepath.Join(tmp, "test.txt")
@@ -292,6 +316,133 @@ func TestRouter_MethodNotAllowed(t *testing.T) {
 	if w.Code != 405 {
 		t.Fatalf("status = %d, want 405", w.Code)
 	}
+}
+
+// Root middleware must run for unmatched routes (404).
+func TestRouter_NotFoundThroughMiddleware(t *testing.T) {
+	r := New(":0")
+	r.Use(func(c *Ctx) {
+		c.Response.Header().Set("X-Middleware", "ran")
+		c.Next()
+	})
+	r.GET("/exists", func(c *Ctx) {
+		c.String(200, "ok")
+	})
+
+	req := httptest.NewRequest("GET", "/notfound", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 404 {
+		t.Fatalf("status = %d, want 404", w.Code)
+	}
+	if w.Header().Get("X-Middleware") != "ran" {
+		t.Fatalf("X-Middleware = %q, want root middleware to run for 404s", w.Header().Get("X-Middleware"))
+	}
+}
+
+// Root middleware must run for 405 responses and the Allow header must survive.
+func TestRouter_MethodNotAllowedThroughMiddleware(t *testing.T) {
+	r := New(":0")
+	r.Use(func(c *Ctx) {
+		c.Response.Header().Set("X-Middleware", "ran")
+		c.Next()
+	})
+	r.GET("/only-get", func(c *Ctx) {
+		c.String(200, "ok")
+	})
+
+	req := httptest.NewRequest("POST", "/only-get", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 405 {
+		t.Fatalf("status = %d, want 405", w.Code)
+	}
+	if w.Header().Get("X-Middleware") != "ran" {
+		t.Fatalf("X-Middleware = %q, want root middleware to run for 405s", w.Header().Get("X-Middleware"))
+	}
+	if !strings.Contains(w.Header().Get("Allow"), "GET") {
+		t.Fatalf("Allow = %q, want it to contain GET", w.Header().Get("Allow"))
+	}
+}
+
+// Root middleware must run for trailing-slash redirects.
+func TestRouter_TSRThroughMiddleware(t *testing.T) {
+	r := New(":0")
+	r.Use(func(c *Ctx) {
+		c.Response.Header().Set("X-Middleware", "ran")
+		c.Next()
+	})
+	r.GET("/slash", func(c *Ctx) {
+		c.String(200, "ok")
+	})
+
+	req := httptest.NewRequest("GET", "/slash/", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 301 {
+		t.Fatalf("status = %d, want 301", w.Code)
+	}
+	if w.Header().Get("X-Middleware") != "ran" {
+		t.Fatalf("X-Middleware = %q, want root middleware to run for TSR redirects", w.Header().Get("X-Middleware"))
+	}
+	if w.Header().Get("Location") != "/slash" {
+		t.Fatalf("Location = %q, want %q", w.Header().Get("Location"), "/slash")
+	}
+}
+
+func TestRouter_NoRouteCustom(t *testing.T) {
+	r := New(":0")
+	r.NoRoute(func(c *Ctx) {
+		c.String(404, "custom not found")
+	})
+
+	req := httptest.NewRequest("GET", "/notfound", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 404 {
+		t.Fatalf("status = %d, want 404", w.Code)
+	}
+	if w.Body.String() != "custom not found" {
+		t.Fatalf("body = %q, want %q", w.Body.String(), "custom not found")
+	}
+}
+
+func TestRouter_NoMethodCustom(t *testing.T) {
+	r := New(":0")
+	r.NoMethod(func(c *Ctx) {
+		c.String(405, "custom 405")
+	})
+	r.GET("/only-get", func(c *Ctx) {
+		c.String(200, "ok")
+	})
+
+	req := httptest.NewRequest("POST", "/only-get", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 405 {
+		t.Fatalf("status = %d, want 405", w.Code)
+	}
+	if w.Body.String() != "custom 405" {
+		t.Fatalf("body = %q, want %q", w.Body.String(), "custom 405")
+	}
+	if !strings.Contains(w.Header().Get("Allow"), "GET") {
+		t.Fatalf("Allow = %q, want it to contain GET", w.Header().Get("Allow"))
+	}
+}
+
+func TestRouter_HandleRawMissingMethodPanics(t *testing.T) {
+	r := New(":0")
+	defer func() {
+		if recover() == nil {
+			t.Fatal("expected HandleRaw without an HTTP method to panic")
+		}
+	}()
+	r.HandleRaw("/missing-method", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 }
 
 func TestRouter_ShutdownTimeout(t *testing.T) {

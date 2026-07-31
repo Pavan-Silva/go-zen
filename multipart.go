@@ -68,12 +68,18 @@ func setMultipartFileHeaderTypes(structField reflect.Value, inputFieldName strin
 	case multipartFileHeaderPointerSliceType:
 		structField.Set(reflect.ValueOf(fileHeaders))
 	case multipartFileHeaderSliceType:
-		headers := make([]multipart.FileHeader, len(fileHeaders))
-		for i, fileHeader := range fileHeaders {
-			headers[i] = *fileHeader
+		headers := make([]multipart.FileHeader, 0, len(fileHeaders))
+		for _, fileHeader := range fileHeaders {
+			if fileHeader == nil {
+				continue
+			}
+			headers = append(headers, *fileHeader)
 		}
 		structField.Set(reflect.ValueOf(headers))
 	case multipartFileHeaderPointerType:
+		if fileHeaders[0] == nil {
+			return false
+		}
 		structField.Set(reflect.ValueOf(fileHeaders[0]))
 	default:
 		result = false
