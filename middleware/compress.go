@@ -85,7 +85,10 @@ func CompressWithLevel(level int) zen.HandlerFunc {
 		// yet, the response is left untouched so the recovering middleware can
 		// produce a clean error response instead of an empty 200.
 		defer func() {
-			if cw.wroteHeader || cw.gz != nil || cw.bodyBuffer.Len() > 0 {
+			// Also finalize when the handler committed a status line without a
+			// body (e.g. 204/304): otherwise the underlying writer never sees
+			// the status and net/http emits a default 200.
+			if cw.statusSet || cw.wroteHeader || cw.gz != nil || cw.bodyBuffer.Len() > 0 {
 				if !cw.wroteHeader {
 					cw.writeFinal(&gzipPool)
 				} else if cw.gz != nil {

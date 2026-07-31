@@ -393,6 +393,24 @@ func TestRouter_TSRThroughMiddleware(t *testing.T) {
 	}
 }
 
+func TestRouter_UseAfterRoutes(t *testing.T) {
+	r := New(":0")
+	ran := false
+	r.GET("/after", func(c *Ctx) { c.String(200, "ok") })
+	r.Use(func(c *Ctx) { ran = true; c.Next() })
+
+	req := httptest.NewRequest("GET", "/after", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 200 {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	if ran {
+		t.Fatal("middleware registered after routes must not run on earlier routes")
+	}
+}
+
 func TestRouter_NoRouteCustom(t *testing.T) {
 	r := New(":0")
 	r.NoRoute(func(c *Ctx) {

@@ -48,6 +48,8 @@ type InMemorySessionStore struct {
 	mu       sync.RWMutex
 	sessions map[string]sessionEntry
 	ttl      time.Duration
+	stop     chan struct{}
+	once     sync.Once
 }
 
 // NewInMemorySessionStore creates a new in-memory session store.
@@ -55,16 +57,33 @@ func NewInMemorySessionStore(ttl time.Duration) *InMemorySessionStore {
 	store := &InMemorySessionStore{
 		sessions: make(map[string]sessionEntry),
 		ttl:      ttl,
+		stop:     make(chan struct{}),
 	}
 	if ttl > 0 {
 		go func() {
 			ticker := time.NewTicker(time.Minute)
-			for range ticker.C {
-				store.CleanupExpired()
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ticker.C:
+					store.CleanupExpired()
+				case <-store.stop:
+					return
+				}
 			}
 		}()
 	}
 	return store
+}
+
+// StopCleanup stops the background expired-session cleanup goroutine started
+// by NewInMemorySessionStore. Call it when the store is no longer needed (e.g.
+// during application shutdown or in tests) so the goroutine does not leak.
+func (s *InMemorySessionStore) StopCleanup() {
+	if s == nil {
+		return
+	}
+	s.once.Do(func() { close(s.stop) })
 }
 
 // Get retrieves a session by ID.

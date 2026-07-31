@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/Pavan-Silva/go-zen"
+	"github.com/Pavan-Silva/go-zen/internal/system"
 	"reflect"
 )
 
@@ -203,6 +204,27 @@ func TestDocHandlerFallbackWhenAssetsMissing(t *testing.T) {
 	}
 	if body := w.Body.String(); !strings.Contains(body, "fallback mode") {
 		t.Fatalf("expected fallback HTML content, got %s", body)
+	}
+}
+
+// Literal '%' characters in the embedded Swagger UI HTML must survive
+// substitution untouched (fmt.Sprintf would corrupt them).
+func TestUIHTMLLiteralPercent(t *testing.T) {
+	prevTemplate := uiTemplate
+	uiTemplate = `<html><div style="width:100%">url="%[1]s" v="%[2]s"</div></html>`
+	t.Cleanup(func() { uiTemplate = prevTemplate })
+
+	doc := New(Config{Title: "Test", Version: "1.0", SpecPath: "/spec.json"})
+	html := uiHTML(doc)
+
+	if strings.Contains(html, "%!") {
+		t.Fatalf("HTML corrupted by format-verb interpretation: %s", html)
+	}
+	if !strings.Contains(html, `url="/spec.json"`) || !strings.Contains(html, `v="`+system.Version+`"`) {
+		t.Fatalf("placeholders not substituted: %s", html)
+	}
+	if !strings.Contains(html, "width:100%") {
+		t.Fatalf("literal %% lost: %s", html)
 	}
 }
 

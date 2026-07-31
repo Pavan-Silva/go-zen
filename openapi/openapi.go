@@ -373,6 +373,7 @@ func (o *OpenAPI) buildParams(path string) []map[string]any {
 	for seg := range strings.SplitSeq(path, "/") {
 		if strings.HasPrefix(seg, "{") && strings.HasSuffix(seg, "}") {
 			name := seg[1 : len(seg)-1]
+			name = strings.TrimSuffix(name, "...")
 			params = append(params, map[string]any{
 				"name":     name,
 				"in":       "path",

@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 // Test Header binding
@@ -407,5 +408,71 @@ func TestBind_SelfReferencingStructReturnsError(t *testing.T) {
 	}
 	if !strings.Contains(w.Body.String(), "recursion depth") {
 		t.Fatalf("body = %q, want a recursion depth error", w.Body.String())
+	}
+}
+
+// Binding into a struct with an unexported struct-typed field must skip the
+// field instead of panicking on reflect.Value.Interface.
+func TestBind_UnexportedStructFieldSkipped(t *testing.T) {
+	type inner struct {
+		X int `query:"x"`
+	}
+	type outer struct {
+		state inner
+		Name  string `query:"name"`
+	}
+
+	r := New(":0")
+	r.GET("/test", func(c *Ctx) {
+		var o outer
+		if err := BindQueryParams(c, &o); err != nil {
+			c.String(http.StatusBadRequest, "bind error: "+err.Error())
+			return
+		}
+		if o.Name != "jane" {
+			c.String(http.StatusInternalServerError, "name not bound")
+			return
+		}
+		if o.state.X != 0 {
+			c.String(http.StatusInternalServerError, "unexported field must be skipped")
+			return
+		}
+		c.String(http.StatusOK, "ok")
+	})
+
+	req := httptest.NewRequest("GET", "/test?name=jane&x=5", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+}
+
+// A time.Time field must bind from a query value using the format tag.
+func TestBind_TimeWithFormat(t *testing.T) {
+	type req struct {
+		When time.Time `query:"when" format:"2006-01-02"`
+	}
+
+	r := New(":0")
+	r.GET("/test", func(c *Ctx) {
+		var q req
+		if err := BindQueryParams(c, &q); err != nil {
+			c.String(http.StatusBadRequest, "bind error: "+err.Error())
+			return
+		}
+		c.String(http.StatusOK, q.When.Format("2006-01-02"))
+	})
+
+	httpreq := httptest.NewRequest("GET", "/test?when=2024-03-15", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httpreq)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	if w.Body.String() != "2024-03-15" {
+		t.Fatalf("body = %q, want %q", w.Body.String(), "2024-03-15")
 	}
 }

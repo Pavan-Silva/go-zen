@@ -689,6 +689,7 @@ func TestInMemorySessionStore(t *testing.T) {
 
 func TestInMemorySessionStore_Expiration(t *testing.T) {
 	store := NewInMemorySessionStore(50 * time.Millisecond)
+	defer store.StopCleanup()
 	user := &User{ID: "1", Username: "john"}
 
 	store.Set("sess1", user)
@@ -711,6 +712,7 @@ func TestInMemorySessionStore_Expiration(t *testing.T) {
 
 func TestInMemorySessionStore_CleanupExpired(t *testing.T) {
 	store := NewInMemorySessionStore(50 * time.Millisecond)
+	defer store.StopCleanup()
 
 	store.Set("sess1", &User{ID: "1"})
 	store.Set("sess2", &User{ID: "2"})

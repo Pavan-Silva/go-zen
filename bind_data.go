@@ -84,6 +84,13 @@ func bindDataValue(typ reflect.Type, val reflect.Value, data map[string][]string
 		sf := typ.Field(i)
 		structField := val.Field(i)
 
+		// Unexported fields cannot be set and reflect.Value.Interface panics
+		// when called on them (e.g. the unmarshaler checks below), so they
+		// must be skipped before any access.
+		if sf.PkgPath != "" {
+			continue
+		}
+
 		explicitTag := sf.Tag.Get(tag)
 		jsonName := jsonTagName(sf.Tag)
 		formatTag := sf.Tag.Get("format")

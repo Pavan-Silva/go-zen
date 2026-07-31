@@ -17,13 +17,6 @@ type CORSConfig struct {
 	ExposeHeaders    []string // Headers exposed to the client in the response.
 	AllowCredentials bool     // Whether to allow credentials (cookies, auth headers).
 	MaxAge           int      // Seconds the preflight result can be cached.
-
-	allowedOriginsMap map[string]struct{}
-	allowedMethodsStr string
-	allowedHeadersStr string
-	exposeHeadersStr  string
-	maxAgeStr         string
-	allowAll          bool
 }
 
 // DefaultCORSConfig returns a CORSConfig with secure defaults.
@@ -86,14 +79,16 @@ func CORS(config CORSConfig) zen.HandlerFunc {
 			if config.AllowCredentials {
 				// When AllowCredentials is set, echo back the origin instead of using "*".
 				respHeaders["Access-Control-Allow-Origin"] = []string{origin}
-				respHeaders["Vary"] = []string{"Origin"}
+				respHeaders.Add("Vary", "Origin")
 			} else {
 				respHeaders["Access-Control-Allow-Origin"] = []string{"*"}
 			}
 		} else {
 			respHeaders["Access-Control-Allow-Origin"] = []string{origin}
-			// Vary header for CDN caching.
-			respHeaders["Vary"] = []string{"Origin"}
+			// Vary header for CDN caching. Append so pre-existing Vary
+			// values (e.g. Accept-Encoding from the compress middleware)
+			// are preserved.
+			respHeaders.Add("Vary", "Origin")
 		}
 
 		// Set optional CORS headers.

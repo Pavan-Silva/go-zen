@@ -58,7 +58,11 @@ func uiHTML(o *OpenAPI) string {
 		return fmt.Sprintf(fallbackUIHTML, o.cfg.SpecPath, o.cfg.SpecPath, system.Version)
 	}
 
-	html := fmt.Sprintf(uiTemplate, o.cfg.SpecPath, system.Version)
+	// The embedded Swagger UI HTML may contain literal '%' characters (CSS,
+	// JS), so positional format verbs must be substituted with strings.Replace
+	// instead of fmt.Sprintf, which would corrupt them.
+	html := strings.Replace(uiTemplate, "%[1]s", o.cfg.SpecPath, 1)
+	html = strings.Replace(html, "%[2]s", system.Version, 1)
 
 	if extraOpts := swaggerUIOptionsString(o.cfg.SwaggerUIOptions); extraOpts != "" {
 		html = strings.Replace(html, "// swagger-ui-extra-options", extraOpts, 1)

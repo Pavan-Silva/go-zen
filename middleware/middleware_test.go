@@ -151,6 +151,29 @@ func TestCORS_NoCredentials_UsesWildcard(t *testing.T) {
 	}
 }
 
+// CORS must append to an existing Vary header, not overwrite it.
+func TestCORS_VaryPreserved(t *testing.T) {
+	cfg := DefaultCORSConfig()
+	cfg.AllowedOrigins = []string{"https://example.com"}
+
+	r := zen.New(":0")
+	r.Use(CORS(cfg))
+	r.GET("/api", func(c *zen.Ctx) {
+		c.Response.Header().Add("Vary", "X-Custom")
+		c.String(200, "ok")
+	})
+
+	req := httptest.NewRequest("GET", "/api", nil)
+	req.Header.Set("Origin", "https://example.com")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	vals := w.Header().Values("Vary")
+	if !slices.Contains(vals, "Origin") || !slices.Contains(vals, "X-Custom") {
+		t.Fatalf("Vary = %v, want both Origin and X-Custom", vals)
+	}
+}
+
 func TestBodyLimit_String(t *testing.T) {
 	r := zen.New(":0")
 	r.Use(BodyLimit("1K"))
@@ -458,6 +481,27 @@ func TestCompress_VaryAppend(t *testing.T) {
 	vals := w.Header().Values("Vary")
 	if !slices.Contains(vals, "Origin") || !slices.Contains(vals, "Accept-Encoding") {
 		t.Fatalf("Vary = %v, want both Origin and Accept-Encoding", vals)
+	}
+}
+
+// A handler that only sets a status without a body (e.g. 204/304) must not be
+// rewritten to 200 by the deferred compression flush.
+func TestCompress_StatusOnly(t *testing.T) {
+	for _, status := range []int{204, 304} {
+		r := zen.New(":0")
+		r.Use(Compress())
+		r.GET("/status", func(c *zen.Ctx) {
+			c.Status(status)
+		})
+
+		req := httptest.NewRequest("GET", "/status", nil)
+		req.Header.Set("Accept-Encoding", "gzip")
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+
+		if w.Code != status {
+			t.Fatalf("status = %d, want %d", w.Code, status)
+		}
 	}
 }
 
