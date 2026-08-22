@@ -35,7 +35,7 @@ func LoadTemplates(fsys fs.FS, pattern string) (*Templates, error) {
 // Render executes a named template and writes the result to the response.
 // Sets Content-Type to "text/html; charset=utf-8".
 //
-// Write errors are logged but not returned (they indicate connection issues).
+// Execution errors are logged but not returned.
 //
 // Example:
 //

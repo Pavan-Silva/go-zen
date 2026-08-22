@@ -9,7 +9,7 @@ import (
 // Override at build time with: -ldflags "-X github.com/Pavan-Silva/go-zen/internal/system.Version=v1.4.0"
 var Version = "1.4.0"
 
-// Banner prints a minimal startup banner.
+// Banner returns the startup banner string for the given listen address.
 func Banner(addr string) string {
 	orange, dim, reset := "\033[38;2;206;145;120m", "\033[2m", "\033[0m"
 

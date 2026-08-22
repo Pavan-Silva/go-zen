@@ -3,6 +3,7 @@ package auth
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"strings"
 	"time"
@@ -52,15 +53,16 @@ func (j *JWTAuth) Authenticate(r *http.Request) (*User, error) {
 	return nil, errors.New("invalid token")
 }
 
-// GenerateJWT creates a JWT token with the given claims.
+// GenerateJWT creates a signed JWT containing the given claims. The caller's
+// map is not modified; iat and exp are derived from expiry on the copy,
+// overwriting any same-named claims passed in.
 func GenerateJWT(secret []byte, method jwt.SigningMethod, claims jwt.MapClaims, expiry time.Duration) (string, error) {
 	now := time.Now()
 
 	// Copy claims to avoid modifying the caller's map
 	claimsCopy := make(jwt.MapClaims, len(claims)+2)
-	for k, v := range claims {
-		claimsCopy[k] = v
-	}
+	maps.Copy(claimsCopy, claims)
+
 	claimsCopy["iat"] = now.Unix()
 	claimsCopy["exp"] = now.Add(expiry).Unix()
 

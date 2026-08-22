@@ -10,7 +10,7 @@ import (
 
 // setWithProperType sets structField to the parsed value of val based on
 // valueKind. It handles all Go primitive kinds (int*, uint*, float*, bool,
-// string), pointer fields (auto-initialised before recursive descent), and
+// string), pointer fields (auto-initialized before recursive descent), and
 // returns an error for unknown kinds.
 func setWithProperType(valueKind reflect.Kind, val string, structField reflect.Value) error {
 	switch valueKind {
@@ -54,9 +54,9 @@ func setWithProperType(valueKind reflect.Kind, val string, structField reflect.V
 }
 
 // unmarshalInputsToField checks whether field implements
-// bindMultipleUnmarshaler and, if so, calls UnmarshalParams with the entire
+// BindMultipleUnmarshaler and, if so, calls UnmarshalParams with the entire
 // values slice. It returns (true, err) when the interface was implemented
-// and (false, nil) when it was not. Pointer fields are auto-initialised
+// and (false, nil) when it was not. Pointer fields are auto-initialized
 // before the interface check.
 func unmarshalInputsToField(valueKind reflect.Kind, values []string, field reflect.Value) (bool, error) {
 	if valueKind == reflect.Pointer {
@@ -79,7 +79,7 @@ func unmarshalInputsToField(valueKind reflect.Kind, values []string, field refle
 // When formatTag is set and the field is time.Time the value is parsed with
 // time.Parse using that format. It returns (true, result) when a custom
 // unmarshaler was used and (false, nil) when the field should fall through
-// to the primitive setter. Pointer fields are auto-initialised before the
+// to the primitive setter. Pointer fields are auto-initialized before the
 // interface check.
 func unmarshalInputToField(valueKind reflect.Kind, val string, field reflect.Value, formatTag string) (bool, error) {
 	if valueKind == reflect.Pointer {

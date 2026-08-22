@@ -12,7 +12,8 @@ import (
 
 // ErrOIDCKeyFuncNotConfigured is returned when SkipTokenVerification is false
 // but no KeyFunc has been configured to verify access token signatures.
-var ErrOIDCKeyFuncNotConfigured = errors.New("oidc: SkipTokenVerification is false but no KeyFunc is configured; set SkipTokenVerification=true to use opaque tokens or provide KeyFunc")
+var ErrOIDCKeyFuncNotConfigured = errors.New("oidc: SkipTokenVerification is false but no KeyFunc is configured; " +
+	"set SkipTokenVerification=true to use opaque tokens or provide KeyFunc")
 
 // OIDCUserInfo represents the user information returned by the userinfo endpoint.
 type OIDCUserInfo struct {
@@ -31,11 +32,11 @@ type OIDCUserInfo struct {
 type OIDCAuth struct {
 	Issuer                string                           // OIDC issuer URL.
 	ClientID              string                           // Client ID for the application.
-	UserInfoEndpoint      string                           // URL of the userinfo endpoint (defaults to issuer + "/oauth2/v2/userinfo").
+	UserInfoEndpoint      string                           // Userinfo endpoint (default issuer + "/oauth2/v2/userinfo").
 	HTTPClient            *http.Client                     // HTTP client for userinfo requests.
 	ClaimsFunc            func(claims jwt.MapClaims) *User // Optional function to map JWT claims to a User struct.
-	SkipTokenVerification bool                             // When true, skips JWT signature verification of the access token.
-	KeyFunc               jwt.Keyfunc                      // Verification key for access token signatures. Required when SkipTokenVerification is false.
+	SkipTokenVerification bool                             // True to skip JWT signature verification of the access token.
+	KeyFunc               jwt.Keyfunc                      // Verification key; required if SkipTokenVerification is false.
 }
 
 // Authenticate validates the access token by calling the userinfo endpoint.
@@ -89,7 +90,12 @@ func (o *OIDCAuth) Authenticate(r *http.Request) (*User, error) {
 }
 
 // getUserInfo calls the OIDC userinfo endpoint with the access token.
-func (o *OIDCAuth) getUserInfo(ctx context.Context, client *http.Client, token, endpoint string) (info *OIDCUserInfo, err error) {
+func (o *OIDCAuth) getUserInfo(
+	ctx context.Context,
+	client *http.Client,
+	token string,
+	endpoint string,
+) (info *OIDCUserInfo, err error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", endpoint, nil)
 	if err != nil {
 		return nil, err

@@ -270,7 +270,9 @@ func TestRadix_MethodNotAllowed(t *testing.T) {
 	if res.allowedMethod == "" {
 		t.Errorf("expected allowed methods, got empty")
 	}
-	if res.allowedMethod != "DELETE, GET, POST" && res.allowedMethod != "DELETE, POST, GET" && res.allowedMethod != "GET, POST, DELETE" {
+	if res.allowedMethod != "DELETE, GET, POST" &&
+		res.allowedMethod != "DELETE, POST, GET" &&
+		res.allowedMethod != "GET, POST, DELETE" {
 		t.Errorf("expected allowed methods to contain GET, POST, DELETE, got %q", res.allowedMethod)
 	}
 

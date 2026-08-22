@@ -16,60 +16,95 @@ import (
 // overflow.
 const maxBindDepth = 64
 
-func bindData(destination any, data map[string][]string, tag string, dataFiles map[string][]*multipart.FileHeader) error {
+// bindData maps raw input values onto destination, matching struct fields
+// (or map keys) by the given tag, falling back to the json tag and then the
+// Go field name. data holds text values keyed by input name; dataFiles holds
+// uploaded multipart files and may be nil. destination must be a non-nil
+// pointer to a struct or a string-keyed map, otherwise ErrInvalidBindTarget
+// is returned. When both maps are empty, destination is left unchanged.
+func bindData(
+	destination any,
+	data map[string][]string,
+	tag string,
+	dataFiles map[string][]*multipart.FileHeader,
+) error {
 	if destination == nil {
 		return ErrInvalidBindTarget
 	}
+
 	v := reflect.ValueOf(destination)
 	if v.Kind() != reflect.Pointer || v.IsNil() {
 		return ErrInvalidBindTarget
 	}
+
 	typ := v.Type().Elem()
 	if typ.Kind() != reflect.Struct && typ.Kind() != reflect.Map {
 		return ErrInvalidBindTarget
 	}
+
 	if len(data) == 0 && len(dataFiles) == 0 {
 		return nil
 	}
+
 	return bindDataValue(typ, v.Elem(), data, tag, dataFiles, 0)
 }
 
-func bindDataValue(typ reflect.Type, val reflect.Value, data map[string][]string, tag string, dataFiles map[string][]*multipart.FileHeader, depth int) error {
+// bindDataValue recursively binds data and dataFiles into val (of type typ),
+// supporting structs, anonymous and nested structs, slices, and string-keyed
+// maps. depth guards recursion into self-referencing types: past maxBindDepth
+// binding fails with an error reporting a likely circular reference.
+func bindDataValue(
+	typ reflect.Type,
+	val reflect.Value,
+	data map[string][]string,
+	tag string,
+	dataFiles map[string][]*multipart.FileHeader,
+	depth int,
+) error {
 	if depth > maxBindDepth {
 		return fmt.Errorf("binding exceeded maximum recursion depth of %d (circular reference?)", maxBindDepth)
 	}
+
 	hasFiles := len(dataFiles) > 0
 
 	if typ.Kind() == reflect.Map {
 		if typ.Key().Kind() != reflect.String {
 			return fmt.Errorf("unsupported map key type %s (must be string)", typ.Key().String())
 		}
+
 		elemKind := typ.Elem().Kind()
 		switch elemKind {
 		case reflect.String:
 			if val.IsNil() {
 				val.Set(reflect.MakeMap(typ))
 			}
+
 			for k, v := range data {
 				val.SetMapIndex(reflect.ValueOf(k), reflect.ValueOf(strings.Join(v, ",")))
 			}
+
 		case reflect.Interface:
 			if val.IsNil() {
 				val.Set(reflect.MakeMap(typ))
 			}
+
 			for k, v := range data {
 				val.SetMapIndex(reflect.ValueOf(k), reflect.ValueOf(strings.Join(v, ",")))
 			}
+
 		case reflect.Slice:
 			if typ.Elem().Elem().Kind() != reflect.String {
 				return fmt.Errorf("unsupported map slice element type %s", typ.Elem().Elem().String())
 			}
+
 			if val.IsNil() {
 				val.Set(reflect.MakeMap(typ))
 			}
+
 			for k, v := range data {
 				val.SetMapIndex(reflect.ValueOf(k), reflect.ValueOf(v))
 			}
+
 		default:
 			return fmt.Errorf("unsupported map value type %s", typ.Elem().String())
 		}
@@ -97,6 +132,7 @@ func bindDataValue(typ reflect.Type, val reflect.Value, data map[string][]string
 
 		var inputFieldName string
 		var hasBindingName bool
+
 		if explicitTag != "" {
 			inputFieldName = explicitTag
 			hasBindingName = true
@@ -124,6 +160,7 @@ func bindDataValue(typ reflect.Type, val reflect.Value, data map[string][]string
 				}
 				structField = structField.Elem()
 			}
+
 			if structField.CanSet() {
 				if _, ok := structField.Addr().Interface().(BindUnmarshaler); ok {
 					continue
@@ -151,6 +188,7 @@ func bindDataValue(typ reflect.Type, val reflect.Value, data map[string][]string
 					hasUnmarshaler = true
 				}
 			}
+
 			if _, ok := structField.Interface().(encoding.TextUnmarshaler); ok {
 				hasUnmarshaler = true
 			} else if structField.CanAddr() {
@@ -171,6 +209,7 @@ func bindDataValue(typ reflect.Type, val reflect.Value, data map[string][]string
 					}
 					tempField = tempField.Elem()
 				}
+
 				if tempField.CanSet() {
 					if err := bindDataValue(tempField.Type(), tempField, data, tag, dataFiles, depth+1); err != nil {
 						return err
@@ -251,15 +290,18 @@ func bindDataValue(typ reflect.Type, val reflect.Value, data map[string][]string
 			slice := reflect.MakeSlice(structField.Type(), numElems, numElems)
 			elemType := structField.Type().Elem()
 			elemKind := elemType.Kind()
+
 			for j := range numElems {
 				elemVal := slice.Index(j)
 				ok, err := unmarshalInputToField(elemKind, inputValue[j], elemVal, formatTag)
+
 				if ok {
 					if err != nil {
 						return fmt.Errorf("%s: %w", inputFieldName, err)
 					}
 					continue
 				}
+
 				if err := setWithProperType(elemKind, inputValue[j], elemVal); err != nil {
 					return fmt.Errorf("%s: %w", inputFieldName, err)
 				}
@@ -273,10 +315,13 @@ func bindDataValue(typ reflect.Type, val reflect.Value, data map[string][]string
 			if mt.Key().Kind() != reflect.String {
 				return fmt.Errorf("unsupported map key type %s (must be string)", mt.Key().String())
 			}
+
 			if structField.IsNil() {
 				structField.Set(reflect.MakeMap(mt))
 			}
+
 			elemKind := mt.Elem().Kind()
+
 			switch elemKind {
 			case reflect.String:
 				structField.SetMapIndex(reflect.ValueOf(inputFieldName), reflect.ValueOf(strings.Join(inputValue, ",")))
@@ -308,8 +353,10 @@ func jsonTagName(tag reflect.StructTag) string {
 	if name == "" || name == "-" {
 		return ""
 	}
+
 	if idx := strings.IndexByte(name, ','); idx != -1 {
 		name = name[:idx]
 	}
+
 	return name
 }

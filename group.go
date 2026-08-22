@@ -140,6 +140,7 @@ func ensureLeadingSlash(prefix string) string {
 	if prefix == "" {
 		return "/"
 	}
+
 	prefix = strings.TrimSuffix(prefix, "/")
 	if prefix[0] != '/' {
 		return "/" + prefix

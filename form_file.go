@@ -17,6 +17,7 @@ func (c *Ctx) parseMultipartForm() error {
 		if maxMemory <= 0 {
 			maxMemory = defaultMultipartMemory
 		}
+
 		if err := c.Request.ParseMultipartForm(maxMemory); err != nil {
 			return fmt.Errorf("http: ParseMultipartForm error: %w", err)
 		}

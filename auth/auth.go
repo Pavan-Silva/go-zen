@@ -1,4 +1,4 @@
-// Package auth provides authentication and authorization middleware (JWT, OAuth2, OIDC, Basic, RBAC, ABAC, PBAC, session).
+// Package auth provides authentication/authorization middleware (JWT, OAuth2, OIDC, Basic, RBAC, ABAC, PBAC, session).
 package auth
 
 import (

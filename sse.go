@@ -88,7 +88,8 @@ func (c *Ctx) writeSSEData(w http.ResponseWriter, data any) error {
 		if _, err := w.Write(prefixData); err != nil {
 			return err
 		}
-		// Use configured serializer path or standard marshal
+		// Standard-library encoding; the configured JSONSerializer is
+		// intentionally not used on the SSE hot path.
 		b, err := json.Marshal(value)
 		if err != nil {
 			return err

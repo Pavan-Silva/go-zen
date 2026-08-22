@@ -27,10 +27,10 @@ type OAuth2TokenInfo struct {
 // OAuth2Auth implements OAuth2 token introspection authentication.
 type OAuth2Auth struct {
 	TokenIntrospectionEndpoint string                           // URL of the OAuth2 token introspection endpoint.
-	ClientID                   string                           // Client ID for authenticating to the introspection endpoint.
-	ClientSecret               string                           // Client secret for authenticating to the introspection endpoint.
+	ClientID                   string                           // Client ID for the introspection endpoint.
+	ClientSecret               string                           // Client secret for token introspection.
 	HTTPClient                 *http.Client                     // HTTP client used for introspection requests.
-	ClaimsFunc                 func(claims jwt.MapClaims) *User // Optional function to convert JWT claims to a User struct.
+	ClaimsFunc                 func(claims jwt.MapClaims) *User // Optional function mapping JWT claims to a User.
 }
 
 // Authenticate validates the access token using OAuth2 token introspection.
@@ -73,12 +73,11 @@ func (o *OAuth2Auth) Authenticate(r *http.Request) (*User, error) {
 		"iat":        tokenInfo.IssuedAt,
 	}
 
-	// If a custom claims function isn't provided, build the pointer object inline
 	if o.ClaimsFunc != nil {
 		return o.ClaimsFunc(claims), nil
 	}
 
-	// Allocation-free setup straight to heap pointer bounds
+	// Build the user from the introspection result.
 	user := &User{
 		ID:       tokenInfo.Subject,
 		Username: tokenInfo.Username,
@@ -97,7 +96,11 @@ func (o *OAuth2Auth) Authenticate(r *http.Request) (*User, error) {
 }
 
 // introspectToken calls the OAuth2 token introspection endpoint.
-func (o *OAuth2Auth) introspectToken(ctx context.Context, client *http.Client, token string) (info *OAuth2TokenInfo, err error) {
+func (o *OAuth2Auth) introspectToken(
+	ctx context.Context,
+	client *http.Client,
+	token string,
+) (info *OAuth2TokenInfo, err error) {
 	data := url.Values{}
 	data.Set("token", token)
 	data.Set("token_type_hint", "access_token")

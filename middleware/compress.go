@@ -131,10 +131,9 @@ func (w *compressResponseWriter) Write(b []byte) (int, error) {
 		return w.bodyBuffer.Write(b)
 	}
 
-	// Case 4: Payload crossed the threshold. Initialize gzip streaming immediately.
-	// We pass a dummy pointer here since Write doesn't have access to the closure's pool.
-	// Instead, we initialize a standalone writer if it escapes during an active write loop,
-	// ensuring optimal stream continuity.
+	// Case 4: Payload crossed the threshold. Switch to gzip streaming via
+	// the pooled writer stored on w.gzipPool; any bytes buffered so far are
+	// flushed into the stream first.
 	w.initGzipStream()
 	return w.gz.Write(b)
 }
@@ -155,7 +154,9 @@ func (w *compressResponseWriter) initGzipStream() {
 	}
 }
 
-// FIXED: Adjusted signature to accept `*sync.Pool` pointer reference to satisfy go vet analysis
+// writeFinal flushes buffered output at the end of the response, emitting
+// remaining bytes raw when streaming was never activated and closing the
+// gzip stream otherwise. pool is the pool the writer must be returned to.
 func (w *compressResponseWriter) writeFinal(pool *sync.Pool) {
 	w.wroteHeader = true
 

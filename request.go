@@ -23,7 +23,7 @@ func (c *Ctx) queryParams() url.Values {
 // Example:
 //
 //	page := c.QueryParam("page")      // GET /posts?page=2 -> "2"
-//	search := c.QueryParam("q")       // GET /posts?q=golang-> "golang"
+//	search := c.QueryParam("q")       // GET /posts?q=golang -> "golang"
 func (c *Ctx) QueryParam(key string) string {
 	return c.queryParams().Get(key)
 }
@@ -93,9 +93,11 @@ func (c *Ctx) ClientIP() string {
 		}
 		return strings.TrimSpace(fwd)
 	}
+
 	if realIP := c.Header("X-Real-IP"); realIP != "" {
 		return strings.TrimSpace(realIP)
 	}
+
 	host, _, err := net.SplitHostPort(c.Request.RemoteAddr)
 	if err != nil {
 		return c.Request.RemoteAddr

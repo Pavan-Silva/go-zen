@@ -74,9 +74,11 @@ type node struct {
 	path string
 
 	// indices is a compact lookup string where each byte is the first
-	// character of a static child's path, aligned with the children slice
-	// by position. Wildcard children are not indexed here; they are always
-	// the last entry in children and tracked via wildChild.
+	// character of a child's path, aligned with the children slice by
+	// position. Param wildcards are not indexed here; they are always the
+	// last entry in children and tracked via wildChild. Catch-all routes
+	// insert an empty-path intermediate node indexed as "/", so catchAll
+	// children may appear here too.
 	indices string
 
 	// children holds the child nodes of this node. Static children are
@@ -96,13 +98,15 @@ type node struct {
 	// nType classifies this node as static, root, param, or catchAll.
 	nType nodeType
 
-	// wildChild is true when the last entry in children is a wildcard node
-	// (param or catchAll). This avoids scanning indices for wildcards
-	// since they are always positioned at the end.
+	// wildChild is true when the last entry in children is a named-param
+	// wildcard (:param). This avoids scanning indices for the wildcard
+	// since it is always positioned at the end. Catch-all intermediates
+	// are reachable via indices and do not set this flag.
 	wildChild bool
 
-	// fullPath is the complete registered route path that terminates at
-	// this node. Only set for nodes with handlers; empty otherwise.
+	// fullPath is the complete registered route path this node was created
+	// for, including structural split points and wildcard intermediates. It
+	// may therefore be non-empty even when handlers is nil.
 	fullPath string
 }
 
@@ -377,8 +381,9 @@ func (n *node) insertChild(path string, fullPath string, handlers []HandlerFunc)
 		}
 
 		// Split at the slash before the catch-all and insert a two-level
-		// catch-all node structure: an intermediate parent with indices="/"
-		// and a leaf holding the catch-all path and handlers.
+		// catch-all node structure: an intermediate catchAll parent (empty
+		// path) plus a leaf holding the catch-all path and handlers. The
+		// existing parent (cur) receives indices="/" to reach it.
 		cur.path = path[:i]
 
 		child := &node{
@@ -457,7 +462,12 @@ func appendParamValue(value *nodeValue, ps *params, count int16, key, rawVal str
 // ends with the unmatched remainder is found. Collected parameters are
 // truncated back to the saved count, the parameter counter is restored, and
 // the node plus restored path to resume traversal from are returned.
-func backtrack(skippedNodes *[]skippedNode, path string, value *nodeValue, globalParamsCount *int16) (*node, string, bool) {
+func backtrack(
+	skippedNodes *[]skippedNode,
+	path string,
+	value *nodeValue,
+	globalParamsCount *int16,
+) (*node, string, bool) {
 	for length := len(*skippedNodes); length > 0; length-- {
 		skipped := (*skippedNodes)[length-1]
 		*skippedNodes = (*skippedNodes)[:length-1]
@@ -641,7 +651,8 @@ walk:
 			return value
 		}
 
-		// Prefix mismatch — check TSR (e.g. path "/user" vs prefix "/users/").
+		// Prefix mismatch — check TSR (e.g. route registered "/user/",
+		// request "/user": prefix "/user/" vs path "/user").
 		value.tsr = path == "/" ||
 			(len(prefix) == len(path)+1 && prefix[len(path)] == '/' &&
 				path == prefix[:len(prefix)-1] && cur.handlers != nil)

@@ -150,6 +150,10 @@ func BindBody(c *Ctx, dest any) error {
 	return nil
 }
 
+// bindBody binds the request body to dest according to the request's
+// Content-Type: JSON (including +json suffixes), XML (including +xml), an
+// url-encoded form, or a multipart form. An absent Content-Type is a no-op;
+// an unsupported type returns an error.
 func bindBody(c *Ctx, dest any) error {
 	var err error
 	req := c.Request

@@ -5,6 +5,7 @@ import (
 	"os"
 )
 
+// DefaultWriter is the destination for zen's internal error and debug logs.
 var DefaultWriter = os.Stderr
 
 var logger = log.New(DefaultWriter, "[zen] ", log.LstdFlags)

@@ -243,12 +243,15 @@ func TestBind_MapUnsupportedValueType(t *testing.T) {
 // 5. Test pluggable XML serializer
 type CustomXMLSerializer struct{}
 
-func (CustomXMLSerializer) Serialize(c *Ctx, v any) error {
-	c.Response.Write([]byte("<custom>serialized</custom>"))
+func (CustomXMLSerializer) Serialize(c *Ctx, _ any) error {
+	_, err := c.Response.Write([]byte("<custom>serialized</custom>"))
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
-func (CustomXMLSerializer) Deserialize(c *Ctx, v any) error {
+func (CustomXMLSerializer) Deserialize(_ *Ctx, v any) error {
 	destStruct := v.(*struct {
 		Val string `xml:"val"`
 	})
@@ -302,7 +305,12 @@ func TestFormFile_MaxMultipartMemory(t *testing.T) {
 		c.String(http.StatusOK, "ok")
 	})
 
-	body := "--boundary\r\nContent-Disposition: form-data; name=\"file\"; filename=\"a.txt\"\r\nContent-Type: text/plain\r\n\r\nhello\r\n--boundary--"
+	body := "--boundary\r\n" +
+		"Content-Disposition: form-data; name=\"file\"; filename=\"a.txt\"\r\n" +
+		"Content-Type: text/plain\r\n" +
+		"\r\n" +
+		"hello\r\n" +
+		"--boundary--"
 	req := httptest.NewRequest("POST", "/upload", strings.NewReader(body))
 	req.Header.Set("Content-Type", "multipart/form-data; boundary=boundary")
 	w := httptest.NewRecorder()
@@ -345,7 +353,9 @@ func TestBind_RecursiveAndPointerStructs(t *testing.T) {
 		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
 	}
 	actual := w.Body.String()
-	if !strings.Contains(actual, `"City":"Paris"`) || !strings.Contains(actual, `"Age":30`) || !strings.Contains(actual, `"Name":"Alice"`) {
+	if !strings.Contains(actual, `"City":"Paris"`) ||
+		!strings.Contains(actual, `"Age":30`) ||
+		!strings.Contains(actual, `"Name":"Alice"`) {
 		t.Fatalf("unexpected recursive bind result: %s", actual)
 	}
 }

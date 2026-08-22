@@ -9,18 +9,23 @@ import (
 // BindForm binds form data from the request body to dest. It parses the
 // request body as application/x-www-form-urlencoded (or multipart form data
 // that was already parsed) and maps values onto struct fields tagged with
-// the "form" struct tag.
+// the "form" struct tag. Because it relies on ParseForm, URL query
+// parameters are bound as well; body values take precedence for POST, PUT,
+// and PATCH requests.
 func (c *Ctx) BindForm(dest any) error {
 	params, err := formValues(c.Request)
 	if err != nil {
 		return err
 	}
+
 	if err := bindData(dest, params, "form", nil); err != nil {
 		return err
 	}
+
 	if c.engine.autoValidate && c.engine.validator != nil {
 		return c.engine.validator.Validate(dest)
 	}
+
 	return nil
 }
 
@@ -31,6 +36,7 @@ func formValues(req *http.Request) (map[string][]string, error) {
 	if err := req.ParseForm(); err != nil {
 		return nil, fmt.Errorf("http: ParseForm error: %w", err)
 	}
+
 	m := make(map[string][]string, len(req.Form))
 	maps.Copy(m, req.Form)
 	return m, nil

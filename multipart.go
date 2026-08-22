@@ -54,10 +54,15 @@ func isFieldMultipartFile(field reflect.Type) (bool, error) {
 
 // setMultipartFileHeaderTypes populates structField with file headers from
 // files that match inputFieldName. It returns true when the field was
-// populated and false when no matching files were found. Supported target
-// types are *multipart.FileHeader, []multipart.FileHeader, and
+// populated and false when no matching files were found, the target type is
+// unsupported, or the first matched header is nil. Supported target types
+// are *multipart.FileHeader, []multipart.FileHeader, and
 // []*multipart.FileHeader.
-func setMultipartFileHeaderTypes(structField reflect.Value, inputFieldName string, files map[string][]*multipart.FileHeader) bool {
+func setMultipartFileHeaderTypes(
+	structField reflect.Value,
+	inputFieldName string,
+	files map[string][]*multipart.FileHeader,
+) bool {
 	fileHeaders := files[inputFieldName]
 	if len(fileHeaders) == 0 {
 		return false

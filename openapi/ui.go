@@ -21,7 +21,8 @@ const fallbackUIHTML = `<!doctype html>
 </head>
 <body>
   <h1>OpenAPI Documentation</h1>
-  <p>The embedded Swagger UI assets are unavailable, so the documentation page is running in a minimal fallback mode.</p>
+  <p>The embedded Swagger UI assets are unavailable, so the documentation page
+  is running in a minimal fallback mode.</p>
   <p>OpenAPI spec: <a href="%s">%s</a></p>
   <p>go-zen version %s</p>
 </body>
@@ -74,7 +75,7 @@ func uiHTML(o *OpenAPI) string {
 }
 
 // swaggerUIOptionsString serializes a map of SwaggerUI init options into
-// indented JavaScript object-literal lines. Each value is marshalled as a
+// indented JavaScript object-literal lines. Each value is marshaled as a
 // JSON literal so that strings, booleans, numbers, arrays, and nested objects
 // are all represented correctly. Returns empty string when the map is empty.
 func swaggerUIOptionsString(opts map[string]any) string {
