@@ -14,6 +14,7 @@ All notable changes to this project are documented in this file.
 ### Maintenance
 
 - auth: RBAC, ABAC, and PBAC middlewares now share a single `authorize` helper instead of repeating the user lookup / 403 boilerplate
+- router: radix tree internals refactored — traversal no longer reassigns method receivers (explicit local cursors), the triplicated backtracking loop extracted into `backtrack`, and the duplicated param-append block into `appendParamValue`; no behavior change
 
 ## v1.4.0
 
