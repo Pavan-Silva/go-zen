@@ -15,7 +15,7 @@ type testAuth struct {
 	err  error
 }
 
-func (a *testAuth) Authenticate(r *http.Request) (*User, error) {
+func (a *testAuth) Authenticate(_ *http.Request) (*User, error) {
 	return a.user, a.err
 }
 
@@ -801,33 +801,13 @@ func TestDefaultUserMapper_AuthoritiesRoles(t *testing.T) {
 	}
 }
 
-func TestWithAuth(t *testing.T) {
-	auth := &testAuth{user: &User{ID: "1"}}
-
-	var handlerCalled bool
-	handler := WithAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		handlerCalled = true
-	}), auth)
-
-	req := httptest.NewRequest("GET", "/", nil)
-	w := httptest.NewRecorder()
-	handler.ServeHTTP(w, req)
-
-	if !handlerCalled {
-		t.Fatal("handler not called")
-	}
-	if w.Code != 200 {
-		t.Fatalf("status = %d, want 200", w.Code)
-	}
-}
-
-func TestWithAuth_Failure(t *testing.T) {
+func TestWithAuthFunc_Failure(t *testing.T) {
 	auth := &testAuth{err: errUnauth}
 
 	var handlerCalled bool
-	handler := WithAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := WithAuthFunc(func(w http.ResponseWriter, r *http.Request, user *User) {
 		handlerCalled = true
-	}), auth)
+	}, auth)
 
 	req := httptest.NewRequest("GET", "/", nil)
 	w := httptest.NewRecorder()
@@ -855,25 +835,6 @@ func TestWithAuthFunc(t *testing.T) {
 
 	if capturedUser.Username != "john" {
 		t.Fatalf("username = %q, want %q", capturedUser.Username, "john")
-	}
-}
-
-func TestMiddleware_Deprecated(t *testing.T) {
-	r := zen.New(":0")
-	r.Use(Middleware(&testAuth{
-		user: &User{ID: "1"},
-	}, nil))
-
-	r.GET("/test", func(c *zen.Ctx) {
-		c.String(200, "ok")
-	})
-
-	req := httptest.NewRequest("GET", "/test", nil)
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != 200 {
-		t.Fatalf("status = %d, want 200", w.Code)
 	}
 }
 

@@ -55,44 +55,25 @@ func TestContext_Reset(t *testing.T) {
 	}
 }
 
-func TestFromContext_NoCtxValue(t *testing.T) {
-	ctx := context.Background()
-	if c, ok := FromContext(ctx); ok {
-		t.Fatal("FromContext with no value should return false")
+func TestFromRequest_WrongType(t *testing.T) {
+	r := httptest.NewRequest("GET", "/", nil)
+	req := r.WithContext(context.WithValue(r.Context(), zenCtxKey{}, "not a *Ctx"))
+	if c, ok := FromRequest(req); ok {
+		t.Fatal("FromRequest with wrong type should return false")
 	} else if c != nil {
-		t.Fatal("FromContext with no value should return nil")
+		t.Fatal("FromRequest with wrong type should return nil")
 	}
 }
 
-func TestFromContext_WrongType(t *testing.T) {
-	ctx := context.WithValue(context.Background(), zenCtxKey{}, "not a *Ctx")
-	if c, ok := FromContext(ctx); ok {
-		t.Fatal("FromContext with wrong type should return false")
-	} else if c != nil {
-		t.Fatal("FromContext with wrong type should return nil")
-	}
-}
-
-func TestFromContext_Valid(t *testing.T) {
-	expected := &Ctx{}
-	ctx := context.WithValue(context.Background(), zenCtxKey{}, expected)
-	got, ok := FromContext(ctx)
-	if !ok {
-		t.Fatal("FromContext should return true")
-	}
-	if got != expected {
-		t.Fatal("FromContext should return the stored ctx")
-	}
-}
-
-func TestFromContext_RoundTrip(t *testing.T) {
+func TestFromRequest_RoundTrip(t *testing.T) {
 	original := &Ctx{Response: httptest.NewRecorder(), Request: httptest.NewRequest("GET", "/", nil)}
 	original.Set("key", "value")
 
-	ctx := context.WithValue(context.Background(), zenCtxKey{}, original)
-	got, ok := FromContext(ctx)
+	r := httptest.NewRequest("GET", "/", nil)
+	req := r.WithContext(context.WithValue(r.Context(), zenCtxKey{}, original))
+	got, ok := FromRequest(req)
 	if !ok {
-		t.Fatal("FromContext should return true")
+		t.Fatal("FromRequest should return true")
 	}
 	if got.Response != original.Response {
 		t.Fatal("Response not preserved")

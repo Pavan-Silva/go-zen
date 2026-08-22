@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented in this file.
 
+## Unreleased
+
+### Breaking
+
+- Removed `zen.FromContext` — use `zen.FromRequest(r)`, which is equivalent
+- Removed `auth.Middleware` — use `auth.RequireAuth` or `auth.MiddlewareWithSkipper`
+- Removed `auth.WithAuth` — use `auth.WithAuthFunc`, which additionally provides the authenticated user
+- Removed `auth.Authorities` — declare authority slices directly (`[]string{...}`)
+
+### Maintenance
+
+- auth: RBAC, ABAC, and PBAC middlewares now share a single `authorize` helper instead of repeating the user lookup / 403 boilerplate
+
 ## v1.4.0
 
 Consolidates all work since the v1.3.0 release, including the framework-wide audit.

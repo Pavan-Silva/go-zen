@@ -1,7 +1,6 @@
 package zen
 
 import (
-	"context"
 	"maps"
 	"net/http"
 	"net/url"
@@ -116,13 +115,8 @@ func (c *Ctx) Copy() *Ctx {
 	return cp
 }
 
-// FromContext extracts a Ctx from a context.Context.
-func FromContext(ctx context.Context) (*Ctx, bool) {
-	c, ok := ctx.Value(zenCtxKey{}).(*Ctx)
-	return c, ok
-}
-
 // FromRequest extracts a Ctx from an http.Request.
 func FromRequest(r *http.Request) (*Ctx, bool) {
-	return FromContext(r.Context())
+	c, ok := r.Context().Value(zenCtxKey{}).(*Ctx)
+	return c, ok
 }

@@ -1,16 +1,10 @@
 package auth
 
 import (
-	"net/http"
 	"slices"
 
 	"github.com/Pavan-Silva/go-zen"
 )
-
-// Authorities builds a slice of authority strings.
-func Authorities(list ...string) []string {
-	return append([]string(nil), list...)
-}
 
 // RequireAuthority checks if the user has a raw authority string.
 func (u *User) RequireAuthority(authority string) bool {
@@ -52,64 +46,15 @@ func (u *User) RequireAllPermissions(permissions ...string) bool {
 // RequirePermission creates middleware that requires a specific permission-like authority.
 // Must be chained after RequireAuth. Optionally accepts a custom error handler.
 func RequirePermission(permission string, onError ...func(*zen.Ctx)) zen.HandlerFunc {
-	errFunc := func(c *zen.Ctx) {
-		c.Error(http.StatusForbidden, http.StatusText(http.StatusForbidden))
-	}
-	if len(onError) > 0 && onError[0] != nil {
-		errFunc = onError[0]
-	}
-
-	return func(c *zen.Ctx) {
-		userVal, ok := c.Get("user")
-		if !ok || userVal == nil {
-			errFunc(c)
-			return
-		}
-
-		user, ok := userVal.(*User)
-		if !ok || !user.RequireAuthority(permission) {
-			errFunc(c)
-			return
-		}
-
-		c.Next()
-	}
+	return authorize(func(u *User) bool { return u.RequireAuthority(permission) }, onError...)
 }
 
 // RequireAnyPermission creates middleware that requires at least one of the supplied permissions.
 func RequireAnyPermission(permissions ...string) zen.HandlerFunc {
-	return func(c *zen.Ctx) {
-		userVal, ok := c.Get("user")
-		if !ok || userVal == nil {
-			c.Error(http.StatusForbidden, http.StatusText(http.StatusForbidden))
-			return
-		}
-
-		user, ok := userVal.(*User)
-		if !ok || !user.RequireAnyPermission(permissions...) {
-			c.Error(http.StatusForbidden, http.StatusText(http.StatusForbidden))
-			return
-		}
-
-		c.Next()
-	}
+	return authorize(func(u *User) bool { return u.RequireAnyPermission(permissions...) })
 }
 
 // RequireAllPermissions creates middleware that requires every supplied permission.
 func RequireAllPermissions(permissions ...string) zen.HandlerFunc {
-	return func(c *zen.Ctx) {
-		userVal, ok := c.Get("user")
-		if !ok || userVal == nil {
-			c.Error(http.StatusForbidden, http.StatusText(http.StatusForbidden))
-			return
-		}
-
-		user, ok := userVal.(*User)
-		if !ok || !user.RequireAllPermissions(permissions...) {
-			c.Error(http.StatusForbidden, http.StatusText(http.StatusForbidden))
-			return
-		}
-
-		c.Next()
-	}
+	return authorize(func(u *User) bool { return u.RequireAllPermissions(permissions...) })
 }

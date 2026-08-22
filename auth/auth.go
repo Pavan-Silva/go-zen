@@ -37,11 +37,6 @@ func RequireAuth(auth Authenticator, skip ...zen.SkipFunc) zen.HandlerFunc {
 	return MiddlewareWithSkipper(auth, nil, skipper)
 }
 
-// Middleware creates HTTP middleware that authenticates requests using the provided Authenticator.
-func Middleware(auth Authenticator, onError func(*zen.Ctx)) zen.HandlerFunc {
-	return MiddlewareWithSkipper(auth, onError, nil)
-}
-
 // MiddlewareWithSkipper creates HTTP middleware that authenticates requests and can skip selected routes.
 func MiddlewareWithSkipper(auth Authenticator, onError func(*zen.Ctx), skip zen.SkipFunc) zen.HandlerFunc {
 	if auth == nil {
@@ -82,17 +77,6 @@ func GetUser(c *zen.Ctx) *User {
 	return nil
 }
 
-// WithAuth wraps an http.Handler to require authentication before serving.
-func WithAuth(handler http.Handler, auth Authenticator) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if _, err := auth.Authenticate(r); err != nil {
-			http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
-			return
-		}
-		handler.ServeHTTP(w, r)
-	})
-}
-
 // WithAuthFunc wraps an http.HandlerFunc to require authentication before serving.
 func WithAuthFunc(handler func(w http.ResponseWriter, r *http.Request, user *User), auth Authenticator) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -103,4 +87,23 @@ func WithAuthFunc(handler func(w http.ResponseWriter, r *http.Request, user *Use
 		}
 		handler(w, r, user)
 	})
+}
+
+// authorize returns middleware that denies the request with 403 via onError
+// when no authenticated *User is present or check reports unauthorized.
+func authorize(check func(*User) bool, onError ...func(*zen.Ctx)) zen.HandlerFunc {
+	errFunc := func(c *zen.Ctx) {
+		c.Error(http.StatusForbidden, http.StatusText(http.StatusForbidden))
+	}
+	if len(onError) > 0 && onError[0] != nil {
+		errFunc = onError[0]
+	}
+
+	return func(c *zen.Ctx) {
+		if user := GetUser(c); user == nil || !check(user) {
+			errFunc(c)
+			return
+		}
+		c.Next()
+	}
 }
