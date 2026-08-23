@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Zen API Docs</title>
+
     <style>
       body {
         margin: 0;
@@ -71,7 +72,7 @@
       }
       /* Scalar native offset. */
       :root {
-        --scalar-custom-header-height: 52px;
+        --scalar-custom-header-height: 51px;
       }
     </style>
   </head>
@@ -103,8 +104,16 @@
     <script src="/openapi/ui/scalar.js"></script>
     <script>
       Scalar.createApiReference("#zen-api-reference", {
-        url: "%[1]s",
-        // ui-extra-options
+          url: "%[1]s",
+          telemetry: false,
+          showDeveloperTools: "never",
+          mcp: {
+              disabled: true
+          },
+          agent: {
+            disabled: true
+          },
+          // ui-extra-options
       });
     </script>
   </body>
