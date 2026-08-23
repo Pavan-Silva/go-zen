@@ -1,5 +1,5 @@
 // Package openapi serves swaggo-generated OpenAPI documentation through zen's
-// embedded Swagger UI.
+// embedded Scalar UI.
 //
 // The specification itself is produced by swag (github.com/swaggo/swag) from
 // comment annotations on handlers and models. Run "swag init", import the
@@ -29,11 +29,11 @@ type Config struct {
 	DocPath          string         // Path to serve the docs UI (default "/docs").
 	DisableUI        bool           // When true, no documentation UI is served.
 	SwagInstance     string         // Name of the registered swag instance (default swag.Name; matches "swag init --instanceName").
-	SwaggerUIOptions map[string]any // Extra SwaggerUI init options (e.g. "persistAuthorizations": true).
+	SwaggerUIOptions map[string]any // Extra init options forwarded to Scalar.createApiReference (kept name for compatibility).
 }
 
 // OpenAPI serves a swaggo-generated OpenAPI specification and the embedded
-// Swagger UI on a zen engine.
+// Scalar UI on a zen engine.
 type OpenAPI struct {
 	cfg Config
 
@@ -134,7 +134,7 @@ func (o *OpenAPI) RegisterRoutes(r *zen.Engine) {
 		r.HandleRaw("GET "+o.cfg.DocPath, http.HandlerFunc(o.writeDoc))
 
 		if uiAssets != nil {
-			r.HandleRaw("GET /openapi/swagger-ui/{path...}", http.StripPrefix("/openapi/swagger-ui/", http.FileServer(uiAssets)))
+			r.HandleRaw("GET /openapi/ui/{path...}", http.StripPrefix("/openapi/ui/", http.FileServer(uiAssets)))
 		}
 	}
 }

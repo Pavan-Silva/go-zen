@@ -146,11 +146,14 @@ func TestDocHandler(t *testing.T) {
 	}
 }
 
-func TestDocHandlerSwaggerUI(t *testing.T) {
+func TestDocHandlerScalarUI(t *testing.T) {
 	doc := New(Config{})
 	body := uiHTML(doc)
-	if !strings.Contains(body, "swagger-ui") {
-		t.Fatal("expected swagger-ui in HTML")
+	if !strings.Contains(body, "createApiReference") {
+		t.Fatal("expected Scalar createApiReference bootstrap in HTML")
+	}
+	if !strings.Contains(body, `url: "/openapi.json"`) {
+		t.Fatal("expected default spec URL in HTML")
 	}
 }
 
@@ -180,8 +183,8 @@ func TestDocHandlerFallbackWhenAssetsMissing(t *testing.T) {
 	}
 }
 
-// Literal '%' characters in the embedded Swagger UI HTML must survive
-// substitution untouched (fmt.Sprintf would corrupt them).
+// Literal '%' characters in the embedded UI HTML must survive substitution
+// untouched (fmt.Sprintf would corrupt them).
 func TestUIHTMLLiteralPercent(t *testing.T) {
 	prevTemplate := uiTemplate
 	uiTemplate = `<html><div style="width:100%">url="%[1]s" v="%[2]s"</div></html>`

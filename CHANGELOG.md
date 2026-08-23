@@ -7,6 +7,7 @@ All notable changes to this project are documented in this file.
 ### Features
 
 - `openapi` now serves swaggo-generated documentation through zen's embedded Swagger UI — annotate handlers with `// @Summary`-style comments, run `swag init`, import the generated docs package, and serve with the unchanged two-liner (`doc := openapi.New(openapi.Config{})`; `doc.RegisterRoutes(r)`). New `Config.SwagInstance` selects a named instance (default `swagger`, matching `swag init --instanceName`); spec JSON is read via `swag.ReadDoc` and cached
+- The embedded documentation UI switched from Swagger UI to Scalar (`@scalar/api-reference`, self-hosted bundle — no CDN or internet required). The zen topbar is unchanged; `Config.SwaggerUIOptions` entries are now forwarded to `Scalar.createApiReference`. Adds ~3.6 MB to binaries embedding `openapi`
 
 ### Breaking
 

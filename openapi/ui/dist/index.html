@@ -2,22 +2,23 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Zen API Docs</title>
-    <link rel="stylesheet" href="/openapi/swagger-ui/swagger-ui.css" />
     <style>
       body {
         margin: 0;
       }
       .zen-header {
+        position: sticky;
+        top: 0;
+        z-index: 100;
         background: #1b1b1b;
-        padding: 16px 20px;
+        padding: 13px 20px;
       }
       .zen-header-content {
         display: flex;
         align-items: center;
         gap: 7px;
-        max-width: 1420px;
-        margin: 0 auto;
       }
       .zen-logo {
         width: 23px;
@@ -68,13 +69,17 @@
         background: rgba(255, 255, 255, 0.1);
         color: #fff;
       }
+      /* Scalar native offset. */
+      :root {
+        --scalar-custom-header-height: 52px;
+      }
     </style>
   </head>
 
   <body>
     <header class="zen-header">
       <div class="zen-header-content">
-        <img src="/openapi/swagger-ui/logo.svg" alt="" class="zen-logo" />
+        <img src="/openapi/ui/logo.svg" alt="" class="zen-logo" />
         <div>
           <span class="zen-title">Zen</span>
           <span class="zen-version">v%[2]s</span>
@@ -94,16 +99,12 @@
       </div>
     </header>
 
-    <div id="swagger-ui"></div>
-    <script src="/openapi/swagger-ui/swagger-ui-bundle.js"></script>
+    <div id="zen-api-reference"></div>
+    <script src="/openapi/ui/scalar.js"></script>
     <script>
-      SwaggerUIBundle({
+      Scalar.createApiReference("#zen-api-reference", {
         url: "%[1]s",
-        dom_id: "#swagger-ui",
-        presets: [SwaggerUIBundle.presets.apis],
-        deepLinking: true,
-        customSiteTitle: "Zen API Docs",
-        // swagger-ui-extra-options
+        // ui-extra-options
       });
     </script>
   </body>
