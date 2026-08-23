@@ -25,7 +25,42 @@ func (c *Ctx) queryParams() url.Values {
 //	page := c.QueryParam("page")      // GET /posts?page=2 -> "2"
 //	search := c.QueryParam("q")       // GET /posts?q=golang -> "golang"
 func (c *Ctx) QueryParam(key string) string {
-	return c.queryParams().Get(key)
+	// If the full query map was already built (e.g. by QueryParams), use it.
+	// Otherwise, look the key up directly in the raw query, avoiding the
+	// url.Values map allocation for the common case of reading only a few
+	// params. The result matches url.Values.Get over url.ParseQuery output:
+	// first match wins, '+' decodes to space, percent escapes are decoded,
+	// segments containing ';' are skipped, and pairs that fail to unescape
+	// are skipped.
+	if c.queryCache != nil {
+		return c.queryCache.Get(key)
+	}
+	return rawQueryParam(c.Request.URL.RawQuery, key)
+}
+
+// rawQueryParam returns the first value for name parsed directly from a raw
+// URL query string. It avoids allocating the full url.Values map for
+// single-key lookups; url.QueryUnescape has a no-escape fast path, so plain
+// keys and values are compared without allocating.
+func rawQueryParam(query, name string) string {
+	for query != "" {
+		var seg string
+		seg, query, _ = strings.Cut(query, "&")
+		if seg == "" || strings.Contains(seg, ";") {
+			continue
+		}
+		key, value, _ := strings.Cut(seg, "=")
+		k, err := url.QueryUnescape(key)
+		if err != nil || k != name {
+			continue
+		}
+		v, err := url.QueryUnescape(value)
+		if err != nil {
+			continue
+		}
+		return v
+	}
+	return ""
 }
 
 // Param returns the URL path parameter for the given key.

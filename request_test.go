@@ -177,7 +177,7 @@ func TestHeaderXRequestID(t *testing.T) {
 }
 
 func TestQueryParam_Caching(t *testing.T) {
-	r := httptest.NewRequest("GET", "/test?a=1&b=2", nil)
+	r := httptest.NewRequest("GET", "/test?a=1&b=2&msg=hello%20world", nil)
 	c := &Ctx{Request: r}
 
 	if c.queryCache != nil {
@@ -189,8 +189,22 @@ func TestQueryParam_Caching(t *testing.T) {
 		t.Fatalf("a = %q, want 1", a1)
 	}
 
+	// Single-key lookups scan the raw query without building the full map.
+	if c.queryCache != nil {
+		t.Fatal("queryCache should not be populated by single-key QueryParam lookups")
+	}
+
+	if got := c.QueryParam("msg"); got != "hello world" {
+		t.Fatalf("msg = %q, want %q", got, "hello world")
+	}
+
+	// Reading all params builds and caches the map; later lookups use it.
+	qp := c.QueryParams()
+	if len(qp) != 3 {
+		t.Fatalf("QueryParams() len = %d, want 3", len(qp))
+	}
 	if c.queryCache == nil {
-		t.Fatal("queryCache should be populated after first access")
+		t.Fatal("queryCache should be populated after QueryParams")
 	}
 
 	b1 := c.QueryParam("b")

@@ -23,6 +23,7 @@ All notable changes to this project are documented in this file.
 
 ### Maintenance
 
+- request: `QueryParam` single-key lookups now scan the raw query string directly instead of building the full `url.Values` map — 192ns/437B/4 allocs → 86ns/4B/0 allocs per lookup pair; the map is still built and cached by `QueryParams()`, and results match `url.Values.Get` semantics (first value wins, escapes decoded)
 - auth: RBAC, ABAC, and PBAC middlewares now share a single `authorize` helper instead of repeating the user lookup / 403 boilerplate
 - router: radix tree internals refactored — traversal no longer reassigns method receivers (explicit local cursors), the triplicated backtracking loop extracted into `backtrack`, and the duplicated param-append block into `appendParamValue`; no behavior change
 
