@@ -10,6 +10,7 @@ All notable changes to this project are documented in this file.
 - Removed `auth.Middleware` — use `auth.RequireAuth` or `auth.MiddlewareWithSkipper`
 - Removed `auth.WithAuth` — use `auth.WithAuthFunc`, which additionally provides the authenticated user
 - Removed `auth.Authorities` — declare authority slices directly (`[]string{...}`)
+- Removed `auth.GenerateJWT` and `auth.ParseJWT` — use `(JWTAuth).Generate(claims, expiry)` and `(JWTAuth).Parse(token)`, which reuse the adapter's configured `Secret` and `SigningMethod` instead of requiring them again
 
 ### Fixed
 

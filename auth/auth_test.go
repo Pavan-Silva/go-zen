@@ -381,18 +381,20 @@ func TestValidatePassword_InvalidFormat(t *testing.T) {
 }
 
 func TestJWT_GenerateAndParse(t *testing.T) {
-	secret := []byte("test-secret")
-	method := jwt.SigningMethodHS256
+	cfg := &JWTAuth{
+		Secret:        []byte("test-secret"),
+		SigningMethod: jwt.SigningMethodHS256,
+	}
 	claims := jwt.MapClaims{"sub": "123", "username": "john"}
 
-	token, err := GenerateJWT(secret, method, claims, 1*time.Hour)
+	token, err := cfg.Generate(claims, 1*time.Hour)
 	if err != nil {
-		t.Fatalf("GenerateJWT error: %v", err)
+		t.Fatalf("Generate error: %v", err)
 	}
 
-	parsed, err := ParseJWT(token, secret, method)
+	parsed, err := cfg.Parse(token)
 	if err != nil {
-		t.Fatalf("ParseJWT error: %v", err)
+		t.Fatalf("Parse error: %v", err)
 	}
 
 	if parsed["sub"] != "123" {
@@ -404,39 +406,66 @@ func TestJWT_GenerateAndParse(t *testing.T) {
 }
 
 func TestJWT_ParseInvalid(t *testing.T) {
-	_, err := ParseJWT("invalid.token.here", []byte("secret"), jwt.SigningMethodHS256)
+	cfg := &JWTAuth{
+		Secret:        []byte("secret"),
+		SigningMethod: jwt.SigningMethodHS256,
+	}
+
+	_, err := cfg.Parse("invalid.token.here")
 	if err == nil {
 		t.Fatal("should error for invalid token")
 	}
 }
 
 func TestJWT_ParseWrongSecret(t *testing.T) {
-	secret := []byte("test-secret")
-	method := jwt.SigningMethodHS256
-
-	token, err := GenerateJWT(secret, method, jwt.MapClaims{"sub": "1"}, 3600)
-	if err != nil {
-		t.Fatalf("GenerateJWT error: %v", err)
+	signer := &JWTAuth{
+		Secret:        []byte("test-secret"),
+		SigningMethod: jwt.SigningMethodHS256,
 	}
 
-	_, err = ParseJWT(token, []byte("wrong-secret"), method)
-	if err == nil {
+	token, err := signer.Generate(jwt.MapClaims{"sub": "1"}, time.Hour)
+	if err != nil {
+		t.Fatalf("Generate error: %v", err)
+	}
+
+	verifier := &JWTAuth{
+		Secret:        []byte("wrong-secret"),
+		SigningMethod: jwt.SigningMethodHS256,
+	}
+	if _, err = verifier.Parse(token); err == nil {
 		t.Fatal("should error for wrong secret")
 	}
 }
 
-func TestJWTAuth_Authenticate(t *testing.T) {
-	secret := []byte("test-secret")
-	method := jwt.SigningMethodHS256
-
-	token, err := GenerateJWT(secret, method, jwt.MapClaims{"sub": "123", "username": "john"}, 1*time.Hour)
-	if err != nil {
-		t.Fatalf("GenerateJWT error: %v", err)
+func TestJWT_ConfigValidation(t *testing.T) {
+	var nilCfg *JWTAuth
+	if _, err := nilCfg.Generate(jwt.MapClaims{}, time.Hour); err == nil {
+		t.Fatal("nil adapter should error on Generate")
+	}
+	if _, err := nilCfg.Parse("x"); err == nil {
+		t.Fatal("nil adapter should error on Parse")
 	}
 
+	cfg := &JWTAuth{}
+	if _, err := cfg.Generate(jwt.MapClaims{}, time.Hour); err == nil {
+		t.Fatal("missing signing method should error")
+	}
+
+	cfg.SigningMethod = jwt.SigningMethodHS256
+	if _, err := cfg.Generate(jwt.MapClaims{}, time.Hour); err == nil {
+		t.Fatal("missing secret should error")
+	}
+}
+
+func TestJWTAuth_Authenticate(t *testing.T) {
 	auth := &JWTAuth{
-		Secret:        secret,
-		SigningMethod: method,
+		Secret:        []byte("test-secret"),
+		SigningMethod: jwt.SigningMethodHS256,
+	}
+
+	token, err := auth.Generate(jwt.MapClaims{"sub": "123", "username": "john"}, 1*time.Hour)
+	if err != nil {
+		t.Fatalf("Generate error: %v", err)
 	}
 
 	req := httptest.NewRequest("GET", "/", nil)

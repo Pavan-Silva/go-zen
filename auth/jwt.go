@@ -11,23 +11,34 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-// JWTAuth implements JWT token authentication.
+// JWTAuth implements JWT token authentication. The Secret and SigningMethod
+// fields are the single source of truth used both to verify incoming tokens
+// (Authenticate) and to issue new ones (Generate).
 type JWTAuth struct {
 	Secret        []byte                           // Secret key used to verify token signatures.
 	SigningMethod jwt.SigningMethod                // Expected signing method (e.g. jwt.SigningMethodHS256).
 	ClaimsFunc    func(claims jwt.MapClaims) *User // Optional function to map JWT claims to a User pointer.
 }
 
-// Authenticate extracts and validates a JWT token from the request.
-func (j *JWTAuth) Authenticate(r *http.Request) (*User, error) {
+// validate reports whether the adapter carries the minimum configuration
+// required to issue or verify tokens.
+func (j *JWTAuth) validate() error {
 	if j == nil {
-		return nil, errors.New("jwt auth is not configured")
+		return errors.New("jwt auth is not configured")
 	}
 	if j.SigningMethod == nil {
-		return nil, errors.New("jwt signing method is not configured")
+		return errors.New("jwt signing method is not configured")
 	}
 	if len(j.Secret) == 0 {
-		return nil, errors.New("jwt secret is not configured")
+		return errors.New("jwt secret is not configured")
+	}
+	return nil
+}
+
+// Authenticate extracts and validates a JWT token from the request.
+func (j *JWTAuth) Authenticate(r *http.Request) (*User, error) {
+	if err := j.validate(); err != nil {
+		return nil, err
 	}
 
 	tokenString, err := bearerTokenFromRequest(r)
@@ -53,10 +64,15 @@ func (j *JWTAuth) Authenticate(r *http.Request) (*User, error) {
 	return nil, errors.New("invalid token")
 }
 
-// GenerateJWT creates a signed JWT containing the given claims. The caller's
-// map is not modified; iat and exp are derived from expiry on the copy,
-// overwriting any same-named claims passed in.
-func GenerateJWT(secret []byte, method jwt.SigningMethod, claims jwt.MapClaims, expiry time.Duration) (string, error) {
+// Generate creates a signed JWT containing the given claims, using the
+// adapter's Secret and SigningMethod. The caller's map is not modified; iat
+// and exp are derived from expiry on the copy, overwriting any same-named
+// claims passed in.
+func (j *JWTAuth) Generate(claims jwt.MapClaims, expiry time.Duration) (string, error) {
+	if err := j.validate(); err != nil {
+		return "", err
+	}
+
 	now := time.Now()
 
 	// Copy claims to avoid modifying the caller's map
@@ -66,19 +82,24 @@ func GenerateJWT(secret []byte, method jwt.SigningMethod, claims jwt.MapClaims, 
 	claimsCopy["iat"] = now.Unix()
 	claimsCopy["exp"] = now.Add(expiry).Unix()
 
-	token := jwt.NewWithClaims(method, claimsCopy)
-	return token.SignedString(secret)
+	token := jwt.NewWithClaims(j.SigningMethod, claimsCopy)
+	return token.SignedString(j.Secret)
 }
 
-// ParseJWT verifies the provided token string and returns the claims.
-func ParseJWT(tokenString string, secret []byte, method jwt.SigningMethod) (jwt.MapClaims, error) {
+// Parse verifies a token string using the adapter's Secret and SigningMethod
+// and returns the claims.
+func (j *JWTAuth) Parse(tokenString string) (jwt.MapClaims, error) {
+	if err := j.validate(); err != nil {
+		return nil, err
+	}
+
 	claims := jwt.MapClaims{}
 
 	token, err := jwt.ParseWithClaims(tokenString, &claims, func(t *jwt.Token) (any, error) {
-		if t.Method.Alg() != method.Alg() {
+		if t.Method.Alg() != j.SigningMethod.Alg() {
 			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
 		}
-		return secret, nil
+		return j.Secret, nil
 	})
 	if err != nil {
 		return nil, err
