@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/Pavan-Silva/go-zen/internal/log"
 	"github.com/Pavan-Silva/go-zen/internal/system"
 )
 
@@ -39,12 +40,14 @@ func init() {
 
 	sub, err := fs.Sub(uiDist, "ui/dist")
 	if err != nil {
+		log.Debug("openapi: swagger-ui assets unavailable, using fallback UI: %v", err)
 		return
 	}
 	uiAssets = http.FS(sub)
 
 	data, err := uiDist.ReadFile("ui/dist/index.html")
 	if err != nil {
+		log.Debug("openapi: swagger-ui index.html unavailable, using fallback UI: %v", err)
 		return
 	}
 	uiTemplate = string(data)
@@ -87,6 +90,7 @@ func swaggerUIOptionsString(opts map[string]any) string {
 	for k, v := range opts {
 		j, err := json.Marshal(v)
 		if err != nil {
+			log.Debug("openapi: skipping swagger-ui option %q: %v", k, err)
 			continue
 		}
 		if !first {

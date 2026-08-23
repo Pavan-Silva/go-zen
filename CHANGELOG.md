@@ -4,8 +4,13 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+### Features
+
+- `openapi` now serves swaggo-generated documentation through zen's embedded Swagger UI — annotate handlers with `// @Summary`-style comments, run `swag init`, import the generated docs package, and serve with the unchanged two-liner (`doc := openapi.New(openapi.Config{})`; `doc.RegisterRoutes(r)`). New `Config.SwagInstance` selects a named instance (default `swagger`, matching `swag init --instanceName`); spec JSON is read via `swag.ReadDoc` and cached
+
 ### Breaking
 
+- `openapi` rewritten as a swaggo serving adapter — the built-in spec generator is gone: removed `RouteInfo`, `RouteInfoBuilder`, `RI`, `Register` and the per-method helpers, `OpenAPI.Group`, `SecurityScheme`/`OAuthFlows` types, and the `Config` fields `Title`, `Version`, `Description`, `SecuritySchemes`, and `DefaultSecurity`; that metadata now comes from swag annotations (`@Summary`, `@Param`, `@Success`, `@securityDefinitions`, ...). `SpecJSON` returns `([]byte, error)` and serves 503 with a JSON error body when no swag documentation is registered
 - Removed `zen.FromContext` — use `zen.FromRequest(r)`, which is equivalent
 - Removed `auth.Middleware` — use `auth.RequireAuth` or `auth.MiddlewareWithSkipper`
 - Removed `auth.WithAuth` — use `auth.WithAuthFunc`, which additionally provides the authenticated user

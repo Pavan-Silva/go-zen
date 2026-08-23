@@ -9,56 +9,45 @@ import (
 
 	"github.com/Pavan-Silva/go-zen"
 	"github.com/Pavan-Silva/go-zen/internal/system"
-	"reflect"
+	"github.com/swaggo/swag"
 )
 
-type User struct {
-	ID    int    `json:"id" validate:"required"`
-	Name  string `json:"name" validate:"required"`
-	Email string `json:"email,omitempty"`
+// fakeSwag implements swag.Swagger with a canned document. A unique instance
+// name is required per test because swag.Register panics on duplicates.
+type fakeSwag struct {
+	doc string
 }
 
-type CreateUserRequest struct {
-	Name  string `json:"name" validate:"required"`
-	Email string `json:"email" validate:"required,email"`
+func (f fakeSwag) ReadDoc() string { return f.doc }
+
+func registerFakeSwag(t *testing.T, doc string) string {
+	t.Helper()
+	name := "test-" + t.Name()
+	swag.Register(name, fakeSwag{doc: doc})
+	return name
 }
 
-type ErrorResponse struct {
-	Error string `json:"error"`
-}
-
-type UserResponse struct {
-	ID    int    `json:"id"`
-	Name  string `json:"name"`
-	Email string `json:"email"`
-	Role  string `json:"role"`
-}
-
-type ListUsersResponse struct {
-	Users []UserResponse `json:"users"`
-	Total int            `json:"total"`
-}
+const sampleSpec = `{
+  "swagger": "2.0",
+  "info": {"title": "Test API", "version": "1.0.0"},
+  "paths": {"/users/{id}": {"get": {"summary": "Get user"}}}
+}`
 
 func TestNew(t *testing.T) {
-	doc := New(Config{Title: "Test API", Version: "1.0.0"})
-	if doc.cfg.Title != "Test API" {
-		t.Fatalf("expected title Test API, got %s", doc.cfg.Title)
-	}
+	doc := New(Config{})
 	if doc.cfg.SpecPath != "/openapi.json" {
 		t.Fatalf("expected default spec path /openapi.json, got %s", doc.cfg.SpecPath)
 	}
 	if doc.cfg.DocPath != "/docs" {
 		t.Fatalf("expected default doc path /docs, got %s", doc.cfg.DocPath)
 	}
+	if doc.cfg.SwagInstance != swag.Name {
+		t.Fatalf("expected default swag instance %q, got %q", swag.Name, doc.cfg.SwagInstance)
+	}
 }
 
 func TestConfigCustomPaths(t *testing.T) {
-	doc := New(Config{
-		Title:    "Test",
-		Version:  "1.0",
-		SpecPath: "/api/openapi.json",
-		DocPath:  "/api/docs",
-	})
+	doc := New(Config{SpecPath: "/api/openapi.json", DocPath: "/api/docs"})
 	if doc.cfg.SpecPath != "/api/openapi.json" {
 		t.Fatalf("expected /api/openapi.json, got %s", doc.cfg.SpecPath)
 	}
@@ -67,70 +56,57 @@ func TestConfigCustomPaths(t *testing.T) {
 	}
 }
 
-func TestRegisterEnrichment(t *testing.T) {
-	doc := New(Config{Title: "Test", Version: "1.0"})
-	doc.Register("GET", "/users/{id}", RI().
-		Summary("Get user by ID").
-		Desc("Returns a single user").
-		Resp(200, &User{}).
-		Resp(404, &ErrorResponse{}),
-	)
-
-	doc.mu.RLock()
-	info := doc.routes["GET"]["/users/{id}"]
-	doc.mu.RUnlock()
-
-	if info.Summary != "Get user by ID" {
-		t.Fatalf("expected summary 'Get user by ID', got %s", info.Summary)
-	}
-}
-
 func TestSpecJSON(t *testing.T) {
-	doc := New(Config{Title: "Test API", Version: "1.0.0", Description: "Test"})
-	doc.Register("GET", "/users/{id}", RI().
-		Summary("Get user").
-		Resp(200, &User{}),
-	)
-	doc.Register("POST", "/users", RI().
-		Summary("Create user").
-		Body(&CreateUserRequest{}).
-		Resp(201, &User{}),
-	)
+	doc := New(Config{SwagInstance: registerFakeSwag(t, sampleSpec)})
 
-	data := doc.SpecJSON()
+	data, err := doc.SpecJSON()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
 	var spec map[string]any
 	if err := json.Unmarshal(data, &spec); err != nil {
 		t.Fatalf("failed to unmarshal spec: %v", err)
 	}
-
-	info := spec["info"].(map[string]any)
-	if info["title"] != "Test API" {
-		t.Fatalf("expected title 'Test API', got %v", info["title"])
+	if spec["swagger"] != "2.0" {
+		t.Fatalf("expected swagger 2.0 document, got %v", spec["swagger"])
 	}
 
-	paths := spec["paths"].(map[string]any)
-	if _, ok := paths["/users/{id}"]; !ok {
-		t.Fatal("expected path /users/{id}")
-	}
-	if _, ok := paths["/users"]; !ok {
-		t.Fatal("expected path /users")
-	}
-
-	components := spec["components"].(map[string]any)
-	schemas := components["schemas"].(map[string]any)
-	if _, ok := schemas["User"]; !ok {
-		t.Fatal("expected schema User")
-	}
-	if _, ok := schemas["CreateUserRequest"]; !ok {
-		t.Fatal("expected schema CreateUserRequest")
+	// Cached: second call returns identical bytes without re-reading.
+	again, _ := doc.SpecJSON()
+	if &data[0] != &again[0] {
+		t.Fatal("expected cached spec bytes")
 	}
 }
 
-func TestSpecHandler(t *testing.T) {
-	doc := New(Config{Title: "Test", Version: "1.0"})
-	doc.Register("GET", "/ping", RI().Summary("Ping"))
+func TestSpecJSONMissingRegistration(t *testing.T) {
+	doc := New(Config{SwagInstance: "does-not-exist-" + t.Name()})
+	if _, err := doc.SpecJSON(); err == nil {
+		t.Fatal("expected error when no swag documentation is registered")
+	}
+}
 
+func TestWriteSpecUnavailable(t *testing.T) {
+	doc := New(Config{SwagInstance: "missing-" + t.Name()})
 	handler := doc.SpecHandler()
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/openapi.json", nil)
+	c := &zen.Ctx{Response: w, Request: r}
+	handler(c)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503 when spec unavailable, got %d", w.Code)
+	}
+	if ct := w.Header().Get("Content-Type"); ct != "application/json" {
+		t.Fatalf("expected application/json error body, got %s", ct)
+	}
+}
+
+func TestWriteSpec(t *testing.T) {
+	doc := New(Config{SwagInstance: registerFakeSwag(t, sampleSpec)})
+	handler := doc.SpecHandler()
+
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/openapi.json", nil)
 	c := &zen.Ctx{Response: w, Request: r}
@@ -147,13 +123,10 @@ func TestSpecHandler(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &spec); err != nil {
 		t.Fatalf("invalid json: %v", err)
 	}
-	if spec["openapi"] != "3.0.3" {
-		t.Fatalf("expected openapi 3.0.3, got %v", spec["openapi"])
-	}
 }
 
 func TestDocHandler(t *testing.T) {
-	doc := New(Config{Title: "Test", Version: "1.0"})
+	doc := New(Config{})
 	handler := doc.DocHandler()
 
 	w := httptest.NewRecorder()
@@ -174,7 +147,7 @@ func TestDocHandler(t *testing.T) {
 }
 
 func TestDocHandlerSwaggerUI(t *testing.T) {
-	doc := New(Config{Title: "Test", Version: "1.0"})
+	doc := New(Config{})
 	body := uiHTML(doc)
 	if !strings.Contains(body, "swagger-ui") {
 		t.Fatal("expected swagger-ui in HTML")
@@ -191,7 +164,7 @@ func TestDocHandlerFallbackWhenAssetsMissing(t *testing.T) {
 		uiAssets = prevAssets
 	})
 
-	doc := New(Config{Title: "Test", Version: "1.0"})
+	doc := New(Config{})
 	handler := doc.DocHandler()
 
 	w := httptest.NewRecorder()
@@ -214,7 +187,7 @@ func TestUIHTMLLiteralPercent(t *testing.T) {
 	uiTemplate = `<html><div style="width:100%">url="%[1]s" v="%[2]s"</div></html>`
 	t.Cleanup(func() { uiTemplate = prevTemplate })
 
-	doc := New(Config{Title: "Test", Version: "1.0", SpecPath: "/spec.json"})
+	doc := New(Config{SpecPath: "/spec.json"})
 	html := uiHTML(doc)
 
 	if strings.Contains(html, "%!") {
@@ -229,7 +202,7 @@ func TestUIHTMLLiteralPercent(t *testing.T) {
 }
 
 func TestDocDisabled(t *testing.T) {
-	doc := New(Config{Title: "Test", Version: "1.0", SpecPath: "/spec.json", DisableUI: true})
+	doc := New(Config{SpecPath: "/spec.json", DisableUI: true, SwagInstance: registerFakeSwag(t, sampleSpec)})
 	r := zen.New(":0")
 	doc.RegisterRoutes(r)
 
@@ -249,7 +222,7 @@ func TestDocDisabled(t *testing.T) {
 }
 
 func TestRegisterRoutes(t *testing.T) {
-	doc := New(Config{Title: "Test", Version: "1.0"})
+	doc := New(Config{SwagInstance: registerFakeSwag(t, sampleSpec)})
 
 	r := zen.New(":0")
 	doc.RegisterRoutes(r)
@@ -260,6 +233,9 @@ func TestRegisterRoutes(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200 from spec endpoint, got %d", rec.Code)
 	}
+	if !strings.Contains(rec.Body.String(), `"swagger"`) {
+		t.Fatalf("expected generated spec body, got %s", rec.Body.String())
+	}
 
 	rec2 := httptest.NewRecorder()
 	req2 := httptest.NewRequest(http.MethodGet, "/docs", nil)
@@ -269,236 +245,15 @@ func TestRegisterRoutes(t *testing.T) {
 	}
 }
 
-func TestSpecIdempotent(t *testing.T) {
-	doc := New(Config{Title: "Test", Version: "1.0"})
-	doc.Register("GET", "/a", RI().Summary("A"))
-	first := doc.SpecJSON()
-	doc.Register("GET", "/b", RI().Summary("B"))
-	second := doc.SpecJSON()
-	if len(first) >= len(second) {
-		t.Fatal("expected spec to grow after adding route")
+func TestCustomInstanceName(t *testing.T) {
+	name := registerFakeSwag(t, sampleSpec)
+	doc := New(Config{SwagInstance: name})
+
+	data, err := doc.SpecJSON()
+	if err != nil {
+		t.Fatalf("unexpected error for custom instance %q: %v", name, err)
 	}
-}
-
-func TestRequiredFieldsInSchema(t *testing.T) {
-	doc := New(Config{Title: "Test", Version: "1.0"})
-	doc.Register("POST", "/users", RI().
-		Body(&CreateUserRequest{}).
-		Resp(201, &User{}),
-	)
-
-	data := doc.SpecJSON()
-	var spec map[string]any
-	json.Unmarshal(data, &spec)
-	components := spec["components"].(map[string]any)
-	schemas := components["schemas"].(map[string]any)
-
-	userSchema := schemas["User"].(map[string]any)
-	req := userSchema["required"].([]any)
-	if len(req) != 2 {
-		t.Fatalf("expected 2 required fields for User, got %d: %v", len(req), req)
-	}
-}
-
-func TestEngineIntegration(t *testing.T) {
-	doc := New(Config{Title: "Integration", Version: "1.0"})
-	r := zen.New(":0")
-
-	r.GET("/users/{id}", func(c *zen.Ctx) {
-		c.JSON(200, map[string]string{"id": c.Param("id")})
-	})
-
-	doc.Register("GET", "/users/{id}", RI().
-		Summary("Get user").
-		Resp(200, &User{}),
-	)
-
-	doc.RegisterRoutes(r)
-
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/openapi.json", nil)
-	r.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rec.Code)
-	}
-
-	var spec map[string]any
-	json.Unmarshal(rec.Body.Bytes(), &spec)
-	paths := spec["paths"].(map[string]any)
-	if _, ok := paths["/users/{id}"]; !ok {
-		t.Fatal("expected /users/{id} in paths")
-	}
-}
-
-func TestEmptySpec(t *testing.T) {
-	doc := New(Config{Title: "Empty", Version: "0.1"})
-	data := doc.SpecJSON()
-	var spec map[string]any
-	json.Unmarshal(data, &spec)
-	paths := spec["paths"].(map[string]any)
-	if len(paths) != 0 {
-		t.Fatal("expected empty paths")
-	}
-}
-
-func TestRIFluidAPI(t *testing.T) {
-	b := RI().
-		Summary("Get user").
-		Desc("Returns a user by ID").
-		Tags("Users", "Admin").
-		Resp(200, &UserResponse{}).
-		Resp(404, &ErrorResponse{}).
-		Body(&CreateUserRequest{})
-
-	if b.info.Summary != "Get user" {
-		t.Fatalf("expected summary 'Get user', got %q", b.info.Summary)
-	}
-	if b.info.Description != "Returns a user by ID" {
-		t.Fatalf("expected description 'Returns a user by ID', got %q", b.info.Description)
-	}
-	if len(b.info.Tags) != 2 || b.info.Tags[0] != "Users" || b.info.Tags[1] != "Admin" {
-		t.Fatalf("expected tags [Users Admin], got %v", b.info.Tags)
-	}
-	if b.info.RequestBody == nil {
-		t.Fatal("expected request body")
-	}
-	if len(b.info.Responses) != 2 {
-		t.Fatalf("expected 2 responses, got %d", len(b.info.Responses))
-	}
-	if _, ok := b.info.Responses[200]; !ok {
-		t.Fatal("expected 200 response")
-	}
-}
-
-func TestRIDeprecated(t *testing.T) {
-	b := RI().Summary("Old").Deprecated()
-	if !b.info.Deprecated {
-		t.Fatal("expected deprecated")
-	}
-}
-
-func TestMethodHelpers(t *testing.T) {
-	doc := New(Config{Title: "Test", Version: "1.0"})
-
-	doc.GET("/items", RI().Summary("List").Resp(200, &ListUsersResponse{}))
-	doc.POST("/items", RI().Summary("Create").Body(&CreateUserRequest{}).Resp(201, &UserResponse{}))
-	doc.DELETE("/items/{id}", RI().Summary("Delete").Resp(204, nil))
-
-	data := doc.SpecJSON()
-	var spec map[string]any
-	json.Unmarshal(data, &spec)
-	paths := spec["paths"].(map[string]any)
-	items := paths["/items"].(map[string]any)
-	if _, ok := items["get"]; !ok {
-		t.Fatal("expected GET /items")
-	}
-	if _, ok := items["post"]; !ok {
-		t.Fatal("expected POST /items")
-	}
-	itemsID := paths["/items/{id}"].(map[string]any)
-	if _, ok := itemsID["delete"]; !ok {
-		t.Fatal("expected DELETE /items/{id}")
-	}
-}
-
-func TestRIEmpty(t *testing.T) {
-	b := RI()
-	if b.info.Summary != "" || b.info.Description != "" || b.info.Tags != nil || b.info.Responses != nil {
-		t.Fatal("expected empty RI")
-	}
-}
-
-type nested struct {
-	Inner struct{ X string }
-	Value int
-}
-
-func TestNestedStructSchema(t *testing.T) {
-	doc := New(Config{Title: "Test", Version: "1.0"})
-	doc.Register("GET", "/nested", RI().Resp(200, &nested{}))
-
-	data := doc.SpecJSON()
-	var spec map[string]any
-	json.Unmarshal(data, &spec)
-	components := spec["components"].(map[string]any)
-	schemas := components["schemas"].(map[string]any)
-
-	if _, ok := schemas["nested"]; !ok {
-		t.Fatal("expected schema for nested")
-	}
-	s := schemas["nested"].(map[string]any)
-	props := s["properties"].(map[string]any)
-	if _, ok := props["Inner"]; !ok {
-		t.Fatal("expected Inner property")
-	}
-}
-
-func TestNilModelResponse(t *testing.T) {
-	doc := New(Config{Title: "Test", Version: "1.0"})
-	doc.Register("DELETE", "/users/{id}", RI().
-		Summary("Delete user").
-		Resp(204, nil).
-		Resp(404, &ErrorResponse{}),
-	)
-	data := doc.SpecJSON()
-	var spec map[string]any
-	json.Unmarshal(data, &spec)
-	paths := spec["paths"].(map[string]any)
-	deleteOp := paths["/users/{id}"].(map[string]any)["delete"].(map[string]any)
-	resp := deleteOp["responses"].(map[string]any)
-	if _, ok := resp["204"]; !ok {
-		t.Fatal("expected 204 response")
-	}
-	if _, ok := resp["404"]; !ok {
-		t.Fatal("expected 404 response")
-	}
-}
-
-func TestContextPoolIntegration(t *testing.T) {
-	doc := New(Config{Title: "Pool", Version: "1.0"})
-	doc.Register("GET", "/pool", RI().Summary("Pool test"))
-
-	handler := doc.SpecHandler()
-	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodGet, "/openapi.json", nil)
-	c := &zen.Ctx{Response: w, Request: r}
-	handler(c)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", w.Code)
-	}
-}
-
-type Grandparent struct {
-	Grandpa string `json:"grandpa"`
-}
-
-type Parent struct {
-	Grandparent
-	Dad string `json:"dad"`
-}
-
-type Child struct {
-	Parent
-	Kid string `json:"kid"`
-}
-
-func TestMergeInlineFieldsRecursive(t *testing.T) {
-	sb := newSchemaBuilder()
-	schema := sb.inlineStruct(reflect.TypeOf(Child{}))
-
-	props, ok := schema["properties"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected properties to be map[string]any")
-	}
-
-	if _, ok := props["kid"]; !ok {
-		t.Errorf("missing kid property")
-	}
-	if _, ok := props["dad"]; !ok {
-		t.Errorf("missing dad property")
-	}
-	if _, ok := props["grandpa"]; !ok {
-		t.Errorf("missing grandpa property, nested embedded structs are not merged correctly")
+	if !json.Valid(data) {
+		t.Fatal("expected valid JSON from custom swag instance")
 	}
 }
