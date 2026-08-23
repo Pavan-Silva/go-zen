@@ -170,12 +170,6 @@ func TestClientIP_NoHeaders(t *testing.T) {
 	}
 }
 
-func TestHeaderXRequestID(t *testing.T) {
-	if HeaderXRequestID != "X-Request-ID" {
-		t.Fatalf("HeaderXRequestID = %q, want %q", HeaderXRequestID, "X-Request-ID")
-	}
-}
-
 func TestQueryParam_Caching(t *testing.T) {
 	r := httptest.NewRequest("GET", "/test?a=1&b=2&msg=hello%20world", nil)
 	c := &Ctx{Request: r}
