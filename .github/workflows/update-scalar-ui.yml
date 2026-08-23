@@ -1,0 +1,50 @@
+name: Update Scalar UI
+
+on:
+  schedule:
+    - cron: '0 0 1 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check latest @scalar/api-reference release
+        id: check
+        run: |
+          LATEST=$(curl -sf https://registry.npmjs.org/@scalar/api-reference/latest | jq -r .version)
+          if [ -z "$LATEST" ] || [ "$LATEST" = "null" ]; then
+            echo "Failed to resolve latest version from npm registry" >&2
+            exit 1
+          fi
+          echo "latest=$LATEST" >> "$GITHUB_OUTPUT"
+          CURRENT=$(cat openapi/ui/version.txt 2>/dev/null || echo "none")
+          echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
+
+      - name: Update assets
+        if: steps.check.outputs.latest != steps.check.outputs.current
+        run: |
+          VER=${{ steps.check.outputs.latest }}
+          curl -sfL "https://cdn.jsdelivr.net/npm/@scalar/api-reference@$VER/dist/browser/standalone.js" -o openapi/ui/dist/scalar.js
+          # Guard against upstream packaging changes: the embedded UI relies
+          # on a single self-contained file exposing Scalar.createApiReference.
+          grep -q "createApiReference" openapi/ui/dist/scalar.js || {
+            echo "Downloaded bundle does not expose createApiReference; upstream layout changed" >&2
+            exit 1
+          }
+          echo "$VER" > openapi/ui/version.txt
+
+      - name: Create PR
+        if: steps.check.outputs.latest != steps.check.outputs.current
+        uses: peter-evans/create-pull-request@v6
+        with:
+          title: "chore: update Scalar UI to ${{ steps.check.outputs.latest }}"
+          commit-message: "chore: update Scalar UI to ${{ steps.check.outputs.latest }}"
+          branch: update-scalar-ui
+          delete-branch: true
