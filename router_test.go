@@ -49,7 +49,7 @@ func TestRouter_RunServer_HandlesListenError(t *testing.T) {
 
 	r.runServer(func() error {
 		return errors.New("listen failed")
-	})
+	}, false)
 }
 
 func TestRouter_DefaultConfig(t *testing.T) {

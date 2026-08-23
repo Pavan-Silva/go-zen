@@ -236,7 +236,7 @@ func (e *Engine) staticFS(prefix string, filesystem http.FileSystem) {
 
 // Run starts the HTTP server and blocks until a shutdown signal is received.
 func (e *Engine) Run() {
-	e.runServer(e.server.ListenAndServe)
+	e.runServer(e.server.ListenAndServe, false)
 }
 
 // RunTLS starts the HTTPS server with the given certificate and key files,
@@ -244,12 +244,12 @@ func (e *Engine) Run() {
 func (e *Engine) RunTLS(certFile, keyFile string) {
 	e.runServer(func() error {
 		return e.server.ListenAndServeTLS(certFile, keyFile)
-	})
+	}, true)
 }
 
 // Internal execution runner for handling system interrupts and process execution loops.
-func (e *Engine) runServer(listen func() error) {
-	fmt.Print(system.Banner(e.server.Addr))
+func (e *Engine) runServer(listen func() error, secure bool) {
+	fmt.Print(system.Banner(e.server.Addr, secure))
 
 	errCh := make(chan error, 1)
 	go func() {
