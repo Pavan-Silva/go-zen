@@ -44,6 +44,37 @@ func TestGroup_Prefix(t *testing.T) {
 	}
 }
 
+func TestGroup_RootSlashPrefix(t *testing.T) {
+	r := New(":0")
+
+	// Group("/") must not panic and must inherit the parent prefix unchanged.
+	same := r.Group("/")
+	if same.prefix != "" {
+		t.Fatalf("prefix = %q, want empty", same.prefix)
+	}
+	nested := r.Group("/api").Group("/")
+	if nested.prefix != "/api" {
+		t.Fatalf("prefix = %q, want %q", nested.prefix, "/api")
+	}
+
+	var called bool
+	nested.GET("/users", func(c *Ctx) {
+		called = true
+		c.String(200, "ok")
+	})
+
+	req := httptest.NewRequest("GET", "/api/users", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != 200 {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	if !called {
+		t.Fatal("handler not called for route registered via Group(\"/\")")
+	}
+}
+
 func TestGroup_HandleRaw(t *testing.T) {
 	r := New(":0")
 	api := r.Group("/api")

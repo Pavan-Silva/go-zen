@@ -135,15 +135,14 @@ func compileChain(chain []HandlerFunc) HandlerFunc {
 	return finalHandler
 }
 
-// ensureLeadingSlash adds a leading slash (if absent) and strips a trailing slash.
+// ensureLeadingSlash adds a leading slash (if absent) and strips trailing
+// slashes. An empty or "/" argument returns "" so the group keeps the
+// parent prefix unchanged; appending "/" instead would produce double-slash
+// route paths.
 func ensureLeadingSlash(prefix string) string {
+	prefix = strings.Trim(prefix, "/")
 	if prefix == "" {
-		return "/"
+		return ""
 	}
-
-	prefix = strings.TrimSuffix(prefix, "/")
-	if prefix[0] != '/' {
-		return "/" + prefix
-	}
-	return prefix
+	return "/" + prefix
 }

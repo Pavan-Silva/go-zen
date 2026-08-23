@@ -11,6 +11,10 @@ All notable changes to this project are documented in this file.
 - Removed `auth.WithAuth` — use `auth.WithAuthFunc`, which additionally provides the authenticated user
 - Removed `auth.Authorities` — declare authority slices directly (`[]string{...}`)
 
+### Fixed
+
+- `Group("/")` no longer panics with an index-out-of-range error; empty and "/" prefixes now inherit the parent group prefix unchanged instead of producing double-slash route paths
+
 ### Maintenance
 
 - auth: RBAC, ABAC, and PBAC middlewares now share a single `authorize` helper instead of repeating the user lookup / 403 boilerplate
