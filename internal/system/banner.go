@@ -6,8 +6,8 @@ import (
 )
 
 // Version is the current release version.
-// Override at build time with: -ldflags "-X github.com/Pavan-Silva/go-zen/internal/system.Version=v1.4.0"
-var Version = "1.4.0"
+// Override at build time with: -ldflags "-X github.com/Pavan-Silva/go-zen/internal/system.Version=v1.5.0"
+var Version = "1.5.0"
 
 // Banner returns the startup banner string for the given listen address.
 func Banner(addr string) string {
