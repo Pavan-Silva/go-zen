@@ -57,7 +57,7 @@ func Logger(c *zen.Ctx) {
 	buf := (*bufPtr)[:0]
 
 	buf = append(buf, "[ZEN] "...)
-	buf = start.AppendFormat(buf, "2006/01/02 - 15:04:05")
+	buf = start.AppendFormat(buf, "2006/01/02 15:04:05")
 	buf = append(buf, " | "...)
 	buf = appendStatusColor(buf, rw.status)
 	buf = rightPad(buf, strconv.Itoa(rw.status), 5)

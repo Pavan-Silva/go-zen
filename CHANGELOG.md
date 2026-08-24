@@ -8,6 +8,7 @@ All notable changes to this project are documented in this file.
 
 - Startup banner redesigned, Banner now shows a clickable http://localhost link instead of a bare port (wildcard hosts like `:8080` or `0.0.0.0:3000` are normalized to `localhost`); servers started with `RunTLS` show an https:// link
 - New scalar api reference default config to hide premium/online features etc.
+- Unified logger and internal/log timestamp format
 
 ## v1.5.0
 
