@@ -99,8 +99,12 @@ func CORS(config CORSConfig) zen.HandlerFunc {
 			respHeaders["Access-Control-Allow-Credentials"] = []string{"true"}
 		}
 
-		// Handle preflight requests.
-		if c.Request.Method == http.MethodOptions {
+		// Handle preflight requests. Per the Fetch spec a preflight is an
+		// OPTIONS request carrying Access-Control-Request-Method; plain
+		// OPTIONS requests (even with an Origin header) must reach the
+		// router so user-registered OPTIONS handlers keep working.
+		if c.Request.Method == http.MethodOptions &&
+			c.Request.Header.Get("Access-Control-Request-Method") != "" {
 			respHeaders["Access-Control-Allow-Methods"] = []string{allowedMethodsStr}
 			respHeaders["Access-Control-Allow-Headers"] = []string{allowedHeadersStr}
 			if maxAgeStr != "0" {

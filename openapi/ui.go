@@ -47,18 +47,21 @@ func init() {
 }
 
 func uiHTML(o *OpenAPI) string {
-	if uiTemplate == "" {
-		uiTemplate = fallbackHTML
+	// Work on a local copy: this runs on request goroutines, so the package
+	// globals must only ever be read here.
+	template := uiTemplate
+	if template == "" {
+		template = fallbackHTML
 	}
 
-	if uiTemplate == fallbackHTML {
+	if template == fallbackHTML {
 		return fmt.Sprintf(fallbackHTML, o.cfg.SpecPath, o.cfg.SpecPath, system.Version)
 	}
 
 	// The embedded UI HTML may contain literal '%' characters (CSS, JS), so
 	// positional format verbs must be substituted with strings.Replace instead
 	// of fmt.Sprintf, which would corrupt them.
-	html := strings.Replace(uiTemplate, "%[1]s", o.cfg.SpecPath, 1)
+	html := strings.Replace(template, "%[1]s", o.cfg.SpecPath, 1)
 	html = strings.Replace(html, "%[2]s", system.Version, 1)
 
 	if extraOpts := swaggerUIOptionsString(o.cfg.SwaggerUIOptions); extraOpts != "" {

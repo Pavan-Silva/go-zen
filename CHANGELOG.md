@@ -4,6 +4,18 @@ All notable changes to this project are documented in this file.
 
 ## v1.5.1
 
+### Fixed
+
+- **compress**: a handler that panicked after writing no longer masks the failure as `200 OK` — when nothing reached the wire yet the partial buffer is discarded so recovery middleware emits a clean 500; once the gzip stream is committed it is closed cleanly instead of being left corrupt (the panic is always re-raised for outer recovery)
+- **compress**: `Accept-Encoding` parsing now inspects *all* header values (a client sending multiple `Accept-Encoding` lines used to silently disable compression), honors q-values (`gzip;q=0` is no longer compressed, RFC 9110), matches tokens case-insensitively (`GZIP`, `x-gzip`), and supports the `*` wildcard
+- **cors**: only genuine preflights are intercepted — an OPTIONS request is treated as a preflight solely when it carries `Access-Control-Request-Method` (per the Fetch spec, matching echo/fiber); plain OPTIONS requests with an Origin header now reach registered OPTIONS handlers instead of getting an empty 204
+- **pprof**: profile endpoints now serve their dedicated `pprof.Handler(name)` instead of `pprof.Index`, which resolves profile names by trimming a hardcoded `/debug/pprof/` prefix — custom `PprofConfig.Prefix` values (e.g. `/prof/heap`) returned the HTML index page instead of the requested profile
+- **auth**: the Bearer auth-scheme is matched case-insensitively per RFC 7235 §5.1 — lowercase `bearer <token>` headers are accepted by JWT/OAuth2/OIDC authentication instead of failing with "invalid authorization header format"
+- **middleware**: `Logger` never restored `c.Response` after wrapping it, leaving the context pointing at a pooled wrapper whose embedded writer was nil — any middleware running outside the logger that touched `c.Response` after `Next()` panicked with a nil pointer dereference
+- **middleware**: `Logger` now logs from a deferred call, so requests that panic still produce an access-log entry and the pooled response writer is returned exactly once on every path
+- **auth**: `DefaultUserMapper` skips non-string and empty role claim entries instead of leaving empty holes in `Authorities`; `(User).RequireAuthority("")` never grants access even if an empty string is present in the list
+- **openapi**: `uiHTML` no longer writes to package-level state from request goroutines (latent data race)
+
 ### Maintenance
 
 - Startup banner redesigned, Banner now shows a clickable http://localhost link instead of a bare port (wildcard hosts like `:8080` or `0.0.0.0:3000` are normalized to `localhost`); servers started with `RunTLS` show an https:// link

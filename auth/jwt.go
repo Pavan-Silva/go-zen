@@ -112,15 +112,18 @@ func (j *JWTAuth) Parse(tokenString string) (jwt.MapClaims, error) {
 	return claims, nil
 }
 
-// bearerTokenFromRequest extracts the Bearer token from the Authorization header
+// bearerTokenFromRequest extracts the Bearer token from the Authorization header.
+// The auth-scheme is matched case-insensitively per RFC 7235 section 5.1
+// (e.g. "Bearer", "bearer", and "BEARER" are all accepted).
 func bearerTokenFromRequest(r *http.Request) (string, error) {
 	ah := r.Header["Authorization"]
 	if len(ah) == 0 {
 		return "", fmt.Errorf("missing authorization header")
 	}
 
-	if len(ah[0]) > 7 && ah[0][:7] == "Bearer " {
-		return ah[0][7:], nil
+	const scheme = "bearer "
+	if len(ah[0]) > len(scheme) && strings.EqualFold(ah[0][:len(scheme)], scheme) {
+		return ah[0][len(scheme):], nil
 	}
 
 	return "", fmt.Errorf("invalid authorization header format")
@@ -151,22 +154,25 @@ func DefaultUserMapper(claims jwt.MapClaims) *User {
 	}
 
 	if roles, ok := claims["roles"].([]any); ok {
-		user.Authorities = make([]string, len(roles))
-		for i, r := range roles {
-			if s, ok := r.(string); ok {
-				user.Authorities[i] = s
-			}
-		}
+		user.Authorities = stringAuthorities(roles)
 	} else if roles, ok := claims["authorities"].([]any); ok {
-		user.Authorities = make([]string, len(roles))
-		for i, r := range roles {
-			if s, ok := r.(string); ok {
-				user.Authorities[i] = s
-			}
-		}
+		user.Authorities = stringAuthorities(roles)
 	} else if scope, ok := claims["scope"].(string); ok && scope != "" {
 		user.Authorities = strings.Split(scope, " ")
 	}
 
 	return user
+}
+
+// stringAuthorities converts a heterogeneous claim array (e.g. JSON-decoded)
+// into a compact []string, skipping non-string and empty entries instead of
+// leaving empty holes that could match empty-authority checks.
+func stringAuthorities(values []any) []string {
+	authorities := make([]string, 0, len(values))
+	for _, v := range values {
+		if s, ok := v.(string); ok && s != "" {
+			authorities = append(authorities, s)
+		}
+	}
+	return authorities
 }

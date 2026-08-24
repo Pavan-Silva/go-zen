@@ -7,8 +7,9 @@ import (
 )
 
 // RequireAuthority checks if the user has a raw authority string.
+// An empty authority never grants access.
 func (u *User) RequireAuthority(authority string) bool {
-	if u == nil {
+	if u == nil || authority == "" {
 		return false
 	}
 	return slices.Contains(u.Authorities, authority)

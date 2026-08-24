@@ -36,6 +36,11 @@ var logBufPool = sync.Pool{
 }
 
 // Logger logs HTTP requests with method, path, status code, and response time.
+//
+// The log line is emitted from a deferred call so requests that panic are
+// still logged (the recovery middleware further up the chain then produces
+// the error response), and the wrapped ResponseWriter is always restored and
+// returned to its pool.
 func Logger(c *zen.Ctx) {
 	start := time.Now()
 
@@ -47,47 +52,50 @@ func Logger(c *zen.Ctx) {
 
 	c.Response = rw
 
+	defer func() {
+		duration := time.Since(start)
+		method := c.Request.Method
+		path := c.Request.URL.Path
+
+		bufPtr := logBufPool.Get().(*[]byte)
+		buf := (*bufPtr)[:0]
+
+		buf = append(buf, "[ZEN] "...)
+		buf = start.AppendFormat(buf, "2006/01/02 15:04:05")
+		buf = append(buf, " | "...)
+		buf = appendStatusColor(buf, rw.status)
+		buf = rightPad(buf, strconv.Itoa(rw.status), 5)
+		buf = append(buf, colorReset...)
+		buf = append(buf, " | "...)
+
+		buf = rightPad(buf, formatLatency(duration), 9)
+		buf = append(buf, " | "...)
+
+		buf = leftPad(buf, c.ClientIP(), 15)
+		buf = append(buf, " | "...)
+		size := strconv.FormatInt(c.Request.ContentLength, 10) + "->" + strconv.FormatInt(int64(rw.written), 10) + "B"
+		buf = rightPad(buf, size, 13)
+		buf = append(buf, " | "...)
+
+		buf = appendMethodColor(buf, method)
+		buf = leftPad(buf, method, 7)
+		buf = append(buf, colorReset...)
+		buf = append(buf, " "...)
+
+		buf = append(buf, path...)
+		buf = append(buf, '\n')
+
+		_, _ = os.Stdout.Write(buf)
+
+		*bufPtr = buf
+		logBufPool.Put(bufPtr)
+
+		c.Response = rw.ResponseWriter
+		rw.ResponseWriter = nil
+		rwPool.Put(rw)
+	}()
+
 	c.Next()
-
-	duration := time.Since(start)
-	method := c.Request.Method
-	path := c.Request.URL.Path
-
-	bufPtr := logBufPool.Get().(*[]byte)
-	buf := (*bufPtr)[:0]
-
-	buf = append(buf, "[ZEN] "...)
-	buf = start.AppendFormat(buf, "2006/01/02 15:04:05")
-	buf = append(buf, " | "...)
-	buf = appendStatusColor(buf, rw.status)
-	buf = rightPad(buf, strconv.Itoa(rw.status), 5)
-	buf = append(buf, colorReset...)
-	buf = append(buf, " | "...)
-
-	buf = rightPad(buf, formatLatency(duration), 9)
-	buf = append(buf, " | "...)
-
-	buf = leftPad(buf, c.ClientIP(), 15)
-	buf = append(buf, " | "...)
-	size := strconv.FormatInt(c.Request.ContentLength, 10) + "->" + strconv.FormatInt(int64(rw.written), 10) + "B"
-	buf = rightPad(buf, size, 13)
-	buf = append(buf, " | "...)
-
-	buf = appendMethodColor(buf, method)
-	buf = leftPad(buf, method, 7)
-	buf = append(buf, colorReset...)
-	buf = append(buf, " "...)
-
-	buf = append(buf, path...)
-	buf = append(buf, '\n')
-
-	_, _ = os.Stdout.Write(buf)
-
-	*bufPtr = buf
-	logBufPool.Put(bufPtr)
-
-	rw.ResponseWriter = nil
-	rwPool.Put(rw)
 }
 
 // responseWriter wraps http.ResponseWriter to capture status codes and body sizes.

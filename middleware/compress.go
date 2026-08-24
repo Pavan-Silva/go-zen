@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -54,14 +55,14 @@ func CompressWithLevel(level int) zen.HandlerFunc {
 	}
 
 	return func(c *zen.Ctx) {
-		// Fast Path 1: Validate client capabilities
-		av := c.Request.Header["Accept-Encoding"]
-		if len(av) == 0 || !strings.Contains(av[0], "gzip") {
+		// Validate client capabilities (all Accept-Encoding values, q-values
+		// and the "*" wildcard respected).
+		if !acceptsGzip(c.Request.Header) {
 			c.Next()
 			return
 		}
 
-		// Fast Path 2: Skip if another middleware already compressed the response
+		// Skip if another middleware already compressed the response
 		if _, exists := c.Response.Header()["Content-Encoding"]; exists {
 			c.Next()
 			return
@@ -81,29 +82,90 @@ func CompressWithLevel(level int) zen.HandlerFunc {
 		c.Response = cw
 
 		// Teardown runs in a defer so it also fires when a downstream handler
-		// panics (e.g. to the Recover middleware). If nothing has been written
-		// yet, the response is left untouched so the recovering middleware can
-		// produce a clean error response instead of an empty 200.
-		defer func() {
-			// Also finalize when the handler committed a status line without a
-			// body (e.g. 204/304): otherwise the underlying writer never sees
-			// the status and net/http emits a default 200.
-			if cw.statusSet || cw.wroteHeader || cw.gz != nil || cw.bodyBuffer.Len() > 0 {
-				if !cw.wroteHeader {
-					cw.writeFinal(&gzipPool)
-				} else if cw.gz != nil {
+		// panics (e.g. to the Recover middleware).
+		var panicked any
+		func() {
+			defer func() {
+				panicked = recover()
+				switch {
+				case panicked != nil && !cw.wroteHeader:
+					// Nothing reached the wire yet: drop everything so an
+					// outer recovery middleware can emit a clean error
+					// response instead of a partial 200.
+					cw.bodyBuffer.Reset()
+				case cw.wroteHeader && cw.gz != nil:
+					// Streaming already started: close the gzip stream so
+					// the client receives a valid (truncated) body instead
+					// of a corrupt one.
 					_ = cw.gz.Close()
 					gzipPool.Put(cw.gz)
+					cw.gz = nil
+				case cw.statusSet || cw.bodyBuffer.Len() > 0:
+					cw.writeFinal(&gzipPool)
 				}
-			}
-			c.Response = cw.ResponseWriter
-			cw.ResponseWriter = nil
-			cw.gz = nil
-			writerStructPool.Put(cw)
+				c.Response = cw.ResponseWriter
+				cw.ResponseWriter = nil
+				cw.gz = nil
+				writerStructPool.Put(cw)
+			}()
+			c.Next()
 		}()
 
-		c.Next()
+		if panicked != nil {
+			panic(panicked)
+		}
 	}
+}
+
+// acceptsGzip reports whether the client's Accept-Encoding header advertises
+// gzip support. All header values are inspected (a client may send multiple
+// Accept-Encoding lines), q-values are honored ("gzip;q=0" refuses gzip, as
+// does "gzip;q=0, *"), and the "*" wildcard is accepted when no explicit gzip
+// token with q>0 excludes it.
+func acceptsGzip(h http.Header) bool {
+	values := h["Accept-Encoding"]
+	if len(values) == 0 {
+		return false
+	}
+
+	gzipQ := -1.0 // max q seen for an explicit gzip token; -1 = absent
+	wildQ := -1.0 // max q seen for the "*" wildcard;      -1 = absent
+
+	for _, v := range values {
+		for part := range strings.SplitSeq(v, ",") {
+			part = strings.TrimSpace(part)
+			if part == "" {
+				continue
+			}
+			token, params, _ := strings.Cut(part, ";")
+			q := 1.0
+			for p := range strings.SplitSeq(params, ";") {
+				k, val, ok := strings.Cut(strings.TrimSpace(p), "=")
+				if !ok || !strings.EqualFold(strings.TrimSpace(k), "q") {
+					continue
+				}
+				if parsed, err := strconv.ParseFloat(strings.TrimSpace(val), 64); err == nil {
+					q = parsed
+				}
+				break
+			}
+			switch token := strings.ToLower(strings.TrimSpace(token)); token {
+			case "gzip", "x-gzip":
+				if q > gzipQ {
+					gzipQ = q
+				}
+			case "*":
+				if q > wildQ {
+					wildQ = q
+				}
+			}
+		}
+	}
+
+	if gzipQ >= 0 {
+		return gzipQ > 0
+	}
+	return wildQ > 0
 }
 
 func (w *compressResponseWriter) WriteHeader(status int) {

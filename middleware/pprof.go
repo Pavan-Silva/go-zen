@@ -43,25 +43,28 @@ func RegisterPprofWithConfig(r *zen.Engine, config PprofConfig) {
 
 	// Map structural endpoints directly to the Zen engine router.
 	// Bypassing extra sub-muxes prevents route-matching and trailing-slash bugs.
-	r.GET(p+"/", wrapHandler(pprof.Index))
-	r.GET(p+"/cmdline", wrapHandler(pprof.Cmdline))
-	r.GET(p+"/profile", wrapHandler(pprof.Profile))
-	r.GET(p+"/symbol", wrapHandler(pprof.Symbol))
-	r.GET(p+"/trace", wrapHandler(pprof.Trace))
+	r.GET(p+"/", wrapHandler(http.HandlerFunc(pprof.Index)))
+	r.GET(p+"/cmdline", wrapHandler(http.HandlerFunc(pprof.Cmdline)))
+	r.GET(p+"/profile", wrapHandler(http.HandlerFunc(pprof.Profile)))
+	r.GET(p+"/symbol", wrapHandler(http.HandlerFunc(pprof.Symbol)))
+	r.GET(p+"/trace", wrapHandler(http.HandlerFunc(pprof.Trace)))
 
-	// Additional profiles served by pprof.Index (the standard ServeMux uses prefix
-	// matching to route these; with exact-match routing we register them explicitly)
+	// Individual profiles are served by their dedicated pprof.Handler instead
+	// of pprof.Index: Index resolves profile names by trimming a hardcoded
+	// "/debug/pprof/" prefix from the request path, which breaks any custom
+	// Prefix (the request would fall through to the HTML index page).
 	for _, profile := range []string{"goroutine", "heap", "threadcreate", "block", "mutex", "allocs"} {
-		r.GET(p+"/"+profile, wrapHandler(pprof.Index))
+		r.GET(p+"/"+profile, wrapHandler(pprof.Handler(profile)))
 	}
 
 	// Post endpoints are required for symbol lookups during interactive CLI debugging sessions
-	r.POST(p+"/symbol", wrapHandler(pprof.Symbol))
+	r.POST(p+"/symbol", wrapHandler(http.HandlerFunc(pprof.Symbol)))
 }
 
-// wrapHandler converts a standard http.HandlerFunc into a native zen.HandlerFunc
-func wrapHandler(h http.HandlerFunc) zen.HandlerFunc {
+// wrapHandler converts a standard http.Handler (including http.HandlerFunc)
+// into a native zen.HandlerFunc
+func wrapHandler(h http.Handler) zen.HandlerFunc {
 	return func(c *zen.Ctx) {
-		h(c.Response, c.Request)
+		h.ServeHTTP(c.Response, c.Request)
 	}
 }
