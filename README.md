@@ -2,7 +2,9 @@
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/Pavan-Silva/go-zen.svg)](https://pkg.go.dev/github.com/Pavan-Silva/go-zen)
 
-A lightweight, high-performance HTTP microframework for Go built on `net/http`. Zero-allocation radix tree routing, batteries-included middleware, and a minimal API.
+A lightweight, high-performance HTTP framework for Go built on `net/http`. Zero-allocation radix tree routing, batteries-included middleware, and a minimal API.
+
+> **Disclaimer:** Zen is built for learning and experimentation. It may contain bugs, incomplete features, or breaking changes. Use at your own risk in production environments.
 
 ## Features
 
