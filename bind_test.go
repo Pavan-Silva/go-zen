@@ -19,7 +19,7 @@ func TestBindHeader(t *testing.T) {
 	r := New(":0")
 	r.GET("/headers", func(c *Ctx) {
 		var h Headers
-		if err := BindHeaders(c, &h); err != nil {
+		if err := c.BindHeaders(&h); err != nil {
 			c.Error(http.StatusBadRequest, err.Error())
 			return
 		}
@@ -49,7 +49,7 @@ func TestBindHeader_NotFound(t *testing.T) {
 	r := New(":0")
 	r.GET("/headers", func(c *Ctx) {
 		var h Headers
-		if err := BindHeaders(c, &h); err != nil {
+		if err := c.BindHeaders(&h); err != nil {
 			c.Error(http.StatusBadRequest, err.Error())
 			return
 		}
@@ -70,7 +70,7 @@ func TestBindHeader_InvalidDest(t *testing.T) {
 	r.GET("/headers", func(c *Ctx) {
 		// Pass a non-pointer (invalid dest)
 		var h struct{}
-		if err := BindHeaders(c, h); err != nil {
+		if err := c.BindHeaders(h); err != nil {
 			c.Error(http.StatusBadRequest, err.Error())
 			return
 		}
@@ -160,7 +160,7 @@ func TestBind_TagFallback_JSONDash(t *testing.T) {
 	r := New(":0")
 	var captured Request
 	r.GET("/test", func(c *Ctx) {
-		if err := BindQueryParams(c, &captured); err != nil {
+		if err := c.BindQueryParams(&captured); err != nil {
 			c.Error(http.StatusBadRequest, err.Error())
 			return
 		}
@@ -195,7 +195,7 @@ func TestBind_SliceCustomElements(t *testing.T) {
 	r := New(":0")
 	r.GET("/test", func(c *Ctx) {
 		var req Request
-		if err := BindQueryParams(c, &req); err != nil {
+		if err := c.BindQueryParams(&req); err != nil {
 			c.Error(http.StatusBadRequest, err.Error())
 			return
 		}
@@ -338,7 +338,7 @@ func TestBind_RecursiveAndPointerStructs(t *testing.T) {
 	r := New(":0")
 	r.GET("/test", func(c *Ctx) {
 		var req Request
-		if err := BindQueryParams(c, &req); err != nil {
+		if err := c.BindQueryParams(&req); err != nil {
 			c.Error(http.StatusBadRequest, err.Error())
 			return
 		}
@@ -370,7 +370,7 @@ func TestBind_HeaderCanonicalOptimization(t *testing.T) {
 	r := New(":0")
 	r.GET("/headers", func(c *Ctx) {
 		var req Request
-		if err := BindHeaders(c, &req); err != nil {
+		if err := c.BindHeaders(&req); err != nil {
 			c.Error(http.StatusBadRequest, err.Error())
 			return
 		}
@@ -402,7 +402,7 @@ func TestBind_SelfReferencingStructReturnsError(t *testing.T) {
 	r := New(":0")
 	r.GET("/test", func(c *Ctx) {
 		var node Node
-		if err := BindQueryParams(c, &node); err != nil {
+		if err := c.BindQueryParams(&node); err != nil {
 			c.String(http.StatusBadRequest, "bind error: "+err.Error())
 			return
 		}
@@ -435,7 +435,7 @@ func TestBind_UnexportedStructFieldSkipped(t *testing.T) {
 	r := New(":0")
 	r.GET("/test", func(c *Ctx) {
 		var o outer
-		if err := BindQueryParams(c, &o); err != nil {
+		if err := c.BindQueryParams(&o); err != nil {
 			c.String(http.StatusBadRequest, "bind error: "+err.Error())
 			return
 		}
@@ -468,7 +468,7 @@ func TestBind_TimeWithFormat(t *testing.T) {
 	r := New(":0")
 	r.GET("/test", func(c *Ctx) {
 		var q req
-		if err := BindQueryParams(c, &q); err != nil {
+		if err := c.BindQueryParams(&q); err != nil {
 			c.String(http.StatusBadRequest, "bind error: "+err.Error())
 			return
 		}

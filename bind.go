@@ -49,7 +49,7 @@ func (e *FormError) Unwrap() error { return e.Err }
 
 // BindUnmarshaler is the interface used to wrap the UnmarshalParam method.
 // Types implementing this interface gain control over how a single string
-// value is deserialised during binding.
+// value is deserialized during binding.
 type BindUnmarshaler interface {
 	UnmarshalParam(param string) error
 }
@@ -84,7 +84,7 @@ func (c *Ctx) Bind(dest any) error {
 // BindPathValues binds URL path parameters to dest. Path params are
 // extracted from the route pattern and mapped onto struct fields tagged
 // with the "param" struct tag.
-func BindPathValues(c *Ctx, dest any) error {
+func (c *Ctx) BindPathValues(dest any) error {
 	if c == nil {
 		return ErrInvalidBindTarget
 	}
@@ -110,7 +110,7 @@ func bindPathValues(c *Ctx, dest any) error {
 
 // BindQueryParams binds query parameters to dest. Query params are mapped
 // onto struct fields tagged with the "query" struct tag.
-func BindQueryParams(c *Ctx, dest any) error {
+func (c *Ctx) BindQueryParams(dest any) error {
 	if c == nil {
 		return ErrInvalidBindTarget
 	}
@@ -137,7 +137,7 @@ func bindQueryParams(c *Ctx, dest any) error {
 //   - application/x-www-form-urlencoded
 //   - multipart/form-data
 //   - any type ending with +json or /json
-func BindBody(c *Ctx, dest any) error {
+func (c *Ctx) BindBody(dest any) error {
 	if c == nil {
 		return ErrInvalidBindTarget
 	}
@@ -194,7 +194,7 @@ func bindBody(c *Ctx, dest any) error {
 // BindHeaders binds HTTP request headers to dest. Headers are mapped onto
 // struct fields tagged with the "header" struct tag. Header names are
 // matched case-insensitively.
-func BindHeaders(c *Ctx, dest any) error {
+func (c *Ctx) BindHeaders(dest any) error {
 	if c == nil {
 		return ErrInvalidBindTarget
 	}

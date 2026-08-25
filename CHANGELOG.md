@@ -15,6 +15,7 @@ All notable changes to this project are documented in this file.
 - **middleware**: `Logger` now logs from a deferred call, so requests that panic still produce an access-log entry and the pooled response writer is returned exactly once on every path
 - **auth**: `DefaultUserMapper` skips non-string and empty role claim entries instead of leaving empty holes in `Authorities`; `(User).RequireAuthority("")` never grants access even if an empty string is present in the list
 - **openapi**: `uiHTML` no longer writes to package-level state from request goroutines (latent data race)
+- **bind**: `BindPathValues`, `BindQueryParams`, `BindBody`, and `BindHeaders` are now context-level methods (`c.BindPathValues(&dest)`) — they were mistakenly exposed as package-level functions in v1.4.0
 
 ### Maintenance
 

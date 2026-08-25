@@ -230,7 +230,7 @@ func TestBindPathParams(t *testing.T) {
 	r := New(":0")
 	r.GET("/users/{userID}/posts/{postID}", func(c *Ctx) {
 		var p params
-		if err := BindPathValues(c, &p); err != nil {
+		if err := c.BindPathValues(&p); err != nil {
 			c.Error(http.StatusBadRequest, err.Error())
 			return
 		}
@@ -257,7 +257,7 @@ func TestBindPathParams_NoMatch(t *testing.T) {
 	r := New(":0")
 	r.GET("/users/{userID}", func(c *Ctx) {
 		var p params
-		if err := BindPathValues(c, &p); err != nil {
+		if err := c.BindPathValues(&p); err != nil {
 			c.Error(http.StatusBadRequest, err.Error())
 			return
 		}
@@ -280,7 +280,7 @@ func TestBindPathParams_NonStruct(t *testing.T) {
 	r := New(":0")
 	r.GET("/users/{id}", func(c *Ctx) {
 		var s string
-		err := BindPathValues(c, &s)
+		err := c.BindPathValues(&s)
 		if err == nil {
 			t.Fatal("BindPathParams on non-struct should return an error")
 		}
@@ -304,7 +304,7 @@ func TestBindPathParams_Int(t *testing.T) {
 	r := New(":0")
 	r.GET("/items/{id}", func(c *Ctx) {
 		var p params
-		if err := BindPathValues(c, &p); err != nil {
+		if err := c.BindPathValues(&p); err != nil {
 			c.Error(http.StatusBadRequest, err.Error())
 			return
 		}
@@ -330,7 +330,7 @@ func TestBindQueryParams(t *testing.T) {
 	r := New(":0")
 	r.GET("/items", func(c *Ctx) {
 		var q query
-		if err := BindQueryParams(c, &q); err != nil {
+		if err := c.BindQueryParams(&q); err != nil {
 			c.Error(http.StatusBadRequest, err.Error())
 			return
 		}
@@ -354,7 +354,7 @@ func TestBindQueryParams_Missing(t *testing.T) {
 	r := New(":0")
 	r.GET("/items", func(c *Ctx) {
 		var q query
-		if err := BindQueryParams(c, &q); err != nil {
+		if err := c.BindQueryParams(&q); err != nil {
 			c.Error(http.StatusBadRequest, err.Error())
 			return
 		}
@@ -374,7 +374,7 @@ func TestBindQueryParams_NonStruct(t *testing.T) {
 	r := New(":0")
 	r.GET("/items", func(c *Ctx) {
 		var s string
-		if err := BindQueryParams(c, &s); err != nil {
+		if err := c.BindQueryParams(&s); err != nil {
 			c.Error(http.StatusBadRequest, err.Error())
 			return
 		}
@@ -434,11 +434,11 @@ func TestBind_EmbeddedStructParams(t *testing.T) {
 	r := New(":0")
 	r.GET("/items/{id}", func(c *Ctx) {
 		var p ExtendedParams
-		if err := BindPathValues(c, &p); err != nil {
+		if err := c.BindPathValues(&p); err != nil {
 			c.Error(400, err.Error())
 			return
 		}
-		if err := BindQueryParams(c, &p); err != nil {
+		if err := c.BindQueryParams(&p); err != nil {
 			c.Error(400, err.Error())
 			return
 		}
