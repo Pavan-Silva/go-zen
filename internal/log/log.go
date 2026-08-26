@@ -5,10 +5,7 @@ import (
 	"os"
 )
 
-// DefaultWriter is the destination for zen's internal error and debug logs.
-var DefaultWriter = os.Stderr
-
-var logger = log.New(DefaultWriter, "[ZEN] ", log.LstdFlags)
+var logger = log.New(os.Stderr, "[ZEN] ", log.LstdFlags)
 
 func Error(format string, args ...any) {
 	logger.Printf("ERROR: "+format, args...)

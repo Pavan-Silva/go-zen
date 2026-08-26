@@ -138,16 +138,3 @@ func DefaultUserMapper(claims jwt.MapClaims) *User {
 
 	return user
 }
-
-// stringAuthorities converts a heterogeneous claim array (e.g. JSON-decoded)
-// into a compact []string, skipping non-string and empty entries instead of
-// leaving empty holes that could match empty-authority checks.
-func stringAuthorities(values []any) []string {
-	authorities := make([]string, 0, len(values))
-	for _, v := range values {
-		if s, ok := v.(string); ok && s != "" {
-			authorities = append(authorities, s)
-		}
-	}
-	return authorities
-}
