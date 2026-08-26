@@ -15,6 +15,7 @@ import (
 
 	"github.com/Pavan-Silva/go-zen/internal/log"
 	"github.com/Pavan-Silva/go-zen/internal/system"
+	"github.com/go-playground/validator/v10"
 )
 
 var _ http.Handler = (*Engine)(nil)
@@ -71,7 +72,7 @@ func New(addr string, config ...Config) *Engine {
 		shutdownTimeout:    cfg.ShutdownTimeout,
 		JSONSerializer:     jsonSerializer{},
 		XMLSerializer:      xmlSerializer{},
-		MaxMultipartMemory: 32 << 20,
+		MaxMultipartMemory: defaultMultipartMemory,
 	}
 
 	e.validator = Validator(&defaultValidate{inst: newValidator()})
@@ -232,6 +233,43 @@ func (e *Engine) staticFS(prefix string, filesystem http.FileSystem) {
 		e.HandleRaw("GET "+prefix+"/{any...}", fsHandler)
 		e.HandleRaw("HEAD "+prefix+"/{any...}", fsHandler)
 	}
+}
+
+// --- Engine validation config ---
+
+// SetValidator sets a custom validator for request validation on this engine.
+// Pass nil to disable validation entirely.
+func (e *Engine) SetValidator(v Validator) {
+	e.validator = v
+}
+
+// EnableAutoValidation enables automatic Validate() calls after
+// BindJSON, BindXML, and BindForm for this engine.
+func (e *Engine) EnableAutoValidation() {
+	e.autoValidate = true
+}
+
+// Validate runs struct validation on dest using the engine's configured validator.
+// Returns nil if no validator is set (validation is opt-in).
+func (e *Engine) Validate(dest any) error {
+	if e.validator == nil {
+		return nil
+	}
+	return e.validator.Validate(dest)
+}
+
+// DefaultValidator returns the underlying go-playground/validator/v10 instance
+// when using the default built-in validator, or nil if a custom validator is set.
+// Use this to register custom validation tags:
+//
+//	e.DefaultValidator().RegisterValidation("is-even", func(fl validator.FieldLevel) bool {
+//	    return fl.Field().Int()%2 == 0
+//	})
+func (e *Engine) DefaultValidator() *validator.Validate {
+	if dv, ok := e.validator.(*defaultValidate); ok {
+		return dv.inst
+	}
+	return nil
 }
 
 // Run starts the HTTP server and blocks until a shutdown signal is received.

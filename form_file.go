@@ -6,7 +6,7 @@ import (
 	"mime/multipart"
 )
 
-// defaultMultipartMemory defines the maximum memory used when parsing multipart form data.
+// defaultMultipartMemory is the maximum memory used when parsing multipart form data.
 // Default is 32 MiB.
 const defaultMultipartMemory int64 = 32 << 20
 

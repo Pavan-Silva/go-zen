@@ -7,6 +7,9 @@ import (
 	"github.com/Pavan-Silva/go-zen"
 )
 
+// HeaderXRequestID is the canonical header name for request IDs.
+const HeaderXRequestID = "X-Request-ID"
+
 // RequestIDConfig holds configuration for the Request ID middleware.
 type RequestIDConfig struct {
 	// Header is the request/response header for the request ID.
@@ -21,7 +24,7 @@ type RequestIDConfig struct {
 // DefaultRequestIDConfig returns a RequestIDConfig with sensible defaults.
 func DefaultRequestIDConfig() RequestIDConfig {
 	return RequestIDConfig{
-		Header: zen.HeaderXRequestID,
+		Header: HeaderXRequestID,
 	}
 }
 
@@ -41,7 +44,7 @@ func RequestID() zen.HandlerFunc {
 // RequestIDWithConfig returns Request ID middleware with the given config.
 func RequestIDWithConfig(config RequestIDConfig) zen.HandlerFunc {
 	if config.Header == "" {
-		config.Header = zen.HeaderXRequestID
+		config.Header = HeaderXRequestID
 	}
 	if config.Generator == nil {
 		config.Generator = defaultRequestIDGenerator

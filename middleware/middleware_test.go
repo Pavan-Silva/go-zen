@@ -772,16 +772,16 @@ func TestRequestID_Default(t *testing.T) {
 	if w.Code != 200 {
 		t.Fatalf("status = %d, want 200", w.Code)
 	}
-	if w.Header().Get(zen.HeaderXRequestID) == "" {
+	if w.Header().Get(HeaderXRequestID) == "" {
 		t.Fatal("expected X-Request-Id header")
 	}
-	if w.Body.String() != w.Header().Get(zen.HeaderXRequestID) {
+	if w.Body.String() != w.Header().Get(HeaderXRequestID) {
 		t.Fatal("response body should match request ID")
 	}
 }
 
 // TestRequestID_HeaderConstant pins the middleware output to the exported
-// zen.HeaderXRequestID constant so a rename on either side fails here.
+// HeaderXRequestID constant so a rename on either side fails here.
 func TestRequestID_HeaderConstant(t *testing.T) {
 	r := zen.New(":0")
 	r.Use(RequestID())
@@ -793,8 +793,8 @@ func TestRequestID_HeaderConstant(t *testing.T) {
 	req := httptest.NewRequest("GET", "/", nil)
 	r.ServeHTTP(w, req)
 
-	if got := w.Header().Get(zen.HeaderXRequestID); got == "" {
-		t.Fatalf("expected non-empty %q response header", zen.HeaderXRequestID)
+	if got := w.Header().Get(HeaderXRequestID); got == "" {
+		t.Fatalf("expected non-empty %q response header", HeaderXRequestID)
 	}
 }
 

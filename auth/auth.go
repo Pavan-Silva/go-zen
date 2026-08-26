@@ -2,10 +2,13 @@
 package auth
 
 import (
+	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/Pavan-Silva/go-zen"
+	"github.com/golang-jwt/jwt/v5"
 )
 
 // defaultAuthHTTPClient is the shared HTTP client used by auth providers
@@ -106,4 +109,29 @@ func authorize(check func(*User) bool, onError ...func(*zen.Ctx)) zen.HandlerFun
 		}
 		c.Next()
 	}
+}
+
+// bearerTokenFromRequest extracts the Bearer token from the Authorization header.
+// The auth-scheme is matched case-insensitively per RFC 7235 section 5.1
+// (e.g. "Bearer", "bearer", and "BEARER" are all accepted).
+func bearerTokenFromRequest(r *http.Request) (string, error) {
+	ah := r.Header["Authorization"]
+	if len(ah) == 0 {
+		return "", fmt.Errorf("missing authorization header")
+	}
+
+	const scheme = "bearer "
+	if len(ah[0]) > len(scheme) && strings.EqualFold(ah[0][:len(scheme)], scheme) {
+		return ah[0][len(scheme):], nil
+	}
+
+	return "", fmt.Errorf("invalid authorization header format")
+}
+
+// userFromClaims maps JWT claims to a User using the optional claims function.
+func userFromClaims(claimsFunc func(jwt.MapClaims) *User, claims jwt.MapClaims) *User {
+	if claimsFunc != nil {
+		return claimsFunc(claims)
+	}
+	return DefaultUserMapper(claims)
 }
