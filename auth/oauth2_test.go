@@ -29,7 +29,9 @@ func TestOAuth2Auth_Success(t *testing.T) {
 			ExpiresAt: time.Now().Add(time.Hour).Unix(),
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(info)
+		if err := json.NewEncoder(w).Encode(info); err != nil {
+			t.Fatal(err)
+		}
 	}))
 	defer introspectServer.Close()
 
@@ -58,7 +60,9 @@ func TestOAuth2Auth_Inactive(t *testing.T) {
 	introspectServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		info := OAuth2TokenInfo{Active: false}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(info)
+		if err := json.NewEncoder(w).Encode(info); err != nil {
+			t.Fatal(err)
+		}
 	}))
 	defer introspectServer.Close()
 
@@ -83,7 +87,9 @@ func TestOAuth2Auth_Expired(t *testing.T) {
 			ExpiresAt: time.Now().Add(-time.Hour).Unix(),
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(info)
+		if err := json.NewEncoder(w).Encode(info); err != nil {
+			t.Fatal(err)
+		}
 	}))
 	defer introspectServer.Close()
 
@@ -129,7 +135,9 @@ func TestOAuth2Auth_CustomClaimsFunc(t *testing.T) {
 			Username: "john",
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(info)
+		if err := json.NewEncoder(w).Encode(info); err != nil {
+			t.Fatal(err)
+		}
 	}))
 	defer introspectServer.Close()
 
@@ -165,7 +173,9 @@ func TestOAuth2Auth_UsernameFallback(t *testing.T) {
 			Subject: "user-1",
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(info)
+		if err := json.NewEncoder(w).Encode(info); err != nil {
+			t.Fatal(err)
+		}
 	}))
 	defer introspectServer.Close()
 

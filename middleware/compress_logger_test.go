@@ -19,7 +19,9 @@ func TestCompress_PanicBeforeCommit_Clean500(t *testing.T) {
 	r.Use(Recover)
 	r.Use(Compress())
 	r.GET("/boom", func(c *zen.Ctx) {
-		io.WriteString(c.Response, "partial-data")
+		if _, err := io.WriteString(c.Response, "partial-data"); err != nil {
+			t.Fatal(err)
+		}
 		panic("kaboom")
 	})
 
@@ -44,7 +46,9 @@ func TestCompress_PanicAfterCommit_StreamClosedAndPanicPropagates(t *testing.T) 
 	r.Use(Recover)
 	r.Use(Compress())
 	r.GET("/boom", func(c *zen.Ctx) {
-		io.WriteString(c.Response, strings.Repeat("A", 4096))
+		if _, err := io.WriteString(c.Response, strings.Repeat("A", 4096)); err != nil {
+			t.Fatal(err)
+		}
 		panic("kaboom")
 	})
 
