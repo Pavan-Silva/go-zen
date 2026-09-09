@@ -1,26 +1,3 @@
-// Package zen provides binding of HTTP request data into Go structs and maps.
-//
-// # Subsystem overview
-//
-// The binding subsystem maps incoming data from four sources onto a destination:
-//   - Path parameters  (via BindPathValues)
-//   - Query parameters (via BindQueryParams)
-//   - Request body     (via BindBody)
-//   - HTTP headers     (via BindHeaders)
-//
-// # Tag resolution order
-//
-// For a given source each struct field is located by looking up its struct tag
-// (param / query / form / header). If that tag is empty the json tag is tried
-// next. If the json tag is also empty (or set to "-") the field name is used
-// as-is. This allows a single set of json tags to double as binding tags in
-// most cases.
-//
-// # Supported field types
-//
-// Basic types (int*, uint*, float*, bool, string), pointers to those types,
-// slices of those types, time.Time (with format tag), BindUnmarshaler,
-// encoding.TextUnmarshaler, and multipart.FileHeader variants.
 package zen
 
 import (

@@ -112,9 +112,9 @@ func TestRenderWriter(t *testing.T) {
 	}
 
 	var buf strings.Builder
-	err = RenderWriter(&buf, tmpl, "test.html", map[string]any{"Name": "Zen"})
+	err = renderWriter(&buf, tmpl, "test.html", map[string]any{"Name": "Zen"})
 	if err != nil {
-		t.Fatalf("RenderWriter failed: %v", err)
+		t.Fatalf("renderWriter failed: %v", err)
 	}
 	if buf.String() != "Hello Zen" {
 		t.Fatalf("result = %q, want %q", buf.String(), "Hello Zen")

@@ -49,13 +49,6 @@ func (c *Ctx) Render(status int, tmpl *Templates, name string, data any) {
 	}
 }
 
-// RenderWriter executes a named template and writes to an io.Writer.
-// Useful for testing or composing templates.
-//
-// Example:
-//
-//	var buf strings.Builder
-//	zen.RenderWriter(&buf, t, "index.html", data)
-func RenderWriter(w io.Writer, tmpl *Templates, name string, data any) error {
+func renderWriter(w io.Writer, tmpl *Templates, name string, data any) error {
 	return tmpl.tmpl.ExecuteTemplate(w, filepath.Base(name), data)
 }

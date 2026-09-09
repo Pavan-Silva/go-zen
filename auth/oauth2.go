@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Pavan-Silva/go-zen"
 	"github.com/golang-jwt/jwt/v5"
 )
 
@@ -26,15 +27,15 @@ type OAuth2TokenInfo struct {
 
 // OAuth2Auth implements OAuth2 token introspection authentication.
 type OAuth2Auth struct {
-	TokenIntrospectionEndpoint string                           // URL of the OAuth2 token introspection endpoint.
-	ClientID                   string                           // Client ID for the introspection endpoint.
-	ClientSecret               string                           // Client secret for token introspection.
-	HTTPClient                 *http.Client                     // HTTP client used for introspection requests.
-	ClaimsFunc                 func(claims jwt.MapClaims) *User // Optional function mapping JWT claims to a User.
+	TokenIntrospectionEndpoint string                               // URL of the OAuth2 token introspection endpoint.
+	ClientID                   string                               // Client ID for the introspection endpoint.
+	ClientSecret               string                               // Client secret for token introspection.
+	HTTPClient                 *http.Client                         // HTTP client used for introspection requests.
+	ClaimsFunc                 func(claims jwt.MapClaims) *zen.User // Optional function mapping JWT claims to a User.
 }
 
 // Authenticate validates the access token using OAuth2 token introspection.
-func (o *OAuth2Auth) Authenticate(r *http.Request) (*User, error) {
+func (o *OAuth2Auth) Authenticate(r *http.Request) (*zen.User, error) {
 	if o == nil {
 		return nil, fmt.Errorf("oauth2 auth is not configured")
 	}
@@ -78,7 +79,7 @@ func (o *OAuth2Auth) Authenticate(r *http.Request) (*User, error) {
 	}
 
 	// Build the user from the introspection result.
-	user := &User{
+	user := &zen.User{
 		ID:       tokenInfo.Subject,
 		Username: tokenInfo.Username,
 		Claims:   claims,
@@ -86,10 +87,6 @@ func (o *OAuth2Auth) Authenticate(r *http.Request) (*User, error) {
 
 	if user.Username == "" {
 		user.Username = tokenInfo.Subject
-	}
-
-	if tokenInfo.Scope != "" {
-		user.Authorities = strings.Split(tokenInfo.Scope, " ")
 	}
 
 	return user, nil

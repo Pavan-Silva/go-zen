@@ -20,6 +20,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/Pavan-Silva/go-zen/rbac"
 )
 
 func TestRouter_New(t *testing.T) {
@@ -887,4 +889,82 @@ func generateCert(t *testing.T) (certFile, keyFile string) {
 	}
 
 	return
+}
+
+func TestEngine_EnableRBAC_DefaultConfigPath(t *testing.T) {
+	if rbac.DefaultConfigPath != "configs/rbac.json" {
+		t.Fatalf("DefaultConfigPath = %q, want configs/rbac.json", rbac.DefaultConfigPath)
+	}
+
+	dir := t.TempDir()
+	writeTestFile(t, filepath.Join(dir, "configs", "rbac.json"), `{
+		"roles": [
+			{"name": "viewer", "permissions": ["posts:read"]},
+			{"name": "editor", "permissions": ["posts:write"], "inheritsFrom": ["viewer"]}
+		]
+	}`)
+
+	oldWD, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldWD) })
+
+	New(":0").EnableRBAC()
+
+	if !rbac.HasPermission([]string{"editor"}, "posts:read") {
+		t.Fatal("editor should inherit viewer's permission from the default config")
+	}
+	if !rbac.HasPermission([]string{"editor"}, "posts:write") {
+		t.Fatal("editor should have its own permission from the default config")
+	}
+}
+
+func TestEngine_EnableRBAC_CustomConfigPath(t *testing.T) {
+	cfg := filepath.Join(t.TempDir(), "rbac.json")
+	writeTestFile(t, cfg, `{
+		"roles": [{"name": "admin", "permissions": ["users:delete"]}]
+	}`)
+
+	New(":0").EnableRBAC(cfg)
+
+	if !rbac.HasPermission([]string{"admin"}, "users:delete") {
+		t.Fatal("admin role not registered from custom config")
+	}
+}
+
+func TestEngine_EnableRBAC_MissingConfigPanics(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("expected panic for missing config file")
+		}
+	}()
+
+	New(":0").EnableRBAC(filepath.Join(t.TempDir(), "does-not-exist.json"))
+}
+
+func TestEngine_EnableRBAC_InvalidConfigPanics(t *testing.T) {
+	cfg := filepath.Join(t.TempDir(), "rbac.json")
+	writeTestFile(t, cfg, `{"roles": [{"name": "viewer",`)
+
+	defer func() {
+		if recover() == nil {
+			t.Fatal("expected panic for invalid config file")
+		}
+	}()
+
+	New(":0").EnableRBAC(cfg)
+}
+
+func writeTestFile(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
 }

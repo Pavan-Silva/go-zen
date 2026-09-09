@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented in this file.
 
+## Unreleased
+
+### Changed
+
+- **rbac**: the RBAC registry, permission checks, and config loading live in a standalone `rbac` package (no dependency on the zen core). `rbac.RegisterRoles`, `rbac.HasPermission`, `rbac.LoadConfig`, `rbac.Config`, `rbac.RoleConfig`, and `rbac.DefaultConfigPath` are its public surface; `Engine.EnableRBAC` and `User.Has*` checks delegate to it
+- **auth → zen**: authentication and authorization middleware moved out of `auth` into the root `zen` package. `EnableAuth` and `c.GetUser()` handle authentication; claim access moved to `c.GetClaim(key)`; `RequireRole`/`RequireAnyRole`/`RequireAllRoles`, `RequirePermission`/`RequireAnyPermission`/`RequireAllPermissions`, `RequireClaim`, `SkipPaths`, `SkipPrefixes`, and `SkipMethodsAndPaths` are package-level functions of `zen`
+- **auth**: the package is now a providers-only addon that implements `zen.Authenticator` and returns `*zen.User`. `auth.User` and `auth.Authenticator` remain available as aliases of the root types; `auth` provides JWT, OAuth2, OIDC, Basic, API key, session, and password providers only
+- **auth**: authorization is now a single roles model — roles define permissions, users carry only roles. `User.Authorities` is replaced by `User.Roles` (exact role names, no `ROLE_` prefix normalization). `RequireRole`/`RequireAnyRole`/`RequireAllRoles` check `User.Roles` directly; `RequirePermission`/`RequireAnyPermission`/`RequireAllPermissions` resolve permissions through the role registry. The old `RequireAuthority` helpers are removed — permissions are no longer carried on the user, they belong to roles
+- **auth**: `DefaultUserMapper` maps a JWT `roles` (array) or `role` (single) claim into `User.Roles`; `scope`/`authorities` claims remain in `User.Claims` for business logic and are not used for authorization
+
+### Added
+
+- **engine**: `Engine.EnableAuth(authenticator, ...SkipFunc)` installs authentication middleware in one call, equivalent to `r.Use(zen.EnableAuth(...))`
+- **auth**: `User.HasRole`/`HasAnyRole`/`HasAllRoles` and `User.HasPermission`/`HasAnyPermission`/`HasAllPermissions` boolean checks
+
 ## v1.5.1
 
 ### Fixed
@@ -34,7 +49,7 @@ All notable changes to this project are documented in this file.
 
 - `openapi` rewritten as a swaggo serving adapter — the built-in spec generator is gone: removed `RouteInfo`, `RouteInfoBuilder`, `RI`, `Register` and the per-method helpers, `OpenAPI.Group`, `SecurityScheme`/`OAuthFlows` types, and the `Config` fields `Title`, `Version`, `Description`, `SecuritySchemes`, and `DefaultSecurity`; that metadata now comes from swag annotations (`@Summary`, `@Param`, `@Success`, `@securityDefinitions`, ...). `SpecJSON` returns `([]byte, error)` and serves 503 with a JSON error body when no swag documentation is registered
 - Removed `zen.FromContext` — use `zen.FromRequest(r)`, which is equivalent
-- Removed `auth.Middleware` — use `auth.RequireAuth` or `auth.MiddlewareWithSkipper`
+- Removed `auth.Middleware` — use `zen.EnableAuth` or `zen.MiddlewareWithSkipper`
 - Removed `auth.WithAuth` — use `auth.WithAuthFunc`, which additionally provides the authenticated user
 - Removed `auth.Authorities` — declare authority slices directly (`[]string{...}`)
 - Removed `auth.GenerateJWT` and `auth.ParseJWT` — use `(JWTAuth).Generate(claims, expiry)` and `(JWTAuth).Parse(token)`, which reuse the adapter's configured `Secret` and `SigningMethod` instead of requiring them again

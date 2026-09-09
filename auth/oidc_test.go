@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/Pavan-Silva/go-zen"
 	"github.com/golang-jwt/jwt/v5"
 )
 
@@ -151,8 +152,8 @@ func TestOIDCAuth_CustomClaimsFunc(t *testing.T) {
 	auth := &OIDCAuth{
 		UserInfoEndpoint:      userinfoServer.URL,
 		SkipTokenVerification: true,
-		ClaimsFunc: func(claims jwt.MapClaims) *User {
-			return &User{
+		ClaimsFunc: func(claims jwt.MapClaims) *zen.User {
+			return &zen.User{
 				ID:       "oidc-" + claims["sub"].(string),
 				Username: claims["name"].(string),
 			}

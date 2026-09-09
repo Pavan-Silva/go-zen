@@ -1,3 +1,7 @@
+// Package auth provides authentication providers (JWT, OAuth2, OIDC, Basic,
+// API key, session, password) built on top of the zen core's authentication
+// types. Each provider implements zen.Authenticator and returns *zen.User
+// values; authorization is resolved through the standalone rbac package.
 package auth
 
 import (
@@ -5,9 +9,9 @@ import (
 	"fmt"
 	"maps"
 	"net/http"
-	"strings"
 	"time"
 
+	"github.com/Pavan-Silva/go-zen"
 	"github.com/golang-jwt/jwt/v5"
 )
 
@@ -15,9 +19,9 @@ import (
 // fields are the single source of truth used both to verify incoming tokens
 // (Authenticate) and to issue new ones (Generate).
 type JWTAuth struct {
-	Secret        []byte                           // Secret key used to verify token signatures.
-	SigningMethod jwt.SigningMethod                // Expected signing method (e.g. jwt.SigningMethodHS256).
-	ClaimsFunc    func(claims jwt.MapClaims) *User // Optional function to map JWT claims to a User pointer.
+	Secret        []byte                               // Secret key used to verify token signatures.
+	SigningMethod jwt.SigningMethod                    // Expected signing method (e.g. jwt.SigningMethodHS256).
+	ClaimsFunc    func(claims jwt.MapClaims) *zen.User // Optional function to map JWT claims to a User pointer.
 }
 
 // validate reports whether the adapter carries the minimum configuration
@@ -26,17 +30,20 @@ func (j *JWTAuth) validate() error {
 	if j == nil {
 		return errors.New("jwt auth is not configured")
 	}
+
 	if j.SigningMethod == nil {
 		return errors.New("jwt signing method is not configured")
 	}
+
 	if len(j.Secret) == 0 {
 		return errors.New("jwt secret is not configured")
 	}
+
 	return nil
 }
 
 // Authenticate extracts and validates a JWT token from the request.
-func (j *JWTAuth) Authenticate(r *http.Request) (*User, error) {
+func (j *JWTAuth) Authenticate(r *http.Request) (*zen.User, error) {
 	if err := j.validate(); err != nil {
 		return nil, err
 	}
@@ -112,9 +119,12 @@ func (j *JWTAuth) Parse(tokenString string) (jwt.MapClaims, error) {
 	return claims, nil
 }
 
-// DefaultUserMapper constructs a User from JWT claims.
-func DefaultUserMapper(claims jwt.MapClaims) *User {
-	user := &User{
+// defaultUserMapper constructs a User from JWT claims. The "roles" claim
+// (array) or the "role" claim (single name) populates User.Roles; "scope" and
+// "authorities" claims are kept in User.Claims for business logic and are not
+// used for authorization (permissions are defined via Engine.EnableRBAC).
+func defaultUserMapper(claims jwt.MapClaims) *zen.User {
+	user := &zen.User{
 		Claims: claims,
 	}
 
@@ -129,11 +139,9 @@ func DefaultUserMapper(claims jwt.MapClaims) *User {
 	}
 
 	if roles, ok := claims["roles"].([]any); ok {
-		user.Authorities = stringAuthorities(roles)
-	} else if roles, ok := claims["authorities"].([]any); ok {
-		user.Authorities = stringAuthorities(roles)
-	} else if scope, ok := claims["scope"].(string); ok && scope != "" {
-		user.Authorities = strings.Split(scope, " ")
+		user.Roles = stringRoles(roles)
+	} else if role, ok := claims["role"].(string); ok && role != "" {
+		user.Roles = []string{role}
 	}
 
 	return user

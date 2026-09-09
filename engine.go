@@ -18,8 +18,6 @@ import (
 	"github.com/go-playground/validator/v10"
 )
 
-var _ http.Handler = (*Engine)(nil)
-
 // Config holds server-level timeout and header size settings.
 // Use DefaultConfig to obtain sensible defaults, then override fields as needed.
 type Config struct {

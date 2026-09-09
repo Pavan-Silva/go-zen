@@ -22,6 +22,17 @@ const maxBindDepth = 64
 // uploaded multipart files and may be nil. destination must be a non-nil
 // pointer to a struct or a string-keyed map, otherwise ErrInvalidBindTarget
 // is returned. When both maps are empty, destination is left unchanged.
+//
+// Tag resolution order: for a given source each struct field is located by
+// looking up its struct tag (param / query / form / header). If that tag is
+// empty the json tag is tried next. If the json tag is also empty (or set to
+// "-") the field name is used as-is. This allows a single set of json tags to
+// double as binding tags in most cases.
+//
+// Supported field types: basic types (int*, uint*, float*, bool, string),
+// pointers to those types, slices of those types, time.Time (with format
+// tag), BindUnmarshaler, encoding.TextUnmarshaler, and multipart.FileHeader
+// variants.
 func bindData(
 	destination any,
 	data map[string][]string,

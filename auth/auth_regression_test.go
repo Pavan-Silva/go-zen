@@ -51,44 +51,32 @@ func TestJWTAuth_MissingOrMalformedHeader(t *testing.T) {
 	}
 }
 
-// Regression: non-string role entries used to leave empty holes in
-// Authorities; entries must be compact and empty strings skipped.
-func TestDefaultUserMapper_CompactAuthorities(t *testing.T) {
-	user := DefaultUserMapper(jwt.MapClaims{
-		"roles": []any{"admin", 42, "", nil, "editor"},
+// Regression: non-string role entries used to leave empty holes in the role
+// list; entries must be compact, empty strings skipped, and role names kept
+// verbatim (no prefix normalization).
+func TestDefaultUserMapper_RolesCompact(t *testing.T) {
+	user := defaultUserMapper(jwt.MapClaims{
+		"roles": []any{"admin", 42, "", nil, "editor", "ROLE:prefixed"},
 	})
-	if len(user.Authorities) != 2 {
-		t.Fatalf("Authorities = %#v, want [admin editor]", user.Authorities)
+	want := []string{"admin", "editor", "ROLE:prefixed"}
+	if len(user.Roles) != len(want) {
+		t.Fatalf("Roles = %#v, want %#v", user.Roles, want)
 	}
-	if user.Authorities[0] != "admin" || user.Authorities[1] != "editor" {
-		t.Errorf("Authorities = %#v, want [admin editor]", user.Authorities)
-	}
-}
-
-func TestDefaultUserMapper_AuthoritiesAndScope(t *testing.T) {
-	u1 := DefaultUserMapper(jwt.MapClaims{"authorities": []any{"read", "write"}})
-	if len(u1.Authorities) != 2 || u1.Authorities[0] != "read" {
-		t.Errorf("Authorities = %#v", u1.Authorities)
-	}
-
-	u2 := DefaultUserMapper(jwt.MapClaims{"scope": "read write admin"})
-	if len(u2.Authorities) != 3 || u2.Authorities[2] != "admin" {
-		t.Errorf("scope mapping broken: %#v", u2.Authorities)
+	for i := range want {
+		if user.Roles[i] != want[i] {
+			t.Errorf("Roles = %#v, want %#v", user.Roles, want)
+		}
 	}
 }
 
-// Regression: an empty authority string must never grant access, even if it
-// is present in the authorities list.
-func TestRequireAuthority_EmptyNeverGrants(t *testing.T) {
-	u := &User{Authorities: []string{""}}
-	if u.RequireAuthority("") {
-		t.Error("empty authority must not match")
+func TestDefaultUserMapper_AuthoritiesAndScopeIgnored(t *testing.T) {
+	u1 := defaultUserMapper(jwt.MapClaims{"authorities": []any{"read", "write"}})
+	if len(u1.Roles) != 0 {
+		t.Errorf("authorities claim must not map to roles: %#v", u1.Roles)
 	}
-	if (&User{}).RequireAuthority("") {
-		t.Error("empty authority must not match")
-	}
-	var nilUser *User
-	if nilUser.RequireAuthority("admin") {
-		t.Error("nil user must not have authorities")
+
+	u2 := defaultUserMapper(jwt.MapClaims{"scope": "read write admin"})
+	if len(u2.Roles) != 0 {
+		t.Errorf("scope must not map to roles: %#v", u2.Roles)
 	}
 }
