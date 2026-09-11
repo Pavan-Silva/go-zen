@@ -24,11 +24,13 @@ var errUnauth = errors.New("unauthorized")
 // tests: viewer owns docs:read, editor owns docs:write and inherits viewer,
 // admin owns admin:system.
 func seedAuthRoles() {
-	rbac.RegisterRoles(
-		rbac.RoleConfig{Name: "viewer", Permissions: []string{"docs:read"}},
-		rbac.RoleConfig{Name: "editor", Permissions: []string{"docs:write"}, InheritsFrom: []string{"viewer"}},
-		rbac.RoleConfig{Name: "admin", Permissions: []string{"admin:system"}},
-	)
+	if err := rbac.Apply(rbac.WithRoles(
+		rbac.Role{Name: "viewer", Permissions: []string{"docs:read"}},
+		rbac.Role{Name: "editor", Permissions: []string{"docs:write"}, InheritsFrom: []string{"viewer"}},
+		rbac.Role{Name: "admin", Permissions: []string{"admin:system"}},
+	)); err != nil {
+		panic(err)
+	}
 }
 
 func TestEnableAuth_Success(t *testing.T) {

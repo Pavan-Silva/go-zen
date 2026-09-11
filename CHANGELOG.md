@@ -6,7 +6,7 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
-- **rbac**: the RBAC registry, permission checks, and config loading live in a standalone `rbac` package (no dependency on the zen core). `rbac.RegisterRoles`, `rbac.HasPermission`, `rbac.LoadConfig`, `rbac.Config`, `rbac.RoleConfig`, and `rbac.DefaultConfigPath` are its public surface; `Engine.EnableRBAC` and `User.Has*` checks delegate to it
+- **rbac**: the RBAC registry, permission checks, and config loading live in a standalone `rbac` package (no dependency on the zen core). Role sources are unified behind `rbac.Apply` with `rbac.WithFile` (JSON config) and `rbac.WithRoles` (inline definitions); `rbac.Role` describes a role, `rbac.HasPermission` answers checks, and `rbac.DefaultConfigPath` is the default file. The engine delegates through a single entry point: `Engine.EnableRBAC()` loads the default file, `Engine.EnableRBAC("path")` loads a custom file, and `Engine.EnableRBAC(rbac.Role{...})` registers inline definitions (any mix of the two in one call); `User.Has*` checks resolve through it
 - **auth → zen**: authentication and authorization middleware moved out of `auth` into the root `zen` package. `EnableAuth` and `c.GetUser()` handle authentication; claim access moved to `c.GetClaim(key)`; `RequireRole`/`RequireAnyRole`/`RequireAllRoles`, `RequirePermission`/`RequireAnyPermission`/`RequireAllPermissions`, `RequireClaim`, `SkipPaths`, `SkipPrefixes`, and `SkipMethodsAndPaths` are package-level functions of `zen`
 - **auth**: the package is now a providers-only addon that implements `zen.Authenticator` and returns `*zen.User`. `auth.User` and `auth.Authenticator` remain available as aliases of the root types; `auth` provides JWT, OAuth2, OIDC, Basic, API key, session, and password providers only
 - **auth**: authorization is now a single roles model — roles define permissions, users carry only roles. `User.Authorities` is replaced by `User.Roles` (exact role names, no `ROLE_` prefix normalization). `RequireRole`/`RequireAnyRole`/`RequireAllRoles` check `User.Roles` directly; `RequirePermission`/`RequireAnyPermission`/`RequireAllPermissions` resolve permissions through the role registry. The old `RequireAuthority` helpers are removed — permissions are no longer carried on the user, they belong to roles
@@ -48,6 +48,7 @@ All notable changes to this project are documented in this file.
 ### Breaking
 
 - `openapi` rewritten as a swaggo serving adapter — the built-in spec generator is gone: removed `RouteInfo`, `RouteInfoBuilder`, `RI`, `Register` and the per-method helpers, `OpenAPI.Group`, `SecurityScheme`/`OAuthFlows` types, and the `Config` fields `Title`, `Version`, `Description`, `SecuritySchemes`, and `DefaultSecurity`; that metadata now comes from swag annotations (`@Summary`, `@Param`, `@Success`, `@securityDefinitions`, ...). `SpecJSON` returns `([]byte, error)` and serves 503 with a JSON error body when no swag documentation is registered
+- `rbac.RegisterRoles`, `rbac.LoadConfig`, and `rbac.Config` are removed and `rbac.RoleConfig` is renamed `rbac.Role` — the rbac package now exposes `rbac.Apply`, `rbac.WithFile`, and `rbac.WithRoles`. On the engine, `Engine.EnableRBAC` became a single variadic entry point that accepts config file paths (strings) and/or `rbac.Role` definitions in any mix; a string argument that was previously a method/option wrapper is now passed directly (`Engine.EnableRBAC("rbac.json")`), and inline definitions are passed as roles (`Engine.EnableRBAC(rbac.Role{...})`)
 - Removed `zen.FromContext` — use `zen.FromRequest(r)`, which is equivalent
 - Removed `auth.Middleware` — use `zen.EnableAuth` or `zen.MiddlewareWithSkipper`
 - Removed `auth.WithAuth` — use `auth.WithAuthFunc`, which additionally provides the authenticated user
@@ -56,6 +57,7 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- `rbac`: inheritance now resolves against every registered role, not just the roles in a single call. A role can inherit from one defined in a separate `EnableRBAC`/`Apply` batch or config file; such cross-batch inheritance previously registered the role without its inherited permissions
 - `Group("/")` no longer panics with an index-out-of-range error; empty and "/" prefixes now inherit the parent group prefix unchanged instead of producing double-slash route paths
 
 ### Maintenance

@@ -96,22 +96,54 @@ func middlewareWithSkipper(authenticator Authenticator, onError func(*Ctx), skip
 
 // --- RBAC ---
 
-// EnableRBAC loads role definitions from a JSON config file using the rbac
-// package and registers them for authorization. With no path it loads
-// rbac.DefaultConfigPath ("configs/rbac.json"); pass a custom path to use a
-// different file. Panics on read or parse errors so misconfiguration fails
-// fast at startup.
-func (e *Engine) EnableRBAC(configPath ...string) {
-	path := rbac.DefaultConfigPath
-	if len(configPath) > 0 && configPath[0] != "" {
-		path = configPath[0]
+// EnableRBAC registers role definitions for authorization through the rbac
+// package. Each argument is a source of roles: a string is a path to a JSON
+// config file, and a rbac.Role is registered directly. With no arguments it
+// loads the default rbac.DefaultConfigPath ("configs/rbac.json"):
+//
+//	r.EnableRBAC()                                   // loads configs/rbac.json
+//	r.EnableRBAC("rbac.json")                        // custom config file
+//	r.EnableRBAC(rbac.Role{Name: "admin", Permissions: []string{"users:delete"}})
+//
+// File roles are registered before inline ones. Panics on read or parse
+// errors, on an unsupported argument type, or on more than one config path, so
+// misconfiguration fails fast at startup.
+func (e *Engine) EnableRBAC(sources ...any) {
+	if len(sources) == 0 {
+		sources = []any{rbac.DefaultConfigPath}
 	}
 
-	cfg, err := rbac.LoadConfig(path)
-	if err != nil {
-		panic(err)
+	var (
+		file   string
+		inline []rbac.Role
+	)
+	for _, src := range sources {
+		switch v := src.(type) {
+		case string:
+			if file != "" {
+				panic(fmt.Errorf("zen: EnableRBAC: multiple config file paths: %q and %q", file, v))
+			}
+			if v == "" {
+				v = rbac.DefaultConfigPath
+			}
+			file = v
+		case rbac.Role:
+			inline = append(inline, v)
+		default:
+			panic(fmt.Errorf("zen: EnableRBAC: unsupported argument type %T (want a string config path or rbac.Role)", src))
+		}
 	}
-	rbac.RegisterRoles(cfg.Roles...)
+
+	if file != "" {
+		if err := rbac.Apply(rbac.WithFile(file)); err != nil {
+			panic(err)
+		}
+	}
+	if len(inline) > 0 {
+		if err := rbac.Apply(rbac.WithRoles(inline...)); err != nil {
+			panic(err)
+		}
+	}
 }
 
 // --- RBAC Utility-Functions ---

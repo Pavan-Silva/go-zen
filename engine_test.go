@@ -923,7 +923,7 @@ func TestEngine_EnableRBAC_DefaultConfigPath(t *testing.T) {
 	}
 }
 
-func TestEngine_EnableRBAC_CustomConfigPath(t *testing.T) {
+func TestEngine_EnableRBAC_CustomFile(t *testing.T) {
 	cfg := filepath.Join(t.TempDir(), "rbac.json")
 	writeTestFile(t, cfg, `{
 		"roles": [{"name": "admin", "permissions": ["users:delete"]}]
@@ -957,6 +957,66 @@ func TestEngine_EnableRBAC_InvalidConfigPanics(t *testing.T) {
 	}()
 
 	New(":0").EnableRBAC(cfg)
+}
+
+func TestEngine_EnableRBAC_Roles(t *testing.T) {
+	New(":0").EnableRBAC(
+		rbac.Role{Name: "admin", Permissions: []string{"users:delete"}},
+		rbac.Role{Name: "editor", Permissions: []string{"docs:write"}, InheritsFrom: []string{"viewer"}},
+		rbac.Role{Name: "viewer", Permissions: []string{"docs:read"}},
+	)
+
+	if !rbac.HasPermission([]string{"admin"}, "users:delete") {
+		t.Fatal("admin role not registered from inline definitions")
+	}
+	if !rbac.HasPermission([]string{"editor"}, "docs:write") {
+		t.Fatal("editor should have its own permission")
+	}
+	if !rbac.HasPermission([]string{"editor"}, "docs:read") {
+		t.Fatal("editor should inherit viewer's permission")
+	}
+	if rbac.HasPermission([]string{"viewer"}, "users:delete") {
+		t.Fatal("viewer should not inherit unrelated permissions")
+	}
+}
+
+func TestEngine_EnableRBAC_UnsupportedArgPanics(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("expected panic for unsupported argument type")
+		}
+	}()
+
+	New(":0").EnableRBAC(42)
+}
+
+func TestEngine_EnableRBAC_MultiplePathsPanics(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("expected panic for multiple config file paths")
+		}
+	}()
+
+	New(":0").EnableRBAC("a.json", "b.json")
+}
+
+func TestEngine_EnableRBAC_MixedFileAndRoles(t *testing.T) {
+	cfg := filepath.Join(t.TempDir(), "rbac.json")
+	writeTestFile(t, cfg, `{
+		"roles": [{"name": "viewer", "permissions": ["posts:read"]}]
+	}`)
+
+	New(":0").EnableRBAC(
+		cfg,
+		rbac.Role{Name: "editor", Permissions: []string{"posts:write"}, InheritsFrom: []string{"viewer"}},
+	)
+
+	if !rbac.HasPermission([]string{"editor"}, "posts:write") {
+		t.Fatal("editor should own its inline permission")
+	}
+	if !rbac.HasPermission([]string{"editor"}, "posts:read") {
+		t.Fatal("editor should inherit viewer's permission from the config file")
+	}
 }
 
 func writeTestFile(t *testing.T, path, content string) {

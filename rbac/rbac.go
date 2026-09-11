@@ -14,11 +14,11 @@ import (
 	"sync/atomic"
 )
 
-// DefaultConfigPath is the JSON config file Engine.EnableRBAC loads when no
-// custom path is provided.
+// DefaultConfigPath is the JSON config file Apply loads when no source is
+// configured.
 const DefaultConfigPath = "configs/rbac.json"
 
-// Config is the JSON shape of an RBAC definition file.
+// config is the JSON shape of an RBAC definition file.
 //
 //	{
 //	  "roles": [
@@ -26,18 +26,18 @@ const DefaultConfigPath = "configs/rbac.json"
 //	    {"name": "editor", "permissions": ["posts:write"], "inheritsFrom": ["viewer"]}
 //	  ]
 //	}
-type Config struct {
-	Roles []RoleConfig `json:"roles"`
+type config struct {
+	Roles []Role `json:"roles"`
 }
 
-// RoleConfig describes a role for RegisterRoles. A role owns permissions, and
-// its effective permission set is the union of its own Permissions plus every
-// role it inherits from (transitively). When using InheritsFrom, only list the
+// Role describes a role for Apply. A role owns permissions, and its
+// effective permission set is the union of its own Permissions plus every role
+// it inherits from (transitively). When using InheritsFrom, only list the
 // additional permissions — inherited ones are included automatically.
 //
 // Permissions are exact resource:action strings ("orders:read"); wildcards
 // are not supported.
-type RoleConfig struct {
+type Role struct {
 	Name         string   `json:"name"`
 	Permissions  []string `json:"permissions"`
 	InheritsFrom []string `json:"inheritsFrom"`
@@ -51,37 +51,120 @@ type registry struct {
 
 var rolePerms atomic.Pointer[registry]
 
-// RegisterRoles records role definitions. Re-registering a role replaces its
-// previous definition while other roles are preserved. Register roles once at
-// startup, before serving.
-func RegisterRoles(configs ...RoleConfig) {
-	defs := make(map[string]RoleConfig, len(configs))
+// roleDefs holds the raw role definitions so inheritance can be resolved
+// across separate registration batches. It is swapped alongside rolePerms.
+var roleDefs atomic.Pointer[map[string]Role]
+
+// Option configures role registration for Apply. Use WithFile to load roles
+// from a JSON config file or WithRoles to provide them inline; both may be
+// combined.
+type Option func(*options)
+
+type options struct {
+	file    string
+	hasFile bool
+	roles   []Role
+}
+
+// WithFile selects a JSON config file to load role definitions from. An empty
+// path falls back to DefaultConfigPath.
+func WithFile(path string) Option {
+	return func(o *options) {
+		if path == "" {
+			path = DefaultConfigPath
+		}
+		o.file = path
+		o.hasFile = true
+	}
+}
+
+// WithRoles registers role definitions inline. When combined with WithFile,
+// the file roles are registered first, then these definitions.
+func WithRoles(configs ...Role) Option {
+	return func(o *options) {
+		o.roles = configs
+	}
+}
+
+// Apply registers role definitions for permission checks. Call it once at
+// startup, before serving. With no options Apply falls back to loading
+// DefaultConfigPath, so Apply() is equivalent to Engine.EnableRBAC(). The
+// source is configured with function options:
+//
+//	Apply()                                // loads configs/rbac.json
+//	Apply(WithFile("rbac.json"))           // any JSON config file
+//	Apply(WithRoles(Role{...}))            // programmatic definitions
+//
+// Apply returns an error only when a configured file cannot be read or parsed.
+func Apply(opts ...Option) error {
+	o := &options{}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(o)
+		}
+	}
+
+	if !o.hasFile && len(o.roles) == 0 {
+		o.file = DefaultConfigPath
+	}
+
+	if err := applyFile(o.file); err != nil {
+		return err
+	}
+	if len(o.roles) > 0 {
+		registerRoles(o.roles...)
+	}
+	return nil
+}
+
+// registerRoles merges new role definitions into the registry snapshot.
+// Re-registering a role replaces its previous definition while other roles are
+// preserved.
+// registerRoles merges new role definitions into the registry snapshot.
+// Re-registering a role replaces its previous definition while other roles are
+// preserved. Inheritance resolves against every registered role, not just the
+// roles in this batch, so a role may inherit from one registered earlier.
+func registerRoles(configs ...Role) {
+	defs := make(map[string]Role, len(configs))
+	if prev := roleDefs.Load(); prev != nil {
+		maps.Copy(defs, *prev)
+	}
 	for _, c := range configs {
 		defs[c.Name] = c
 	}
+	roleDefs.Store(&defs)
 
-	prev := rolePerms.Load()
-	roles := make(map[string]map[string]struct{}, len(configs))
-	if prev != nil {
-		maps.Copy(roles, prev.roles)
-	}
-
-	for _, c := range configs {
-		roles[c.Name] = collectPermissions(c.Name, defs, map[string]bool{})
+	roles := make(map[string]map[string]struct{}, len(defs))
+	for name := range defs {
+		roles[name] = collectPermissions(name, defs, map[string]bool{})
 	}
 
 	rolePerms.Store(&registry{roles: roles})
 }
 
-// LoadConfig reads and parses role definitions from a JSON config file.
-// Engine.EnableRBAC uses the DefaultConfigPath when no custom path is given.
-func LoadConfig(path string) (*Config, error) {
+// applyFile loads role definitions from path and registers them. An empty
+// path (only possible when no file was requested) is a no-op.
+func applyFile(path string) error {
+	if path == "" {
+		return nil
+	}
+
+	cfg, err := loadConfig(path)
+	if err != nil {
+		return err
+	}
+	registerRoles(cfg.Roles...)
+	return nil
+}
+
+// loadConfig reads and parses role definitions from a JSON config file.
+func loadConfig(path string) (*config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("rbac: read config %s: %w", path, err)
 	}
 
-	var cfg Config
+	var cfg config
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("rbac: parse config %s: %w", path, err)
 	}
@@ -90,7 +173,7 @@ func LoadConfig(path string) (*Config, error) {
 }
 
 // HasPermission reports whether an actor holding the given roles is granted
-// the permission, resolving through the roles registered with RegisterRoles.
+// the permission, resolving through the roles registered with Apply.
 // Permissions are exact, case-sensitive matches — wildcards are not supported.
 // Roles that are not registered grant nothing.
 func HasPermission(roles []string, permission string) bool {
@@ -166,7 +249,7 @@ func HasAllPermissions(roles []string, permissions ...string) bool {
 
 // collectPermissions returns the permission set reachable from a role name,
 // guarding against inheritance cycles.
-func collectPermissions(name string, defs map[string]RoleConfig, visiting map[string]bool) map[string]struct{} {
+func collectPermissions(name string, defs map[string]Role, visiting map[string]bool) map[string]struct{} {
 	perms := make(map[string]struct{})
 	if name == "" || visiting[name] {
 		return perms

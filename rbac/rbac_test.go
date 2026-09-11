@@ -1,12 +1,24 @@
 package rbac
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
 
-func TestRegisterRoles_Inheritance(t *testing.T) {
-	RegisterRoles(
-		RoleConfig{Name: "viewer", Permissions: []string{"posts:read"}},
-		RoleConfig{Name: "editor", Permissions: []string{"posts:write"}, InheritsFrom: []string{"viewer"}},
-		RoleConfig{Name: "admin", Permissions: []string{"users:delete"}},
+func mustApplyRoles(t *testing.T, configs ...Role) {
+	t.Helper()
+	if err := Apply(WithRoles(configs...)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestWithRoles_Inheritance(t *testing.T) {
+	mustApplyRoles(t,
+		Role{Name: "viewer", Permissions: []string{"posts:read"}},
+		Role{Name: "editor", Permissions: []string{"posts:write"}, InheritsFrom: []string{"viewer"}},
+		Role{Name: "admin", Permissions: []string{"users:delete"}},
 	)
 
 	editor := []string{"editor"}
@@ -21,11 +33,11 @@ func TestRegisterRoles_Inheritance(t *testing.T) {
 	}
 }
 
-func TestRegisterRoles_TransitiveInheritance(t *testing.T) {
-	RegisterRoles(
-		RoleConfig{Name: "a", Permissions: []string{"x"}},
-		RoleConfig{Name: "b", InheritsFrom: []string{"a"}},
-		RoleConfig{Name: "c", InheritsFrom: []string{"b"}},
+func TestWithRoles_TransitiveInheritance(t *testing.T) {
+	mustApplyRoles(t,
+		Role{Name: "a", Permissions: []string{"x"}},
+		Role{Name: "b", InheritsFrom: []string{"a"}},
+		Role{Name: "c", InheritsFrom: []string{"b"}},
 	)
 
 	if !HasPermission([]string{"c"}, "x") {
@@ -33,10 +45,10 @@ func TestRegisterRoles_TransitiveInheritance(t *testing.T) {
 	}
 }
 
-func TestRegisterRoles_CyclicInheritance(t *testing.T) {
-	RegisterRoles(
-		RoleConfig{Name: "a", InheritsFrom: []string{"b"}},
-		RoleConfig{Name: "b", InheritsFrom: []string{"a"}},
+func TestWithRoles_CyclicInheritance(t *testing.T) {
+	mustApplyRoles(t,
+		Role{Name: "a", InheritsFrom: []string{"b"}},
+		Role{Name: "b", InheritsFrom: []string{"a"}},
 	)
 
 	if HasPermission([]string{"a", "b"}, "anything") {
@@ -45,7 +57,7 @@ func TestRegisterRoles_CyclicInheritance(t *testing.T) {
 }
 
 func TestHasPermission_EdgeCases(t *testing.T) {
-	RegisterRoles(RoleConfig{Name: "viewer", Permissions: []string{"posts:read"}})
+	mustApplyRoles(t, Role{Name: "viewer", Permissions: []string{"posts:read"}})
 
 	if HasPermission(nil, "posts:read") {
 		t.Error("nil roles must not grant")
@@ -102,7 +114,7 @@ func TestHasRole_Helpers(t *testing.T) {
 }
 
 func TestHasAnyAllPermissions(t *testing.T) {
-	RegisterRoles(RoleConfig{Name: "viewer", Permissions: []string{"posts:read"}})
+	mustApplyRoles(t, Role{Name: "viewer", Permissions: []string{"posts:read"}})
 	roles := []string{"viewer"}
 
 	if !HasAnyPermission(roles, "posts:read", "posts:write") {
@@ -126,5 +138,79 @@ func TestHasAnyAllPermissions(t *testing.T) {
 	}
 	if HasPermission(nil, "posts:read") {
 		t.Error("nil roles must not grant")
+	}
+}
+
+func TestApply_CrossBatchInheritance(t *testing.T) {
+	mustApplyRoles(t, Role{Name: "viewer", Permissions: []string{"posts:read"}})
+	mustApplyRoles(t, Role{Name: "editor", Permissions: []string{"posts:write"}, InheritsFrom: []string{"viewer"}})
+
+	if !HasPermission([]string{"editor"}, "posts:write") {
+		t.Error("editor should own its permission")
+	}
+	if !HasPermission([]string{"editor"}, "posts:read") {
+		t.Error("editor should inherit viewer from an earlier batch")
+	}
+}
+
+func TestApply_WithFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "rbac.json")
+	if err := os.WriteFile(path, []byte(`{
+		"roles": [
+			{"name": "viewer", "permissions": ["posts:read"]},
+			{"name": "editor", "permissions": ["posts:write"], "inheritsFrom": ["viewer"]}
+		]
+	}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := Apply(WithFile(path)); err != nil {
+		t.Fatal(err)
+	}
+
+	if !HasPermission([]string{"editor"}, "posts:write") {
+		t.Error("file role should own its permission")
+	}
+	if !HasPermission([]string{"editor"}, "posts:read") {
+		t.Error("file role should inherit through the config")
+	}
+}
+
+func TestApply_MissingFileReturnsError(t *testing.T) {
+	err := Apply(WithFile(filepath.Join(t.TempDir(), "does-not-exist.json")))
+	if err == nil {
+		t.Fatal("expected an error for a missing config file")
+	}
+	if !strings.Contains(err.Error(), "does-not-exist.json") {
+		t.Fatalf("error should name the missing file, got: %v", err)
+	}
+}
+
+func TestApply_ZeroOptionsUsesDefaultPath(t *testing.T) {
+	oldWD, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "configs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "configs", "rbac.json"), []byte(`{
+		"roles": [{"name": "viewer", "permissions": ["posts:read"]}]
+	}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldWD) })
+
+	if err := Apply(); err != nil {
+		t.Fatal(err)
+	}
+
+	if !HasPermission([]string{"viewer"}, "posts:read") {
+		t.Fatal("Apply() should register roles from the default config file")
 	}
 }
