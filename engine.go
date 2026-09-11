@@ -73,7 +73,7 @@ func New(addr string, config ...Config) *Engine {
 		MaxMultipartMemory: defaultMultipartMemory,
 	}
 
-	e.validator = Validator(&defaultValidate{inst: newValidator()})
+	e.validator = &defaultValidate{inst: newValidator()}
 
 	if e.shutdownTimeout == 0 {
 		e.shutdownTimeout = 5 * time.Second

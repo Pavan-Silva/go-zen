@@ -17,14 +17,14 @@ const minCompressionThreshold = 1024
 
 type compressResponseWriter struct {
 	http.ResponseWriter
-	gz          *gzip.Writer
-	bodyBuffer  *bytes.Buffer
-	status      int
-	level       int
-	wroteHeader bool
-	statusSet   bool
-	direct      bool
-	gzipPool    *sync.Pool
+	gz                    *gzip.Writer
+	bodyBuffer            *bytes.Buffer
+	status                int
+	level                 int
+	wroteHeader           bool
+	handlerStatusCaptured bool
+	direct                bool
+	gzipPool              *sync.Pool
 }
 
 // Compress returns standard gzip compression middleware using default compression parameters.
@@ -73,7 +73,7 @@ func CompressWithLevel(level int) zen.HandlerFunc {
 		cw.status = http.StatusOK
 		cw.level = level
 		cw.wroteHeader = false
-		cw.statusSet = false
+		cw.handlerStatusCaptured = false
 		cw.direct = false
 		cw.bodyBuffer.Reset()
 		cw.gz = nil
@@ -100,8 +100,8 @@ func CompressWithLevel(level int) zen.HandlerFunc {
 					_ = cw.gz.Close()
 					gzipPool.Put(cw.gz)
 					cw.gz = nil
-				case cw.statusSet || cw.bodyBuffer.Len() > 0:
-					cw.writeFinal(&gzipPool)
+				case cw.handlerStatusCaptured || cw.bodyBuffer.Len() > 0:
+					cw.writeFinal()
 				}
 				c.Response = cw.ResponseWriter
 				cw.ResponseWriter = nil
@@ -169,10 +169,10 @@ func acceptsGzip(h http.Header) bool {
 }
 
 func (w *compressResponseWriter) WriteHeader(status int) {
-	if w.statusSet {
+	if w.handlerStatusCaptured {
 		return
 	}
-	w.statusSet = true
+	w.handlerStatusCaptured = true
 	w.status = status
 }
 
@@ -223,8 +223,8 @@ func (w *compressResponseWriter) initGzipStream() {
 
 // writeFinal flushes buffered output at the end of the response, emitting
 // remaining bytes raw when streaming was never activated and closing the
-// gzip stream otherwise. pool is the pool the writer must be returned to.
-func (w *compressResponseWriter) writeFinal(pool *sync.Pool) {
+// gzip stream otherwise.
+func (w *compressResponseWriter) writeFinal() {
 	w.wroteHeader = true
 
 	// The response switched to direct streaming: forward any remaining bytes raw.
@@ -246,12 +246,12 @@ func (w *compressResponseWriter) writeFinal(pool *sync.Pool) {
 	// Payload is large enough to compress. Initialize gzip for the buffered data.
 	w.startGzip()
 
-	gz := pool.Get().(*gzip.Writer)
+	gz := w.gzipPool.Get().(*gzip.Writer)
 	gz.Reset(w.ResponseWriter)
 
 	_, _ = gz.Write(w.bodyBuffer.Bytes())
 	_ = gz.Close()
-	pool.Put(gz)
+	w.gzipPool.Put(gz)
 }
 
 func (w *compressResponseWriter) Flush() {

@@ -191,10 +191,12 @@ func TestOAuth2Auth_UsernameFallback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Authenticate() error = %v", err)
 	}
-	// Current behavior: userFromClaims returns ID from "sub" claim
-	// but Username is empty since "username" claim is not set.
-	// FIXME: OAuth2Auth should use the built user struct instead of userFromClaims
+	// defaultUserMapper maps ID from "sub" and falls back to it for the
+	// Username when no "username"/"name" claim is present.
 	if user.ID != "user-1" {
 		t.Fatalf("user.ID = %q, want %q", user.ID, "user-1")
+	}
+	if user.Username != "user-1" {
+		t.Fatalf("user.Username = %q, want %q", user.Username, "user-1")
 	}
 }

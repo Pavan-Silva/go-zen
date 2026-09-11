@@ -7,8 +7,8 @@ import (
 
 func TestStringToBytes_Empty(t *testing.T) {
 	b := StringToBytes("")
-	if b != nil {
-		t.Fatal("empty string should return nil")
+	if len(b) != 0 {
+		t.Fatal("empty string should return an empty slice")
 	}
 }
 

@@ -4,7 +4,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -96,27 +95,5 @@ func TestRender_TemplateNotFound(t *testing.T) {
 	// but the body should be empty since the template wasn't found
 	if w.Code != 200 {
 		t.Fatalf("status = %d, want 200", w.Code)
-	}
-}
-
-func TestRenderWriter(t *testing.T) {
-	dir := t.TempDir()
-	err := os.WriteFile(filepath.Join(dir, "test.html"), []byte("Hello {{.Name}}"), 0644)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	tmpl, err := LoadTemplates(os.DirFS(dir), "*.html")
-	if err != nil {
-		t.Fatalf("LoadTemplates failed: %v", err)
-	}
-
-	var buf strings.Builder
-	err = renderWriter(&buf, tmpl, "test.html", map[string]any{"Name": "Zen"})
-	if err != nil {
-		t.Fatalf("renderWriter failed: %v", err)
-	}
-	if buf.String() != "Hello Zen" {
-		t.Fatalf("result = %q, want %q", buf.String(), "Hello Zen")
 	}
 }

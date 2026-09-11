@@ -53,12 +53,7 @@ func (j *JWTAuth) Authenticate(r *http.Request) (*zen.User, error) {
 		return nil, err
 	}
 
-	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (any, error) {
-		if token.Method.Alg() != j.SigningMethod.Alg() {
-			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
-		}
-		return j.Secret, nil
-	})
+	token, err := jwt.Parse(tokenString, j.keyFunc)
 
 	if err != nil {
 		return nil, err
@@ -102,21 +97,26 @@ func (j *JWTAuth) Parse(tokenString string) (jwt.MapClaims, error) {
 
 	claims := jwt.MapClaims{}
 
-	token, err := jwt.ParseWithClaims(tokenString, &claims, func(t *jwt.Token) (any, error) {
-		if t.Method.Alg() != j.SigningMethod.Alg() {
-			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
-		}
-		return j.Secret, nil
-	})
+	token, err := jwt.ParseWithClaims(tokenString, &claims, j.keyFunc)
 	if err != nil {
 		return nil, err
 	}
 
 	if !token.Valid {
-		return nil, fmt.Errorf("invalid token")
+		return nil, errors.New("invalid token")
 	}
 
 	return claims, nil
+}
+
+// keyFunc returns the signing key for the configured algorithm, rejecting
+// tokens that attempt to switch to a different signing method (the algorithm
+// confusion attack).
+func (j *JWTAuth) keyFunc(token *jwt.Token) (any, error) {
+	if token.Method.Alg() != j.SigningMethod.Alg() {
+		return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+	}
+	return j.Secret, nil
 }
 
 // defaultUserMapper constructs a User from JWT claims. The "roles" claim
@@ -136,6 +136,10 @@ func defaultUserMapper(claims jwt.MapClaims) *zen.User {
 		user.Username = username
 	} else if name, ok := claims["name"].(string); ok {
 		user.Username = name
+	}
+
+	if user.Username == "" {
+		user.Username = user.ID
 	}
 
 	if roles, ok := claims["roles"].([]any); ok {

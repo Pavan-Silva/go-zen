@@ -2,7 +2,6 @@ package zen
 
 import (
 	"html/template"
-	"io"
 	"io/fs"
 	"path/filepath"
 
@@ -47,8 +46,4 @@ func (c *Ctx) Render(status int, tmpl *Templates, name string, data any) {
 	if err := tmpl.tmpl.ExecuteTemplate(c.Response, filepath.Base(name), data); err != nil {
 		log.Error("HTTP: template render error: %v", err)
 	}
-}
-
-func renderWriter(w io.Writer, tmpl *Templates, name string, data any) error {
-	return tmpl.tmpl.ExecuteTemplate(w, filepath.Base(name), data)
 }

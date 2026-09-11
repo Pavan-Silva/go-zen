@@ -2,9 +2,7 @@ package zen
 
 import (
 	"errors"
-	"fmt"
 	"mime/multipart"
-	"net/http"
 	"reflect"
 )
 
@@ -25,16 +23,6 @@ var (
 	multipartFileHeaderSliceType        = reflect.TypeFor[[]multipart.FileHeader]()
 	multipartFileHeaderPointerSliceType = reflect.TypeFor[[]*multipart.FileHeader]()
 )
-
-// multipartFormValues parses the request as a multipart form (using the
-// given maxMemory) and returns the parsed form. Callers should use
-// params.Value for text fields and params.File for file uploads.
-func multipartFormValues(req *http.Request, maxMemory int64) (*multipart.Form, error) {
-	if err := req.ParseMultipartForm(maxMemory); err != nil {
-		return nil, fmt.Errorf("http: ParseMultipartForm error: %w", err)
-	}
-	return req.MultipartForm, nil
-}
 
 // isFieldMultipartFile reports whether field corresponds to one of the
 // supported multipart.FileHeader types. An error is returned when the field

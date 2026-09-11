@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"math"
 	"net/http"
 	"strconv"
 	"sync"
@@ -141,7 +140,7 @@ func RateLimiterWithConfig(config RateLimiterConfig) zen.HandlerFunc {
 		headers := c.Response.Header()
 		headers["X-Ratelimit-Limit"] = []string{burstStr}
 
-		remainingTokens := int(math.Ceil(pkl.limiter.Tokens()))
+		remainingTokens := int(pkl.limiter.Tokens())
 		headers["X-Ratelimit-Remaining"] = []string{strconv.Itoa(remainingTokens)}
 
 		c.Next()

@@ -105,24 +105,22 @@ func (o *OpenAPI) writeDoc(w http.ResponseWriter, _ *http.Request) {
 
 // SpecHandler returns an http.Handler that serves /openapi.json.
 func (o *OpenAPI) SpecHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { o.writeSpec(w, r) })
+	return http.HandlerFunc(o.writeSpec)
 }
 
 // DocHandler returns an http.Handler that serves the API documentation UI.
 // Returns a 404 handler when DisableUI is true.
 func (o *OpenAPI) DocHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { o.writeDoc(w, r) })
-}
-
-// RouteRegistrar is the minimal interface a router must satisfy for
-// RegisterRoutes. zen's Engine and RouterGroup implement it via HandleRaw.
-type RouteRegistrar interface {
-	HandleRaw(pattern string, handler http.Handler)
+	return http.HandlerFunc(o.writeDoc)
 }
 
 // RegisterRoutes registers the spec endpoint and optionally the docs UI on the
-// given router. The docs UI is skipped when DisableUI is true.
-func (o *OpenAPI) RegisterRoutes(r RouteRegistrar) {
+// given router group. The docs UI is skipped when DisableUI is true. Pass a
+// subgroup to mount under a prefix, or the engine's root group:
+//
+//	doc.RegisterRoutes(&e.RouterGroup)
+//	doc.RegisterRoutes(myGroup) // mounts under myGroup's prefix
+func (o *OpenAPI) RegisterRoutes(r *RouterGroup) {
 	r.HandleRaw("GET "+o.cfg.SpecPath, http.HandlerFunc(o.writeSpec))
 
 	if !o.cfg.DisableUI {
@@ -159,5 +157,5 @@ func (e *Engine) EnableAPIDocs(opts ...any) {
 		}
 	}
 
-	NewOpenAPI(cfg).RegisterRoutes(e)
+	NewOpenAPI(cfg).RegisterRoutes(&e.RouterGroup)
 }

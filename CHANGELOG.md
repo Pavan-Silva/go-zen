@@ -6,6 +6,12 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
+- **bind**: removed the unused `FormError` type (no production path ever returned it)
+- **template**: removed the test-only internal `renderWriter` helper
+- **auth**: JWT/OAuth2/OIDC providers no longer duplicate the HTTP+JSON request dance — a shared `fetchJSON` helper backs token introspection and userinfo lookups; JWTs verify through a single extracted `keyFunc`; the default claim mapper falls back to the `sub` claim for `Username` when no `username`/`name` claim is present
+- **middleware**: `Logger` pad helper names now match their behavior; `Compress` drops the redundant pool parameter on its finalizer; `CORS` reads the Origin header via `Header.Get` and always emits `Access-Control-Max-Age`, and `RateLimiter` reports the exact (floor) remaining token count instead of `ceil`
+- **system**: the startup banner builds the listen URL with `net.JoinHostPort`, fixing the clickable link for IPv6 listeners (e.g. `[::1]:8080`)
+- **rbac**: dropped the redundant `hasFile` option flag and hoisted the cycle-detection map out of the per-role permission loop
 - **rbac**: the RBAC registry, permission checks, and config loading live in a standalone `rbac` package (no dependency on the zen core). Role sources are unified behind `rbac.Apply` with `rbac.WithFile` (JSON config) and `rbac.WithRoles` (inline definitions); `rbac.Role` describes a role, `rbac.HasPermission` answers checks, and `rbac.DefaultConfigPath` is the default file. The engine delegates through a single entry point: `Engine.EnableRBAC()` loads the default file, `Engine.EnableRBAC("path")` loads a custom file, and `Engine.EnableRBAC(rbac.Role{...})` registers inline definitions (any mix of the two in one call); `User.Has*` checks resolve through it
 - **auth → zen**: authentication and authorization middleware moved out of `auth` into the root `zen` package. `EnableAuth` and `c.GetUser()` handle authentication; claim access moved to `c.GetClaim(key)`; `RequireRole`/`RequireAnyRole`/`RequireAllRoles`, `RequirePermission`/`RequireAnyPermission`/`RequireAllPermissions`, `RequireClaim`, `SkipPaths`, `SkipPrefixes`, and `SkipMethodsAndPaths` are package-level functions of `zen`
 - **auth**: the package is now a providers-only addon that implements `zen.Authenticator` and returns `*zen.User`. `auth.User` and `auth.Authenticator` remain available as aliases of the root types; `auth` provides JWT, OAuth2, OIDC, Basic, API key, session, and password providers only
@@ -14,7 +20,7 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
-- **openapi → zen**: OpenAPI documentation serving moved into the root `zen` package — `Engine.EnableAPIDocs(opts ...any)` serves the generated OpenAPI spec (`/openapi.json`) and Scalar documentation UI (`/docs`) with no import side effects. Options are an optional `OpenAPIConfig` and/or `func(*OpenAPIConfig)`; the addon constructor is `zen.NewOpenAPI(OpenAPIConfig{})` (`RegisterRoutes` still works standalone against any `RouteRegistrar`). The embedded UI assets stay in the `scalar` package (`scalar/assets/`) for `//go:embed`
+- **openapi → zen**: OpenAPI documentation serving moved into the root `zen` package — `Engine.EnableAPIDocs(opts ...any)` serves the generated OpenAPI spec (`/openapi.json`) and Scalar documentation UI (`/docs`) with no import side effects. Options are an optional `OpenAPIConfig` and/or `func(*OpenAPIConfig)`; the addon constructor is `zen.NewOpenAPI(OpenAPIConfig{})`, whose `RegisterRoutes(*RouterGroup)` mounts the routes on the engine's root group or any subgroup. The embedded UI assets stay in the `scalar` package (`scalar/assets/`) for `//go:embed`
 - **engine**: `Engine.EnableAuth(authenticator, ...SkipFunc)` installs authentication middleware in one call, equivalent to `r.Use(zen.EnableAuth(...))`
 - **auth**: `User.HasRole`/`HasAnyRole`/`HasAllRoles` and `User.HasPermission`/`HasAnyPermission`/`HasAllPermissions` boolean checks
 - **request**: package-level `ClientIP(*http.Request)` extracts the client IP (X-Forwarded-For → X-Real-IP → RemoteAddr); `Ctx.ClientIP()` delegates to it

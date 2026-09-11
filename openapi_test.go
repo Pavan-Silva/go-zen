@@ -31,29 +31,6 @@ const openapiSampleSpec = `{
   "paths": {"/users/{id}": {"get": {"summary": "Get user"}}}
 }`
 
-// fakeRouter implements RouteRegistrar and http.Handler for exercising
-// RegisterRoutes without wiring the full engine.
-type fakeRouter struct {
-	routes map[string]http.Handler
-}
-
-func newFakeRouter() *fakeRouter {
-	return &fakeRouter{routes: make(map[string]http.Handler)}
-}
-
-func (f *fakeRouter) HandleRaw(pattern string, handler http.Handler) {
-	f.routes[pattern] = handler
-}
-
-func (f *fakeRouter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	key := r.Method + " " + r.URL.Path
-	if h, ok := f.routes[key]; ok {
-		h.ServeHTTP(w, r)
-		return
-	}
-	http.NotFound(w, r)
-}
-
 func TestNewOpenAPI(t *testing.T) {
 	doc := NewOpenAPI(OpenAPIConfig{})
 	if doc.cfg.SpecPath != "/openapi.json" {
@@ -166,19 +143,19 @@ func TestOpenAPIDocHandler(t *testing.T) {
 
 func TestOpenAPIDocDisabled(t *testing.T) {
 	doc := NewOpenAPI(OpenAPIConfig{SpecPath: "/spec.json", DisableUI: true, SwagInstance: registerFakeSwag(t, openapiSampleSpec)})
-	r := newFakeRouter()
-	doc.RegisterRoutes(r)
+	e := New(":0")
+	doc.RegisterRoutes(&e.RouterGroup)
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/spec.json", nil)
-	r.ServeHTTP(rec, req)
+	e.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200 from spec, got %d", rec.Code)
 	}
 
 	rec2 := httptest.NewRecorder()
 	req2 := httptest.NewRequest(http.MethodGet, "/docs", nil)
-	r.ServeHTTP(rec2, req2)
+	e.ServeHTTP(rec2, req2)
 	if rec2.Code != http.StatusNotFound {
 		t.Fatalf("expected 404 when UI disabled, got %d", rec2.Code)
 	}
@@ -187,12 +164,12 @@ func TestOpenAPIDocDisabled(t *testing.T) {
 func TestOpenAPIRegisterRoutes(t *testing.T) {
 	doc := NewOpenAPI(OpenAPIConfig{SwagInstance: registerFakeSwag(t, openapiSampleSpec)})
 
-	r := newFakeRouter()
-	doc.RegisterRoutes(r)
+	e := New(":0")
+	doc.RegisterRoutes(&e.RouterGroup)
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/openapi.json", nil)
-	r.ServeHTTP(rec, req)
+	e.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200 from spec endpoint, got %d", rec.Code)
 	}
@@ -202,7 +179,7 @@ func TestOpenAPIRegisterRoutes(t *testing.T) {
 
 	rec2 := httptest.NewRecorder()
 	req2 := httptest.NewRequest(http.MethodGet, "/docs", nil)
-	r.ServeHTTP(rec2, req2)
+	e.ServeHTTP(rec2, req2)
 	if rec2.Code != http.StatusOK {
 		t.Fatalf("expected 200 from doc endpoint, got %d", rec2.Code)
 	}

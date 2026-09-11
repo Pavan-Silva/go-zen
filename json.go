@@ -33,20 +33,20 @@ func (jsonSerializer) Deserialize(c *Ctx, v any) error {
 
 // JSON encodes data as JSON and streams it straight to the response writer.
 func (c *Ctx) JSON(status int, data any) {
-	c.setContentType("application/json")
-	c.Response.WriteHeader(status)
-
-	if err := c.engine.JSONSerializer.Serialize(c, data, ""); err != nil {
-		log.Error("HTTP: JSON encode error: %v", err)
-	}
+	c.writeJSON(status, data, "")
 }
 
 // JSONPretty encodes data as indented JSON for human-readable responses.
 func (c *Ctx) JSONPretty(status int, data any) {
+	c.writeJSON(status, data, "  ")
+}
+
+// writeJSON sets the JSON content type and streams data to the response writer.
+func (c *Ctx) writeJSON(status int, data any, indent string) {
 	c.setContentType("application/json")
 	c.Response.WriteHeader(status)
 
-	if err := c.engine.JSONSerializer.Serialize(c, data, "  "); err != nil {
+	if err := c.engine.JSONSerializer.Serialize(c, data, indent); err != nil {
 		log.Error("HTTP: JSON encode error: %v", err)
 	}
 }

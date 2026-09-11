@@ -3,7 +3,6 @@ package zen
 import (
 	"errors"
 	"fmt"
-	"mime/multipart"
 	"net/http"
 	"strings"
 )
@@ -11,18 +10,6 @@ import (
 // ErrInvalidBindTarget is returned when the bind destination is not a pointer
 // to a struct or map.
 var ErrInvalidBindTarget = errors.New("http: bind dest must be a pointer to a struct or map")
-
-// FormError represents a form binding error for a specific field.
-type FormError struct {
-	Field string
-	Err   error
-}
-
-func (e *FormError) Error() string {
-	return "form field \"" + e.Field + "\": " + e.Err.Error()
-}
-
-func (e *FormError) Unwrap() error { return e.Err }
 
 // BindUnmarshaler is the interface used to wrap the UnmarshalParam method.
 // Types implementing this interface gain control over how a single string
@@ -59,9 +46,6 @@ func (c *Ctx) Bind(dest any) error {
 // extracted from the route pattern and mapped onto struct fields tagged
 // with the "param" struct tag.
 func (c *Ctx) BindPathValues(dest any) error {
-	if c == nil {
-		return ErrInvalidBindTarget
-	}
 	if err := bindPathValues(c, dest); err != nil {
 		return err
 	}
@@ -82,9 +66,6 @@ func bindPathValues(c *Ctx, dest any) error {
 // BindQueryParams binds query parameters to dest. Query params are mapped
 // onto struct fields tagged with the "query" struct tag.
 func (c *Ctx) BindQueryParams(dest any) error {
-	if c == nil {
-		return ErrInvalidBindTarget
-	}
 	if err := bindQueryParams(c, dest); err != nil {
 		return err
 	}
@@ -106,9 +87,6 @@ func bindQueryParams(c *Ctx, dest any) error {
 //   - multipart/form-data
 //   - any type ending with +json or /json
 func (c *Ctx) BindBody(dest any) error {
-	if c == nil {
-		return ErrInvalidBindTarget
-	}
 	if err := bindBody(c, dest); err != nil {
 		return err
 	}
@@ -141,11 +119,10 @@ func bindBody(c *Ctx, dest any) error {
 			err = bindData(dest, params, "form", nil)
 		}
 	case "multipart/form-data":
-		var params *multipart.Form
-		params, err = multipartFormValues(req, c.engine.MaxMultipartMemory)
-		if err == nil {
-			err = bindData(dest, params.Value, "form", params.File)
+		if err := c.parseMultipartForm(); err != nil {
+			return err
 		}
+		err = bindData(dest, c.Request.MultipartForm.Value, "form", c.Request.MultipartForm.File)
 	default:
 		if strings.HasSuffix(mediatype, "+json") || strings.HasSuffix(mediatype, "/json") {
 			err = c.engine.JSONSerializer.Deserialize(c, dest)
@@ -160,9 +137,6 @@ func bindBody(c *Ctx, dest any) error {
 // struct fields tagged with the "header" struct tag. Header names are
 // matched case-insensitively.
 func (c *Ctx) BindHeaders(dest any) error {
-	if c == nil {
-		return ErrInvalidBindTarget
-	}
 	if err := bindHeaders(c, dest); err != nil {
 		return err
 	}

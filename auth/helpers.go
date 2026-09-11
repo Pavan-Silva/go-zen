@@ -1,6 +1,8 @@
 package auth
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -19,7 +21,7 @@ var defaultAuthHTTPClient = &http.Client{Timeout: 10 * time.Second}
 func bearerTokenFromRequest(r *http.Request) (string, error) {
 	ah := r.Header["Authorization"]
 	if len(ah) == 0 {
-		return "", fmt.Errorf("missing authorization header")
+		return "", errors.New("missing authorization header")
 	}
 
 	const scheme = "bearer "
@@ -27,7 +29,27 @@ func bearerTokenFromRequest(r *http.Request) (string, error) {
 		return ah[0][len(scheme):], nil
 	}
 
-	return "", fmt.Errorf("invalid authorization header format")
+	return "", errors.New("invalid authorization header format")
+}
+
+// fetchJSON performs an HTTP request and decodes a 200 OK JSON response into out.
+func fetchJSON(client *http.Client, req *http.Request, out any) (err error) {
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil && err == nil {
+			err = closeErr
+		}
+	}()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("request failed with status %d", resp.StatusCode)
+	}
+
+	return json.NewDecoder(resp.Body).Decode(out)
 }
 
 // userFromClaims maps JWT claims to a User using the optional claims function.

@@ -61,9 +61,8 @@ var roleDefs atomic.Pointer[map[string]Role]
 type Option func(*options)
 
 type options struct {
-	file    string
-	hasFile bool
-	roles   []Role
+	file  string
+	roles []Role
 }
 
 // WithFile selects a JSON config file to load role definitions from. An empty
@@ -74,7 +73,6 @@ func WithFile(path string) Option {
 			path = DefaultConfigPath
 		}
 		o.file = path
-		o.hasFile = true
 	}
 }
 
@@ -104,7 +102,7 @@ func Apply(opts ...Option) error {
 		}
 	}
 
-	if !o.hasFile && len(o.roles) == 0 {
+	if o.file == "" && len(o.roles) == 0 {
 		o.file = DefaultConfigPath
 	}
 
@@ -117,9 +115,6 @@ func Apply(opts ...Option) error {
 	return nil
 }
 
-// registerRoles merges new role definitions into the registry snapshot.
-// Re-registering a role replaces its previous definition while other roles are
-// preserved.
 // registerRoles merges new role definitions into the registry snapshot.
 // Re-registering a role replaces its previous definition while other roles are
 // preserved. Inheritance resolves against every registered role, not just the
@@ -135,8 +130,9 @@ func registerRoles(configs ...Role) {
 	roleDefs.Store(&defs)
 
 	roles := make(map[string]map[string]struct{}, len(defs))
+	visiting := make(map[string]bool, len(defs))
 	for name := range defs {
-		roles[name] = collectPermissions(name, defs, map[string]bool{})
+		roles[name] = collectPermissions(name, defs, visiting)
 	}
 
 	rolePerms.Store(&registry{roles: roles})

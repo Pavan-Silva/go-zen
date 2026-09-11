@@ -2,7 +2,6 @@
 package system
 
 import (
-	"fmt"
 	"net"
 )
 
@@ -34,8 +33,8 @@ func displayURL(addr string, secure bool) string {
 	if err != nil {
 		return scheme + "://" + addr
 	}
-	if host == "" || host == "0.0.0.0" || host == "::" {
+	if host == "" || net.ParseIP(host).IsUnspecified() {
 		host = "localhost"
 	}
-	return fmt.Sprintf("%s://%s:%s", scheme, host, port)
+	return scheme + "://" + net.JoinHostPort(host, port)
 }

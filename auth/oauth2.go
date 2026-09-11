@@ -2,7 +2,6 @@ package auth
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -74,22 +73,7 @@ func (o *OAuth2Auth) Authenticate(r *http.Request) (*zen.User, error) {
 		"iat":        tokenInfo.IssuedAt,
 	}
 
-	if o.ClaimsFunc != nil {
-		return o.ClaimsFunc(claims), nil
-	}
-
-	// Build the user from the introspection result.
-	user := &zen.User{
-		ID:       tokenInfo.Subject,
-		Username: tokenInfo.Username,
-		Claims:   claims,
-	}
-
-	if user.Username == "" {
-		user.Username = tokenInfo.Subject
-	}
-
-	return user, nil
+	return userFromClaims(o.ClaimsFunc, claims), nil
 }
 
 // introspectToken calls the OAuth2 token introspection endpoint.
@@ -114,22 +98,8 @@ func (o *OAuth2Auth) introspectToken(
 		req.SetBasicAuth(o.ClientID, o.ClientSecret)
 	}
 
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		if closeErr := resp.Body.Close(); closeErr != nil && err == nil {
-			err = closeErr
-		}
-	}()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("introspection request failed with status %d", resp.StatusCode)
-	}
-
 	var tokenInfo OAuth2TokenInfo
-	if err := json.NewDecoder(resp.Body).Decode(&tokenInfo); err != nil {
+	if err := fetchJSON(client, req, &tokenInfo); err != nil {
 		return nil, err
 	}
 

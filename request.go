@@ -152,11 +152,7 @@ func (c *Ctx) ClientIP() string {
 // Body reads and returns the complete raw request body as a byte slice.
 // It is the caller's responsibility to interpret the bytes.
 func (c *Ctx) Body() ([]byte, error) {
-	b, err := io.ReadAll(c.Request.Body)
-	if err != nil {
-		return nil, err
-	}
-	return b, nil
+	return io.ReadAll(c.Request.Body)
 }
 
 // Header returns the value of a request header by key.

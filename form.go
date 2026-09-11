@@ -2,7 +2,6 @@ package zen
 
 import (
 	"fmt"
-	"maps"
 	"net/http"
 )
 
@@ -25,15 +24,10 @@ func (c *Ctx) BindForm(dest any) error {
 	return c.engine.validateIfEnabled(dest)
 }
 
-// formValues parses the request form and returns the values as a
-// map[string][]string. It delegates to net/http's ParseForm and copies the
-// result into a fresh map.
+// formValues parses the request form and returns the values.
 func formValues(req *http.Request) (map[string][]string, error) {
 	if err := req.ParseForm(); err != nil {
 		return nil, fmt.Errorf("http: ParseForm error: %w", err)
 	}
-
-	m := make(map[string][]string, len(req.Form))
-	maps.Copy(m, req.Form)
-	return m, nil
+	return req.Form, nil
 }
