@@ -8,7 +8,7 @@ import (
 
 // Version is the current release version.
 // Override at build time with: -ldflags "-X github.com/Pavan-Silva/go-zen/internal/system.Version=v1.5.1"
-var Version = "1.5.1"
+var Version = "1.6.0"
 
 // Banner returns the startup banner string for the given listen address.
 // A side-accent-bar layout: the brand line and the listen URL (https:// when
