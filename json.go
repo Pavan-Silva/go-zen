@@ -56,8 +56,5 @@ func (c *Ctx) BindJSON(dest any) error {
 	if err := c.engine.JSONSerializer.Deserialize(c, dest); err != nil {
 		return err
 	}
-	if c.engine.autoValidate && c.engine.validator != nil {
-		return c.engine.validator.Validate(dest)
-	}
-	return nil
+	return c.engine.validateIfEnabled(dest)
 }

@@ -42,8 +42,5 @@ func (c *Ctx) BindXML(dest any) error {
 	if err := c.engine.XMLSerializer.Deserialize(c, dest); err != nil {
 		return err
 	}
-	if c.engine.autoValidate && c.engine.validator != nil {
-		return c.engine.validator.Validate(dest)
-	}
-	return nil
+	return c.engine.validateIfEnabled(dest)
 }

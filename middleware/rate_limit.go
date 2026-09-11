@@ -2,10 +2,8 @@ package middleware
 
 import (
 	"math"
-	"net"
 	"net/http"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -53,31 +51,13 @@ func RateLimiterWithConfig(config RateLimiterConfig) zen.HandlerFunc {
 	if config.Duration == 0 {
 		config.Duration = time.Minute
 	}
-	if config.Limit == 0 {
-		config.Limit = 100
-	}
-	if config.Limit < 0 {
+	if config.Limit <= 0 {
 		config.Limit = 100
 	}
 	if config.KeyFunc == nil {
 		// Note: trusting X-Forwarded-For/X-Real-IP means a client can spoof its
 		// own rate-limit key when no trusted proxy strips those headers.
-		config.KeyFunc = func(r *http.Request) string {
-			if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
-				if before, _, ok := strings.Cut(fwd, ","); ok {
-					return strings.TrimSpace(before)
-				}
-				return strings.TrimSpace(fwd)
-			}
-			if realIP := r.Header.Get("X-Real-IP"); realIP != "" {
-				return strings.TrimSpace(realIP)
-			}
-			host, _, err := net.SplitHostPort(r.RemoteAddr)
-			if err != nil {
-				return r.RemoteAddr
-			}
-			return host
-		}
+		config.KeyFunc = zen.ClientIP
 	}
 
 	r := rate.Limit(float64(config.Limit) / config.Duration.Seconds())

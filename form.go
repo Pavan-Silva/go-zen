@@ -22,11 +22,7 @@ func (c *Ctx) BindForm(dest any) error {
 		return err
 	}
 
-	if c.engine.autoValidate && c.engine.validator != nil {
-		return c.engine.validator.Validate(dest)
-	}
-
-	return nil
+	return c.engine.validateIfEnabled(dest)
 }
 
 // formValues parses the request form and returns the values as a

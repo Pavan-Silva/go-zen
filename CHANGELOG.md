@@ -16,6 +16,7 @@ All notable changes to this project are documented in this file.
 
 - **engine**: `Engine.EnableAuth(authenticator, ...SkipFunc)` installs authentication middleware in one call, equivalent to `r.Use(zen.EnableAuth(...))`
 - **auth**: `User.HasRole`/`HasAnyRole`/`HasAllRoles` and `User.HasPermission`/`HasAnyPermission`/`HasAllPermissions` boolean checks
+- **request**: package-level `ClientIP(*http.Request)` extracts the client IP (X-Forwarded-For → X-Real-IP → RemoteAddr); `Ctx.ClientIP()` delegates to it
 
 ## v1.5.1
 

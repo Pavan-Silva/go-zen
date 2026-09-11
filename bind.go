@@ -52,10 +52,7 @@ func (c *Ctx) Bind(dest any) error {
 	if err := bindBody(c, dest); err != nil {
 		return err
 	}
-	if c.engine.autoValidate && c.engine.validator != nil {
-		return c.engine.validator.Validate(dest)
-	}
-	return nil
+	return c.engine.validateIfEnabled(dest)
 }
 
 // BindPathValues binds URL path parameters to dest. Path params are
@@ -68,10 +65,7 @@ func (c *Ctx) BindPathValues(dest any) error {
 	if err := bindPathValues(c, dest); err != nil {
 		return err
 	}
-	if c.engine.autoValidate && c.engine.validator != nil {
-		return c.engine.validator.Validate(dest)
-	}
-	return nil
+	return c.engine.validateIfEnabled(dest)
 }
 
 func bindPathValues(c *Ctx, dest any) error {
@@ -94,10 +88,7 @@ func (c *Ctx) BindQueryParams(dest any) error {
 	if err := bindQueryParams(c, dest); err != nil {
 		return err
 	}
-	if c.engine.autoValidate && c.engine.validator != nil {
-		return c.engine.validator.Validate(dest)
-	}
-	return nil
+	return c.engine.validateIfEnabled(dest)
 }
 
 func bindQueryParams(c *Ctx, dest any) error {
@@ -121,10 +112,7 @@ func (c *Ctx) BindBody(dest any) error {
 	if err := bindBody(c, dest); err != nil {
 		return err
 	}
-	if c.engine.autoValidate && c.engine.validator != nil {
-		return c.engine.validator.Validate(dest)
-	}
-	return nil
+	return c.engine.validateIfEnabled(dest)
 }
 
 // bindBody binds the request body to dest according to the request's
@@ -178,10 +166,7 @@ func (c *Ctx) BindHeaders(dest any) error {
 	if err := bindHeaders(c, dest); err != nil {
 		return err
 	}
-	if c.engine.autoValidate && c.engine.validator != nil {
-		return c.engine.validator.Validate(dest)
-	}
-	return nil
+	return c.engine.validateIfEnabled(dest)
 }
 
 func bindHeaders(c *Ctx, dest any) error {

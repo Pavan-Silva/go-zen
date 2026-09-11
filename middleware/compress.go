@@ -200,12 +200,17 @@ func (w *compressResponseWriter) Write(b []byte) (int, error) {
 	return w.gz.Write(b)
 }
 
-func (w *compressResponseWriter) initGzipStream() {
-	w.wroteHeader = true
+// startGzip writes the gzip response headers and emits the buffered status.
+func (w *compressResponseWriter) startGzip() {
 	w.Header().Set("Content-Encoding", "gzip")
 	w.Header().Del("Content-Length")
 	w.Header().Add("Vary", "Accept-Encoding")
 	w.ResponseWriter.WriteHeader(w.status)
+}
+
+func (w *compressResponseWriter) initGzipStream() {
+	w.wroteHeader = true
+	w.startGzip()
 
 	w.gz = w.gzipPool.Get().(*gzip.Writer)
 	w.gz.Reset(w.ResponseWriter)
@@ -239,10 +244,7 @@ func (w *compressResponseWriter) writeFinal(pool *sync.Pool) {
 	}
 
 	// Payload is large enough to compress. Initialize gzip for the buffered data.
-	w.Header().Set("Content-Encoding", "gzip")
-	w.Header().Del("Content-Length")
-	w.Header().Add("Vary", "Accept-Encoding")
-	w.ResponseWriter.WriteHeader(w.status)
+	w.startGzip()
 
 	gz := pool.Get().(*gzip.Writer)
 	gz.Reset(w.ResponseWriter)

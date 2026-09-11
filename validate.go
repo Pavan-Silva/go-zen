@@ -69,6 +69,15 @@ func newValidator() *validator.Validate {
 
 // --- Ctx validation ---
 
+// validateIfEnabled runs automated struct validation when the engine has
+// auto-validation enabled and a validator is configured.
+func (e *Engine) validateIfEnabled(dest any) error {
+	if e.autoValidate && e.validator != nil {
+		return e.validator.Validate(dest)
+	}
+	return nil
+}
+
 // Validate runs struct validation on dest using the engine's configured validator.
 // Returns nil if no validator is set (validation is opt-in).
 func (c *Ctx) Validate(dest any) error {
