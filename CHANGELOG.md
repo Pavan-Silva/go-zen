@@ -14,6 +14,7 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
+- **openapi → zen**: OpenAPI documentation serving moved into the root `zen` package — `Engine.EnableAPIDocs(opts ...any)` serves the generated OpenAPI spec (`/openapi.json`) and Scalar documentation UI (`/docs`) with no import side effects. Options are an optional `OpenAPIConfig` and/or `func(*OpenAPIConfig)`; the addon constructor is `zen.NewOpenAPI(OpenAPIConfig{})` (`RegisterRoutes` still works standalone against any `RouteRegistrar`). The embedded UI assets stay in the `scalar` package (`scalar/assets/`) for `//go:embed`
 - **engine**: `Engine.EnableAuth(authenticator, ...SkipFunc)` installs authentication middleware in one call, equivalent to `r.Use(zen.EnableAuth(...))`
 - **auth**: `User.HasRole`/`HasAnyRole`/`HasAllRoles` and `User.HasPermission`/`HasAnyPermission`/`HasAllPermissions` boolean checks
 - **request**: package-level `ClientIP(*http.Request)` extracts the client IP (X-Forwarded-For → X-Real-IP → RemoteAddr); `Ctx.ClientIP()` delegates to it

@@ -1,4 +1,4 @@
-package openapi
+package zen
 
 import (
 	"encoding/json"
@@ -7,8 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Pavan-Silva/go-zen"
-	"github.com/Pavan-Silva/go-zen/internal/system"
 	"github.com/swaggo/swag"
 )
 
@@ -27,14 +25,37 @@ func registerFakeSwag(t *testing.T, doc string) string {
 	return name
 }
 
-const sampleSpec = `{
+const openapiSampleSpec = `{
   "swagger": "2.0",
   "info": {"title": "Test API", "version": "1.0.0"},
   "paths": {"/users/{id}": {"get": {"summary": "Get user"}}}
 }`
 
-func TestNew(t *testing.T) {
-	doc := New(Config{})
+// fakeRouter implements RouteRegistrar and http.Handler for exercising
+// RegisterRoutes without wiring the full engine.
+type fakeRouter struct {
+	routes map[string]http.Handler
+}
+
+func newFakeRouter() *fakeRouter {
+	return &fakeRouter{routes: make(map[string]http.Handler)}
+}
+
+func (f *fakeRouter) HandleRaw(pattern string, handler http.Handler) {
+	f.routes[pattern] = handler
+}
+
+func (f *fakeRouter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	key := r.Method + " " + r.URL.Path
+	if h, ok := f.routes[key]; ok {
+		h.ServeHTTP(w, r)
+		return
+	}
+	http.NotFound(w, r)
+}
+
+func TestNewOpenAPI(t *testing.T) {
+	doc := NewOpenAPI(OpenAPIConfig{})
 	if doc.cfg.SpecPath != "/openapi.json" {
 		t.Fatalf("expected default spec path /openapi.json, got %s", doc.cfg.SpecPath)
 	}
@@ -46,8 +67,8 @@ func TestNew(t *testing.T) {
 	}
 }
 
-func TestConfigCustomPaths(t *testing.T) {
-	doc := New(Config{SpecPath: "/api/openapi.json", DocPath: "/api/docs"})
+func TestOpenAPIConfigCustomPaths(t *testing.T) {
+	doc := NewOpenAPI(OpenAPIConfig{SpecPath: "/api/openapi.json", DocPath: "/api/docs"})
 	if doc.cfg.SpecPath != "/api/openapi.json" {
 		t.Fatalf("expected /api/openapi.json, got %s", doc.cfg.SpecPath)
 	}
@@ -56,8 +77,8 @@ func TestConfigCustomPaths(t *testing.T) {
 	}
 }
 
-func TestSpecJSON(t *testing.T) {
-	doc := New(Config{SwagInstance: registerFakeSwag(t, sampleSpec)})
+func TestOpenAPISpecJSON(t *testing.T) {
+	doc := NewOpenAPI(OpenAPIConfig{SwagInstance: registerFakeSwag(t, openapiSampleSpec)})
 
 	data, err := doc.SpecJSON()
 	if err != nil {
@@ -79,21 +100,20 @@ func TestSpecJSON(t *testing.T) {
 	}
 }
 
-func TestSpecJSONMissingRegistration(t *testing.T) {
-	doc := New(Config{SwagInstance: "does-not-exist-" + t.Name()})
+func TestOpenAPISpecJSONMissingRegistration(t *testing.T) {
+	doc := NewOpenAPI(OpenAPIConfig{SwagInstance: "does-not-exist-" + t.Name()})
 	if _, err := doc.SpecJSON(); err == nil {
 		t.Fatal("expected error when no swag documentation is registered")
 	}
 }
 
-func TestWriteSpecUnavailable(t *testing.T) {
-	doc := New(Config{SwagInstance: "missing-" + t.Name()})
+func TestOpenAPIWriteSpecUnavailable(t *testing.T) {
+	doc := NewOpenAPI(OpenAPIConfig{SwagInstance: "missing-" + t.Name()})
 	handler := doc.SpecHandler()
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/openapi.json", nil)
-	c := &zen.Ctx{Response: w, Request: r}
-	handler(c)
+	handler.ServeHTTP(w, r)
 
 	if w.Code != http.StatusServiceUnavailable {
 		t.Fatalf("expected 503 when spec unavailable, got %d", w.Code)
@@ -103,14 +123,13 @@ func TestWriteSpecUnavailable(t *testing.T) {
 	}
 }
 
-func TestWriteSpec(t *testing.T) {
-	doc := New(Config{SwagInstance: registerFakeSwag(t, sampleSpec)})
+func TestOpenAPIWriteSpec(t *testing.T) {
+	doc := NewOpenAPI(OpenAPIConfig{SwagInstance: registerFakeSwag(t, openapiSampleSpec)})
 	handler := doc.SpecHandler()
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/openapi.json", nil)
-	c := &zen.Ctx{Response: w, Request: r}
-	handler(c)
+	handler.ServeHTTP(w, r)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", w.Code)
@@ -125,14 +144,13 @@ func TestWriteSpec(t *testing.T) {
 	}
 }
 
-func TestDocHandler(t *testing.T) {
-	doc := New(Config{})
+func TestOpenAPIDocHandler(t *testing.T) {
+	doc := NewOpenAPI(OpenAPIConfig{})
 	handler := doc.DocHandler()
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/docs", nil)
-	c := &zen.Ctx{Response: w, Request: r}
-	handler(c)
+	handler.ServeHTTP(w, r)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", w.Code)
@@ -146,67 +164,9 @@ func TestDocHandler(t *testing.T) {
 	}
 }
 
-func TestDocHandlerScalarUI(t *testing.T) {
-	doc := New(Config{})
-	body := uiHTML(doc)
-	if !strings.Contains(body, "createApiReference") {
-		t.Fatal("expected Scalar createApiReference bootstrap in HTML")
-	}
-	if !strings.Contains(body, `url: "/openapi.json"`) {
-		t.Fatal("expected default spec URL in HTML")
-	}
-}
-
-func TestDocHandlerFallbackWhenAssetsMissing(t *testing.T) {
-	prevTemplate := uiTemplate
-	prevAssets := uiAssets
-	uiTemplate = ""
-	uiAssets = nil
-	t.Cleanup(func() {
-		uiTemplate = prevTemplate
-		uiAssets = prevAssets
-	})
-
-	doc := New(Config{})
-	handler := doc.DocHandler()
-
-	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodGet, "/docs", nil)
-	c := &zen.Ctx{Response: w, Request: r}
-	handler(c)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", w.Code)
-	}
-	if body := w.Body.String(); !strings.Contains(body, "fallback mode") {
-		t.Fatalf("expected fallback HTML content, got %s", body)
-	}
-}
-
-// Literal '%' characters in the embedded UI HTML must survive substitution
-// untouched (fmt.Sprintf would corrupt them).
-func TestUIHTMLLiteralPercent(t *testing.T) {
-	prevTemplate := uiTemplate
-	uiTemplate = `<html><div style="width:100%">url="%[1]s" v="%[2]s"</div></html>`
-	t.Cleanup(func() { uiTemplate = prevTemplate })
-
-	doc := New(Config{SpecPath: "/spec.json"})
-	html := uiHTML(doc)
-
-	if strings.Contains(html, "%!") {
-		t.Fatalf("HTML corrupted by format-verb interpretation: %s", html)
-	}
-	if !strings.Contains(html, `url="/spec.json"`) || !strings.Contains(html, `v="`+system.Version+`"`) {
-		t.Fatalf("placeholders not substituted: %s", html)
-	}
-	if !strings.Contains(html, "width:100%") {
-		t.Fatalf("literal %% lost: %s", html)
-	}
-}
-
-func TestDocDisabled(t *testing.T) {
-	doc := New(Config{SpecPath: "/spec.json", DisableUI: true, SwagInstance: registerFakeSwag(t, sampleSpec)})
-	r := zen.New(":0")
+func TestOpenAPIDocDisabled(t *testing.T) {
+	doc := NewOpenAPI(OpenAPIConfig{SpecPath: "/spec.json", DisableUI: true, SwagInstance: registerFakeSwag(t, openapiSampleSpec)})
+	r := newFakeRouter()
 	doc.RegisterRoutes(r)
 
 	rec := httptest.NewRecorder()
@@ -224,10 +184,10 @@ func TestDocDisabled(t *testing.T) {
 	}
 }
 
-func TestRegisterRoutes(t *testing.T) {
-	doc := New(Config{SwagInstance: registerFakeSwag(t, sampleSpec)})
+func TestOpenAPIRegisterRoutes(t *testing.T) {
+	doc := NewOpenAPI(OpenAPIConfig{SwagInstance: registerFakeSwag(t, openapiSampleSpec)})
 
-	r := zen.New(":0")
+	r := newFakeRouter()
 	doc.RegisterRoutes(r)
 
 	rec := httptest.NewRecorder()
@@ -248,9 +208,9 @@ func TestRegisterRoutes(t *testing.T) {
 	}
 }
 
-func TestCustomInstanceName(t *testing.T) {
-	name := registerFakeSwag(t, sampleSpec)
-	doc := New(Config{SwagInstance: name})
+func TestOpenAPICustomInstanceName(t *testing.T) {
+	name := registerFakeSwag(t, openapiSampleSpec)
+	doc := NewOpenAPI(OpenAPIConfig{SwagInstance: name})
 
 	data, err := doc.SpecJSON()
 	if err != nil {
@@ -259,4 +219,55 @@ func TestCustomInstanceName(t *testing.T) {
 	if !json.Valid(data) {
 		t.Fatal("expected valid JSON from custom swag instance")
 	}
+}
+
+func TestEngineEnableAPIDocs(t *testing.T) {
+	r := New(":0")
+	r.EnableAPIDocs()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/openapi.json", nil)
+	r.ServeHTTP(rec, req)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503 without registered docs, got %d", rec.Code)
+	}
+
+	rec2 := httptest.NewRecorder()
+	req2 := httptest.NewRequest(http.MethodGet, "/docs", nil)
+	r.ServeHTTP(rec2, req2)
+	if rec2.Code != http.StatusOK {
+		t.Fatalf("expected 200 from doc endpoint, got %d", rec2.Code)
+	}
+}
+
+func TestEngineEnableAPIDocsConfigOptions(t *testing.T) {
+	r := New(":0")
+	swag.Register("cfg-"+t.Name(), fakeSwag{doc: openapiSampleSpec})
+	r.EnableAPIDocs(
+		OpenAPIConfig{SpecPath: "/spec.json", DocPath: "/api/docs", SwagInstance: "cfg-" + t.Name()},
+		func(c *OpenAPIConfig) { c.DisableUI = true },
+	)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/spec.json", nil)
+	r.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 from custom spec path, got %d (body %s)", rec.Code, rec.Body.String())
+	}
+
+	rec2 := httptest.NewRecorder()
+	req2 := httptest.NewRequest(http.MethodGet, "/api/docs", nil)
+	r.ServeHTTP(rec2, req2)
+	if rec2.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 when UI disabled, got %d", rec2.Code)
+	}
+}
+
+func TestEngineEnableAPIDocsPanicsOnBadArg(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("expected panic for unsupported argument type")
+		}
+	}()
+	New(":0").EnableAPIDocs("nope")
 }
