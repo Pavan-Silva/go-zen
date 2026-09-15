@@ -959,8 +959,8 @@ func TestEngine_EnableRBAC_InvalidConfigPanics(t *testing.T) {
 	New(":0").EnableRBAC(cfg)
 }
 
-func TestEngine_EnableRBAC_Roles(t *testing.T) {
-	New(":0").EnableRBAC(
+func TestEngine_EnableRBACRoles(t *testing.T) {
+	New(":0").EnableRBACRoles(
 		rbac.Role{Name: "admin", Permissions: []string{"users:delete"}},
 		rbac.Role{Name: "editor", Permissions: []string{"docs:write"}, InheritsFrom: []string{"viewer"}},
 		rbac.Role{Name: "viewer", Permissions: []string{"docs:read"}},
@@ -980,16 +980,6 @@ func TestEngine_EnableRBAC_Roles(t *testing.T) {
 	}
 }
 
-func TestEngine_EnableRBAC_UnsupportedArgPanics(t *testing.T) {
-	defer func() {
-		if recover() == nil {
-			t.Fatal("expected panic for unsupported argument type")
-		}
-	}()
-
-	New(":0").EnableRBAC(42)
-}
-
 func TestEngine_EnableRBAC_MultiplePathsPanics(t *testing.T) {
 	defer func() {
 		if recover() == nil {
@@ -1006,10 +996,8 @@ func TestEngine_EnableRBAC_MixedFileAndRoles(t *testing.T) {
 		"roles": [{"name": "viewer", "permissions": ["posts:read"]}]
 	}`)
 
-	New(":0").EnableRBAC(
-		cfg,
-		rbac.Role{Name: "editor", Permissions: []string{"posts:write"}, InheritsFrom: []string{"viewer"}},
-	)
+	New(":0").EnableRBAC(cfg)
+	New(":0").EnableRBACRoles(rbac.Role{Name: "editor", Permissions: []string{"posts:write"}, InheritsFrom: []string{"viewer"}})
 
 	if !rbac.HasPermission([]string{"editor"}, "posts:write") {
 		t.Fatal("editor should own its inline permission")

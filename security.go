@@ -96,53 +96,57 @@ func middlewareWithSkipper(authenticator Authenticator, onError func(*Ctx), skip
 
 // --- RBAC ---
 
-// EnableRBAC registers role definitions for authorization through the rbac
-// package. Each argument is a source of roles: a string is a path to a JSON
-// config file, and a rbac.Role is registered directly. With no arguments it
-// loads the default rbac.DefaultConfigPath ("configs/rbac.json"):
+// EnableRBAC loads role definitions for authorization from a JSON config file,
+// populating the shared RBAC role registry that HasPermission,
+// RequirePermission, and friends read. With no argument it uses the default
+// rbac.DefaultConfigPath ("configs/rbac.json"):
 //
-//	r.EnableRBAC()                                   // loads configs/rbac.json
-//	r.EnableRBAC("rbac.json")                        // custom config file
-//	r.EnableRBAC(rbac.Role{Name: "admin", Permissions: []string{"users:delete"}})
+//	r.EnableRBAC()                    // loads configs/rbac.json
+//	r.EnableRBAC("rbac.json")         // custom config file
 //
-// File roles are registered before inline ones. Panics on read or parse
-// errors, on an unsupported argument type, or on more than one config path, so
+// It is not a prerequisite for RBAC — EnableRBACRoles (or rbac.Apply
+// directly) registers roles just as well — and the two merge in any order.
+// Panics on read or parse errors, or on more than one path, so
 // misconfiguration fails fast at startup.
-func (e *Engine) EnableRBAC(sources ...any) {
-	if len(sources) == 0 {
-		sources = []any{rbac.DefaultConfigPath}
+func (e *Engine) EnableRBAC(path ...string) {
+	if len(path) > 1 {
+		panic(fmt.Errorf("zen: EnableRBAC: expected at most one config file path, got %d", len(path)))
 	}
 
-	var (
-		file   string
-		inline []rbac.Role
-	)
-	for _, src := range sources {
-		switch v := src.(type) {
-		case string:
-			if file != "" {
-				panic(fmt.Errorf("zen: EnableRBAC: multiple config file paths: %q and %q", file, v))
-			}
-			if v == "" {
-				v = rbac.DefaultConfigPath
-			}
-			file = v
-		case rbac.Role:
-			inline = append(inline, v)
-		default:
-			panic(fmt.Errorf("zen: EnableRBAC: unsupported argument type %T (want a string config path or rbac.Role)", src))
-		}
+	filePath := rbac.DefaultConfigPath
+	if len(path) == 1 {
+		filePath = path[0]
 	}
 
-	if file != "" {
-		if err := rbac.Apply(rbac.WithFile(file)); err != nil {
-			panic(err)
-		}
+	if err := rbac.Apply(rbac.WithFile(filePath)); err != nil {
+		panic(err)
 	}
-	if len(inline) > 0 {
-		if err := rbac.Apply(rbac.WithRoles(inline...)); err != nil {
-			panic(err)
-		}
+}
+
+// EnableRBACRoles registers role definitions programmatically, populating
+// the shared RBAC role registry that HasPermission, RequirePermission, and
+// friends read. Like EnableRBAC it enables RBAC for the engine, differing
+// only in where the definitions come from — here, from any source: inline in
+// code, a database, or a remote service — so rules are not limited to a
+// config file:
+//
+//	r.EnableRBACRoles(
+//		rbac.Role{Name: "viewer", Permissions: []string{"posts:read"}},
+//		rbac.Role{Name: "editor", Permissions: []string{"posts:write"}, InheritsFrom: []string{"viewer"}},
+//	)
+//
+// Calling this alone is sufficient to enable RBAC — EnableRBAC is not
+// required, it only loads the same definitions from a config file. Both
+// methods work the same way: each call merges into the registry, order does
+// not matter, and when a role name appears in both a file and here, the
+// definition registered last takes effect. A call with no roles is a no-op.
+func (e *Engine) EnableRBACRoles(roles ...rbac.Role) {
+	if len(roles) == 0 {
+		return
+	}
+
+	if err := rbac.Apply(rbac.WithRoles(roles...)); err != nil {
+		panic(err)
 	}
 }
 
