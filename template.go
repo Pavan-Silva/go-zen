@@ -4,8 +4,6 @@ import (
 	"html/template"
 	"io/fs"
 	"path/filepath"
-
-	"github.com/Pavan-Silva/go-zen/internal/log"
 )
 
 // Templates holds parsed HTML templates for rendering.
@@ -40,10 +38,7 @@ func LoadTemplates(fsys fs.FS, pattern string) (*Templates, error) {
 //
 //	c.Render(http.StatusOK, t, "index.html", map[string]any{"title": "Home"})
 func (c *Ctx) Render(status int, tmpl *Templates, name string, data any) {
-	c.setContentType("text/html; charset=utf-8")
-	c.Response.WriteHeader(status)
-
-	if err := tmpl.tmpl.ExecuteTemplate(c.Response, filepath.Base(name), data); err != nil {
-		log.Error("HTTP: template render error: %v", err)
-	}
+	c.writeResponse("template render", status, contentTypeHTML, func() error {
+		return tmpl.tmpl.ExecuteTemplate(c.Response, filepath.Base(name), data)
+	})
 }

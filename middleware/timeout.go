@@ -52,8 +52,7 @@ func TimeoutWithConfig(config TimeoutConfig) zen.HandlerFunc {
 	}
 
 	return func(c *zen.Ctx) {
-		if config.Skipper != nil && config.Skipper(c.Request) {
-			c.Next()
+		if skipIfSkipped(c, config.Skipper) {
 			return
 		}
 
@@ -84,7 +83,7 @@ func TimeoutWithConfig(config TimeoutConfig) zen.HandlerFunc {
 		// The handler returned after the deadline without committing a
 		// response: emit the 504 from the handler goroutine.
 		if time.Now().After(deadline) && tw.status == 0 {
-			tw.writeHeader(http.StatusGatewayTimeout)
+			tw.commitHeader(http.StatusGatewayTimeout)
 		}
 	}
 }
@@ -106,8 +105,24 @@ func (tw *timeoutResponseWriter) timeout() {
 	tw.mu.Unlock()
 }
 
-// writeHeader writes a status line if none was written yet.
-func (tw *timeoutResponseWriter) writeHeader(status int) {
+// rejectIfTimedOut reports whether the response timed out and, when it did,
+// emits a 504 Gateway Timeout if no status was committed yet. Writes are
+// discarded when it returns true.
+func (tw *timeoutResponseWriter) rejectIfTimedOut() bool {
+	tw.mu.Lock()
+	defer tw.mu.Unlock()
+	if !tw.timedOut {
+		return false
+	}
+	if tw.status == 0 {
+		tw.status = http.StatusGatewayTimeout
+		tw.ResponseWriter.WriteHeader(http.StatusGatewayTimeout)
+	}
+	return true
+}
+
+// commitHeader writes a status line when none was written yet.
+func (tw *timeoutResponseWriter) commitHeader(status int) {
 	tw.mu.Lock()
 	defer tw.mu.Unlock()
 	if tw.status != 0 {
@@ -118,54 +133,26 @@ func (tw *timeoutResponseWriter) writeHeader(status int) {
 }
 
 func (tw *timeoutResponseWriter) WriteHeader(status int) {
-	tw.mu.Lock()
-	defer tw.mu.Unlock()
-	if tw.timedOut {
-		if tw.status == 0 {
-			tw.status = http.StatusGatewayTimeout
-			tw.ResponseWriter.WriteHeader(http.StatusGatewayTimeout)
-		}
+	if tw.rejectIfTimedOut() {
 		return
 	}
-	if tw.status != 0 {
-		return
-	}
-	tw.status = status
-	tw.ResponseWriter.WriteHeader(status)
+	tw.commitHeader(status)
 }
 
 func (tw *timeoutResponseWriter) Write(b []byte) (int, error) {
-	tw.mu.Lock()
-	defer tw.mu.Unlock()
-	if tw.timedOut {
-		if tw.status == 0 {
-			tw.status = http.StatusGatewayTimeout
-			tw.ResponseWriter.WriteHeader(http.StatusGatewayTimeout)
-		}
+	if tw.rejectIfTimedOut() {
 		return len(b), nil
 	}
-	if tw.status == 0 {
-		tw.status = http.StatusOK
-		tw.ResponseWriter.WriteHeader(http.StatusOK)
-	}
+	tw.commitHeader(http.StatusOK) // an implicit 200 on the first write
 	return tw.ResponseWriter.Write(b)
 }
 
 // Flush implements http.Flusher.
 func (tw *timeoutResponseWriter) Flush() {
-	tw.mu.Lock()
-	defer tw.mu.Unlock()
-	if tw.timedOut {
-		if tw.status == 0 {
-			tw.status = http.StatusGatewayTimeout
-			tw.ResponseWriter.WriteHeader(http.StatusGatewayTimeout)
-		}
+	if tw.rejectIfTimedOut() {
 		return
 	}
-	if tw.status == 0 {
-		tw.status = http.StatusOK
-		tw.ResponseWriter.WriteHeader(http.StatusOK)
-	}
+	tw.commitHeader(http.StatusOK)
 	if f, ok := tw.ResponseWriter.(http.Flusher); ok {
 		f.Flush()
 	}

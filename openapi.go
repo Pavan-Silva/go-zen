@@ -78,7 +78,7 @@ func (o *OpenAPI) SpecJSON() ([]byte, error) {
 
 // writeSpec serves the OpenAPI spec JSON on w.
 func (o *OpenAPI) writeSpec(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", contentTypeJSON)
 
 	data, err := o.SpecJSON()
 	if err != nil {
@@ -98,7 +98,7 @@ func (o *OpenAPI) writeDoc(w http.ResponseWriter, _ *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Content-Type", contentTypeHTML)
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(scalar.UIHTML(o.cfg.SpecPath, o.cfg.SwaggerUIOptions)))
 }

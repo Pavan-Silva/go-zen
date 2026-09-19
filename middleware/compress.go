@@ -20,7 +20,6 @@ type compressResponseWriter struct {
 	gz                    *gzip.Writer
 	bodyBuffer            *bytes.Buffer
 	status                int
-	level                 int
 	wroteHeader           bool
 	handlerStatusCaptured bool
 	direct                bool
@@ -71,7 +70,6 @@ func CompressWithLevel(level int) zen.HandlerFunc {
 		cw := writerStructPool.Get().(*compressResponseWriter)
 		cw.ResponseWriter = c.Response
 		cw.status = http.StatusOK
-		cw.level = level
 		cw.wroteHeader = false
 		cw.handlerStatusCaptured = false
 		cw.direct = false

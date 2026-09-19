@@ -73,15 +73,11 @@ func CORS(config CORSConfig) zen.HandlerFunc {
 
 		respHeaders := c.Response.Header()
 
-		// Set CORS headers.
-		if allowAll {
-			if config.AllowCredentials {
-				// When AllowCredentials is set, echo back the origin instead of using "*".
-				respHeaders["Access-Control-Allow-Origin"] = []string{origin}
-				respHeaders.Add("Vary", "Origin")
-			} else {
-				respHeaders["Access-Control-Allow-Origin"] = []string{"*"}
-			}
+		// Set CORS headers. "*" is only echoed with no credentials; with
+		// AllowCredentials, or when the origin is allow-listed, the request
+		// Origin is reflected back.
+		if allowAll && !config.AllowCredentials {
+			respHeaders["Access-Control-Allow-Origin"] = []string{"*"}
 		} else {
 			respHeaders["Access-Control-Allow-Origin"] = []string{origin}
 			// Vary header for CDN caching. Append so pre-existing Vary

@@ -4,7 +4,6 @@ import (
 	"net/http"
 
 	"github.com/Pavan-Silva/go-zen"
-	"github.com/Pavan-Silva/go-zen/internal/bytesconv"
 )
 
 // CrossOriginProtectionConfig configures the native Go Cross-Origin CSRF protection.
@@ -41,8 +40,7 @@ func CrossOriginProtectionWithConfig(config CrossOriginProtectionConfig) zen.Han
 
 	return func(c *zen.Ctx) {
 		// Respect the custom framework skipper guard
-		if config.Skipper != nil && config.Skipper(c.Request) {
-			c.Next()
+		if skipIfSkipped(c, config.Skipper) {
 			return
 		}
 
@@ -54,8 +52,7 @@ func CrossOriginProtectionWithConfig(config CrossOriginProtectionConfig) zen.Han
 			}
 
 			// Framework Aware Error Write: Ensures your console Logger captures the 403 Forbidden state
-			c.Response.WriteHeader(http.StatusForbidden)
-			_, _ = c.Response.Write(bytesconv.StringToBytes(http.StatusText(http.StatusForbidden)))
+			c.Error(http.StatusForbidden, http.StatusText(http.StatusForbidden))
 			return
 		}
 

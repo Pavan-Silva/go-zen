@@ -8,7 +8,6 @@ import (
 	"runtime/debug"
 
 	"github.com/Pavan-Silva/go-zen"
-	"github.com/Pavan-Silva/go-zen/internal/bytesconv"
 	"github.com/Pavan-Silva/go-zen/internal/log"
 )
 
@@ -27,9 +26,7 @@ func Recover(c *zen.Ctx) {
 			log.Error("HTTP panic recovered, error=%v method=%s path=%s remote_ip=%s\n%s",
 				err, c.Request.Method, c.Request.URL.Path, c.Request.RemoteAddr, stack)
 
-			c.Response.WriteHeader(http.StatusInternalServerError)
-
-			_, _ = c.Response.Write(bytesconv.StringToBytes(http.StatusText(http.StatusInternalServerError)))
+			c.Error(http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 		}
 	}()
 

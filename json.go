@@ -1,10 +1,6 @@
 package zen
 
-import (
-	"encoding/json"
-
-	"github.com/Pavan-Silva/go-zen/internal/log"
-)
+import "encoding/json"
 
 // JSONSerializer is the interface for JSON encoding and decoding.
 // Implementations handle serializing Go values to JSON for responses
@@ -43,12 +39,9 @@ func (c *Ctx) JSONPretty(status int, data any) {
 
 // writeJSON sets the JSON content type and streams data to the response writer.
 func (c *Ctx) writeJSON(status int, data any, indent string) {
-	c.setContentType("application/json")
-	c.Response.WriteHeader(status)
-
-	if err := c.engine.JSONSerializer.Serialize(c, data, indent); err != nil {
-		log.Error("HTTP: JSON encode error: %v", err)
-	}
+	c.writeResponse("JSON encode", status, contentTypeJSON, func() error {
+		return c.engine.JSONSerializer.Serialize(c, data, indent)
+	})
 }
 
 // BindJSON decodes the request body as JSON into dest.

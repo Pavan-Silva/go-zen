@@ -17,6 +17,11 @@ All notable changes to this project are documented in this file.
 - **auth**: the package is now a providers-only addon that implements `zen.Authenticator` and returns `*zen.User`. `auth.User` and `auth.Authenticator` remain available as aliases of the root types; `auth` provides JWT, OAuth2, OIDC, Basic, API key, session, and password providers only
 - **auth**: authorization is now a single roles model — roles define permissions, users carry only roles. `User.Authorities` is replaced by `User.Roles` (exact role names, no `ROLE_` prefix normalization). `RequireRole`/`RequireAnyRole`/`RequireAllRoles` check `User.Roles` directly; `RequirePermission`/`RequireAnyPermission`/`RequireAllPermissions` resolve permissions through the role registry. The old `RequireAuthority` helpers are removed — permissions are no longer carried on the user, they belong to roles
 - **auth**: `DefaultUserMapper` maps a JWT `roles` (array) or `role` (single) claim into `User.Roles`; `scope`/`authorities` claims remain in `User.Claims` for business logic and are not used for authorization
+- **auth**: `EnableAuth` now panics when passed more than one `SkipFunc` instead of silently dropping the extras (fail-fast, matching `EnableRBAC`)
+- **response**: `HTML`, `String`, `Blob`, `JSON`/`JSONPretty`, `XML`, and `Render` share a single `writeResponse` helper (commit content-type, commit status, write, log) and the shared content types are single constants; `Stream` keeps its error-returning behavior
+- **middleware**: a shared `skipIfSkipped` helper replaces the six-line skipper guard duplicated across timeout, body-limit, cross-origin-protection, request-id, and rate-limit middlewares; `BodyLimit`, `Csrf` (CrossOriginProtection), and `Recover` emit their error responses through `Ctx.Error` instead of hand-writing status text; `Timeout`'s response writer extracts the status-commit and timed-out-rejection logic into `commitHeader`/`rejectIfTimedOut`; `CORS` collapses the origin/`Vary` branching; removed the dead `level` field from the pooled `compressResponseWriter`
+- **router**: removed the dead `fullPath` field on the route-lookup result (`nodeValue`); callers only read handlers and the TSR flag
+- **env**: the typed `Get`/`MustGet` readers share generic `lookupEnv`/`mustEnv` helpers instead of each repeating the parse-and-fallback shape
 
 ### Added
 

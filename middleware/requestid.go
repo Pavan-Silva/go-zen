@@ -51,8 +51,7 @@ func RequestIDWithConfig(config RequestIDConfig) zen.HandlerFunc {
 	}
 
 	return func(c *zen.Ctx) {
-		if config.Skipper != nil && config.Skipper(c.Request) {
-			c.Next()
+		if skipIfSkipped(c, config.Skipper) {
 			return
 		}
 

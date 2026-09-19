@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/Pavan-Silva/go-zen"
-	"github.com/Pavan-Silva/go-zen/internal/bytesconv"
 )
 
 // BodyLimitConfig holds configuration for request body size limiting.
@@ -38,15 +37,13 @@ func BodyLimitWithConfig(config BodyLimitConfig) zen.HandlerFunc {
 	}
 
 	return func(c *zen.Ctx) {
-		if config.Skipper != nil && config.Skipper(c.Request) {
-			c.Next()
+		if skipIfSkipped(c, config.Skipper) {
 			return
 		}
 
 		// Check ContentLength before wrapping the body reader.
 		if c.Request.ContentLength > computedLimit {
-			c.Response.WriteHeader(http.StatusRequestEntityTooLarge)
-			_, _ = c.Response.Write(bytesconv.StringToBytes(http.StatusText(http.StatusRequestEntityTooLarge)))
+			c.Error(http.StatusRequestEntityTooLarge, http.StatusText(http.StatusRequestEntityTooLarge))
 			return
 		}
 

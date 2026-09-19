@@ -27,16 +27,23 @@ type Authenticator interface {
 }
 
 // EnableAuth installs authentication middleware for the given authenticator,
-// optionally skipping requests matched by skip funcs. Equivalent to
+// optionally skipping requests matched by a skip func. Equivalent to
 // r.Use(EnableAuth(authenticator, skip...)).
 func (e *Engine) EnableAuth(authenticator Authenticator, skip ...SkipFunc) {
 	e.Use(EnableAuth(authenticator, skip...))
 }
 
 // EnableAuth creates authentication middleware.
+//
+// Pass at most one SkipFunc to bypass authentication for selected requests;
+// more than one is a misconfiguration and panics (fail-fast, matching
+// EnableRBAC). Pass none to require authentication on every request.
 func EnableAuth(authenticator Authenticator, skip ...SkipFunc) HandlerFunc {
+	if len(skip) > 1 {
+		panic("auth: EnableAuth accepts at most one SkipFunc")
+	}
 	var skipper SkipFunc
-	if len(skip) > 0 {
+	if len(skip) == 1 {
 		skipper = skip[0]
 	}
 	return middlewareWithSkipper(authenticator, nil, skipper)
