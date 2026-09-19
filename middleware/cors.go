@@ -22,7 +22,7 @@ type CORSConfig struct {
 // DefaultCORSConfig returns a CORSConfig with secure defaults.
 func DefaultCORSConfig() CORSConfig {
 	return CORSConfig{
-		AllowedOrigins: []string{}, // Locked down by default
+		AllowedOrigins: nil, // Locked down by default
 		AllowedMethods: []string{"GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"},
 		AllowedHeaders: []string{"Content-Type", "Authorization", "Accept", "X-Requested-With"},
 		ExposeHeaders:  []string{"Content-Length", "Date"},
@@ -50,9 +50,8 @@ func CORS(config CORSConfig) zen.HandlerFunc {
 	maxAgeStr := strconv.Itoa(config.MaxAge)
 
 	return func(c *zen.Ctx) {
-		ov := c.Request.Header["Origin"]
 		origin := ""
-		if len(ov) > 0 {
+		if ov := c.Request.Header["Origin"]; len(ov) > 0 {
 			origin = ov[0]
 		}
 
@@ -74,15 +73,11 @@ func CORS(config CORSConfig) zen.HandlerFunc {
 
 		respHeaders := c.Response.Header()
 
-		// Set CORS headers.
-		if allowAll {
-			if config.AllowCredentials {
-				// When AllowCredentials is set, echo back the origin instead of using "*".
-				respHeaders["Access-Control-Allow-Origin"] = []string{origin}
-				respHeaders.Add("Vary", "Origin")
-			} else {
-				respHeaders["Access-Control-Allow-Origin"] = []string{"*"}
-			}
+		// Set CORS headers. "*" is only echoed with no credentials; with
+		// AllowCredentials, or when the origin is allow-listed, the request
+		// Origin is reflected back.
+		if allowAll && !config.AllowCredentials {
+			respHeaders["Access-Control-Allow-Origin"] = []string{"*"}
 		} else {
 			respHeaders["Access-Control-Allow-Origin"] = []string{origin}
 			// Vary header for CDN caching. Append so pre-existing Vary
@@ -107,9 +102,7 @@ func CORS(config CORSConfig) zen.HandlerFunc {
 			c.Request.Header.Get("Access-Control-Request-Method") != "" {
 			respHeaders["Access-Control-Allow-Methods"] = []string{allowedMethodsStr}
 			respHeaders["Access-Control-Allow-Headers"] = []string{allowedHeadersStr}
-			if maxAgeStr != "0" {
-				respHeaders["Access-Control-Max-Age"] = []string{maxAgeStr}
-			}
+			respHeaders["Access-Control-Max-Age"] = []string{maxAgeStr}
 
 			// Return 204 for preflight.
 			c.Response.WriteHeader(http.StatusNoContent)

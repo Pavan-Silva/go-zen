@@ -2,6 +2,34 @@
 
 All notable changes to this project are documented in this file.
 
+## v1.6.0
+
+### Changed
+
+- **bind**: removed the unused `FormError` type (no production path ever returned it)
+- **template**: removed the test-only internal `renderWriter` helper
+- **auth**: JWT/OAuth2/OIDC providers no longer duplicate the HTTP+JSON request dance — a shared `fetchJSON` helper backs token introspection and userinfo lookups; JWTs verify through a single extracted `keyFunc`; the default claim mapper falls back to the `sub` claim for `Username` when no `username`/`name` claim is present
+- **middleware**: `Logger` pad helper names now match their behavior; `Compress` drops the redundant pool parameter on its finalizer; `CORS` reads the Origin header via `Header.Get` and always emits `Access-Control-Max-Age`, and `RateLimiter` reports the exact (floor) remaining token count instead of `ceil`
+- **system**: the startup banner builds the listen URL with `net.JoinHostPort`, fixing the clickable link for IPv6 listeners (e.g. `[::1]:8080`)
+- **rbac**: dropped the redundant `hasFile` option flag and hoisted the cycle-detection map out of the per-role permission loop
+- **rbac**: the RBAC registry, permission checks, and config loading live in a standalone `rbac` package (no dependency on the zen core). Role sources are unified behind `rbac.Apply` with `rbac.WithFile` (JSON config) and `rbac.WithRoles` (inline definitions); `rbac.Role` describes a role, `rbac.HasPermission` answers checks, and `rbac.DefaultConfigPath` is the default file. The engine exposes two entry points: `Engine.EnableRBAC()` (or `Engine.EnableRBAC("path")`) loads role definitions from a JSON config file, and `Engine.EnableRBACRoles(rbac.Role{...})` registers programmatic definitions from any source (code, database, remote service) — the two combine in any order; `User.Has*` checks resolve through it
+- **auth → zen**: authentication and authorization middleware moved out of `auth` into the root `zen` package. `EnableAuth` and `c.GetUser()` handle authentication; claim access moved to `c.GetClaim(key)`; `RequireRole`/`RequireAnyRole`/`RequireAllRoles`, `RequirePermission`/`RequireAnyPermission`/`RequireAllPermissions`, `RequireClaim`, `SkipPaths`, `SkipPrefixes`, and `SkipMethodsAndPaths` are package-level functions of `zen`
+- **auth**: the package is now a providers-only addon that implements `zen.Authenticator` and returns `*zen.User`. `auth.User` and `auth.Authenticator` remain available as aliases of the root types; `auth` provides JWT, OAuth2, OIDC, Basic, API key, session, and password providers only
+- **auth**: authorization is now a single roles model — roles define permissions, users carry only roles. `User.Authorities` is replaced by `User.Roles` (exact role names, no `ROLE_` prefix normalization). `RequireRole`/`RequireAnyRole`/`RequireAllRoles` check `User.Roles` directly; `RequirePermission`/`RequireAnyPermission`/`RequireAllPermissions` resolve permissions through the role registry. The old `RequireAuthority` helpers are removed — permissions are no longer carried on the user, they belong to roles
+- **auth**: `DefaultUserMapper` maps a JWT `roles` (array) or `role` (single) claim into `User.Roles`; `scope`/`authorities` claims remain in `User.Claims` for business logic and are not used for authorization
+- **auth**: `EnableAuth` now panics when passed more than one `SkipFunc` instead of silently dropping the extras (fail-fast, matching `EnableRBAC`)
+- **response**: `HTML`, `String`, `Blob`, `JSON`/`JSONPretty`, `XML`, and `Render` share a single `writeResponse` helper (commit content-type, commit status, write, log) and the shared content types are single constants; `Stream` keeps its error-returning behavior
+- **middleware**: a shared `skipIfSkipped` helper replaces the six-line skipper guard duplicated across timeout, body-limit, cross-origin-protection, request-id, and rate-limit middlewares; `BodyLimit`, `Csrf` (CrossOriginProtection), and `Recover` emit their error responses through `Ctx.Error` instead of hand-writing status text; `Timeout`'s response writer extracts the status-commit and timed-out-rejection logic into `commitHeader`/`rejectIfTimedOut`; `CORS` collapses the origin/`Vary` branching; removed the dead `level` field from the pooled `compressResponseWriter`
+- **router**: removed the dead `fullPath` field on the route-lookup result (`nodeValue`); callers only read handlers and the TSR flag
+- **env**: the typed `Get`/`MustGet` readers share generic `lookupEnv`/`mustEnv` helpers instead of each repeating the parse-and-fallback shape
+
+### Added
+
+- **openapi → zen**: OpenAPI documentation serving moved into the root `zen` package — `Engine.EnableAPIDocs(opts ...any)` serves the generated OpenAPI spec (`/openapi.json`) and Scalar documentation UI (`/docs`) with no import side effects. Options are an optional `OpenAPIConfig` and/or `func(*OpenAPIConfig)`; the addon constructor is `zen.NewOpenAPI(OpenAPIConfig{})`, whose `RegisterRoutes(*RouterGroup)` mounts the routes on the engine's root group or any subgroup. The embedded UI assets stay in the `scalar` package (`scalar/assets/`) for `//go:embed`
+- **engine**: `Engine.EnableAuth(authenticator, ...SkipFunc)` installs authentication middleware in one call, equivalent to `r.Use(zen.EnableAuth(...))`
+- **auth**: `User.HasRole`/`HasAnyRole`/`HasAllRoles` and `User.HasPermission`/`HasAnyPermission`/`HasAllPermissions` boolean checks
+- **request**: package-level `ClientIP(*http.Request)` extracts the client IP (X-Forwarded-For → X-Real-IP → RemoteAddr); `Ctx.ClientIP()` delegates to it
+
 ## v1.5.1
 
 ### Fixed
@@ -33,14 +61,16 @@ All notable changes to this project are documented in this file.
 ### Breaking
 
 - `openapi` rewritten as a swaggo serving adapter — the built-in spec generator is gone: removed `RouteInfo`, `RouteInfoBuilder`, `RI`, `Register` and the per-method helpers, `OpenAPI.Group`, `SecurityScheme`/`OAuthFlows` types, and the `Config` fields `Title`, `Version`, `Description`, `SecuritySchemes`, and `DefaultSecurity`; that metadata now comes from swag annotations (`@Summary`, `@Param`, `@Success`, `@securityDefinitions`, ...). `SpecJSON` returns `([]byte, error)` and serves 503 with a JSON error body when no swag documentation is registered
+- `rbac.RegisterRoles`, `rbac.LoadConfig`, and `rbac.Config` are removed and `rbac.RoleConfig` is renamed `rbac.Role` — the rbac package now exposes `rbac.Apply` with `rbac.WithFile` and `rbac.WithRoles`. On the engine, `Engine.EnableRBAC` takes at most one config file path (`Engine.EnableRBAC("rbac.json")`; no argument loads `configs/rbac.json`), and programmatic definitions are registered through `Engine.EnableRBACRoles(rbac.Role{...})` instead of mixing both kinds through a single variadic argument list
 - Removed `zen.FromContext` — use `zen.FromRequest(r)`, which is equivalent
-- Removed `auth.Middleware` — use `auth.RequireAuth` or `auth.MiddlewareWithSkipper`
+- Removed `auth.Middleware` — use `zen.EnableAuth` or `zen.MiddlewareWithSkipper`
 - Removed `auth.WithAuth` — use `auth.WithAuthFunc`, which additionally provides the authenticated user
 - Removed `auth.Authorities` — declare authority slices directly (`[]string{...}`)
 - Removed `auth.GenerateJWT` and `auth.ParseJWT` — use `(JWTAuth).Generate(claims, expiry)` and `(JWTAuth).Parse(token)`, which reuse the adapter's configured `Secret` and `SigningMethod` instead of requiring them again
 
 ### Fixed
 
+- `rbac`: inheritance now resolves against every registered role, not just the roles in a single call. A role can inherit from one defined in a separate `EnableRBAC`/`Apply` batch or config file; such cross-batch inheritance previously registered the role without its inherited permissions
 - `Group("/")` no longer panics with an index-out-of-range error; empty and "/" prefixes now inherit the parent group prefix unchanged instead of producing double-slash route paths
 
 ### Maintenance

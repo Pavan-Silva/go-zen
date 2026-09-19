@@ -4,6 +4,7 @@ import (
 	"io"
 	"mime"
 	"net"
+	"net/http"
 	"net/url"
 	"strings"
 )
@@ -119,35 +120,39 @@ func (c *Ctx) Params() map[string]string {
 	return m
 }
 
-// ClientIP returns the client's IP address by checking X-Forwarded-For and
-// X-Real-IP headers before falling back to the remote address.
-func (c *Ctx) ClientIP() string {
-	if fwd := c.Header("X-Forwarded-For"); fwd != "" {
+// ClientIP returns the request's client IP address by checking X-Forwarded-For
+// and X-Real-IP headers before falling back to the remote address. Header-based
+// detection trusts whatever source sets those headers (typically a proxy you
+// control).
+func ClientIP(r *http.Request) string {
+	if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
 		if before, _, ok := strings.Cut(fwd, ","); ok {
 			return strings.TrimSpace(before)
 		}
 		return strings.TrimSpace(fwd)
 	}
 
-	if realIP := c.Header("X-Real-IP"); realIP != "" {
+	if realIP := r.Header.Get("X-Real-IP"); realIP != "" {
 		return strings.TrimSpace(realIP)
 	}
 
-	host, _, err := net.SplitHostPort(c.Request.RemoteAddr)
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
-		return c.Request.RemoteAddr
+		return r.RemoteAddr
 	}
 	return host
+}
+
+// ClientIP returns the client's IP address by checking X-Forwarded-For and
+// X-Real-IP headers before falling back to the remote address.
+func (c *Ctx) ClientIP() string {
+	return ClientIP(c.Request)
 }
 
 // Body reads and returns the complete raw request body as a byte slice.
 // It is the caller's responsibility to interpret the bytes.
 func (c *Ctx) Body() ([]byte, error) {
-	b, err := io.ReadAll(c.Request.Body)
-	if err != nil {
-		return nil, err
-	}
-	return b, nil
+	return io.ReadAll(c.Request.Body)
 }
 
 // Header returns the value of a request header by key.

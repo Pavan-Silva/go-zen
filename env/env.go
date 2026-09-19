@@ -18,30 +18,24 @@ func GetString(key, defaultValue string) string {
 
 // GetInt parses the environment variable as int or returns default.
 func GetInt(key string, defaultValue int) int {
-	if v := os.Getenv(key); v != "" {
-		if i, err := strconv.Atoi(v); err == nil {
-			return i
-		}
+	if v, ok := lookupEnv(key, strconv.Atoi); ok {
+		return v
 	}
 	return defaultValue
 }
 
 // GetBool parses the environment variable as bool or returns default.
 func GetBool(key string, defaultValue bool) bool {
-	if v := os.Getenv(key); v != "" {
-		if b, err := strconv.ParseBool(v); err == nil {
-			return b
-		}
+	if v, ok := lookupEnv(key, strconv.ParseBool); ok {
+		return v
 	}
 	return defaultValue
 }
 
 // GetDuration parses the environment variable as time.Duration or returns default.
 func GetDuration(key string, defaultValue time.Duration) time.Duration {
-	if v := os.Getenv(key); v != "" {
-		if d, err := time.ParseDuration(v); err == nil {
-			return d
-		}
+	if v, ok := lookupEnv(key, time.ParseDuration); ok {
+		return v
 	}
 	return defaultValue
 }
@@ -56,27 +50,42 @@ func MustGetString(key string) string {
 
 // MustGetInt parses the environment variable as int or panics.
 func MustGetInt(key string) int {
-	v := MustGetString(key)
-	if i, err := strconv.Atoi(v); err == nil {
-		return i
-	}
-	panic(fmt.Sprintf("environment variable %s is not a valid int: %s", key, v))
+	return mustEnv(key, strconv.Atoi, "int")
 }
 
 // MustGetBool parses the environment variable as bool or panics.
 func MustGetBool(key string) bool {
-	v := MustGetString(key)
-	if b, err := strconv.ParseBool(v); err == nil {
-		return b
-	}
-	panic(fmt.Sprintf("environment variable %s is not a valid bool: %s", key, v))
+	return mustEnv(key, strconv.ParseBool, "bool")
 }
 
 // MustGetDuration parses the environment variable as time.Duration or panics.
 func MustGetDuration(key string) time.Duration {
-	v := MustGetString(key)
-	if d, err := time.ParseDuration(v); err == nil {
-		return d
+	return mustEnv(key, time.ParseDuration, "duration")
+}
+
+// lookupEnv returns the parsed value of an environment variable and whether
+// it is set and parseable. An absent, empty, or invalid value yields the zero
+// value and false, so callers fall back to their default.
+func lookupEnv[T any](key string, parse func(string) (T, error)) (T, bool) {
+	var parsed T
+	v := os.Getenv(key)
+	if v == "" {
+		return parsed, false
 	}
-	panic(fmt.Sprintf("environment variable %s is not a valid duration: %s", key, v))
+	parsed, err := parse(v)
+	if err != nil {
+		return parsed, false
+	}
+	return parsed, true
+}
+
+// mustEnv parses a required environment variable of the given kind, panicking
+// when it is unset or cannot be parsed.
+func mustEnv[T any](key string, parse func(string) (T, error), kind string) T {
+	v := MustGetString(key)
+	parsed, err := parse(v)
+	if err != nil {
+		panic(fmt.Sprintf("environment variable %s is not a valid %s: %s", key, kind, v))
+	}
+	return parsed
 }

@@ -1,3 +1,7 @@
+// Package auth provides authentication providers (JWT, OAuth2, OIDC, Basic,
+// API key, session, password) built on top of the zen core's authentication
+// types. Each provider implements zen.Authenticator and returns *zen.User
+// values; authorization is resolved through the standalone rbac package.
 package auth
 
 import (
@@ -5,9 +9,9 @@ import (
 	"fmt"
 	"maps"
 	"net/http"
-	"strings"
 	"time"
 
+	"github.com/Pavan-Silva/go-zen"
 	"github.com/golang-jwt/jwt/v5"
 )
 
@@ -15,9 +19,9 @@ import (
 // fields are the single source of truth used both to verify incoming tokens
 // (Authenticate) and to issue new ones (Generate).
 type JWTAuth struct {
-	Secret        []byte                           // Secret key used to verify token signatures.
-	SigningMethod jwt.SigningMethod                // Expected signing method (e.g. jwt.SigningMethodHS256).
-	ClaimsFunc    func(claims jwt.MapClaims) *User // Optional function to map JWT claims to a User pointer.
+	Secret        []byte                               // Secret key used to verify token signatures.
+	SigningMethod jwt.SigningMethod                    // Expected signing method (e.g. jwt.SigningMethodHS256).
+	ClaimsFunc    func(claims jwt.MapClaims) *zen.User // Optional function to map JWT claims to a User pointer.
 }
 
 // validate reports whether the adapter carries the minimum configuration
@@ -26,17 +30,20 @@ func (j *JWTAuth) validate() error {
 	if j == nil {
 		return errors.New("jwt auth is not configured")
 	}
+
 	if j.SigningMethod == nil {
 		return errors.New("jwt signing method is not configured")
 	}
+
 	if len(j.Secret) == 0 {
 		return errors.New("jwt secret is not configured")
 	}
+
 	return nil
 }
 
 // Authenticate extracts and validates a JWT token from the request.
-func (j *JWTAuth) Authenticate(r *http.Request) (*User, error) {
+func (j *JWTAuth) Authenticate(r *http.Request) (*zen.User, error) {
 	if err := j.validate(); err != nil {
 		return nil, err
 	}
@@ -46,12 +53,7 @@ func (j *JWTAuth) Authenticate(r *http.Request) (*User, error) {
 		return nil, err
 	}
 
-	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (any, error) {
-		if token.Method.Alg() != j.SigningMethod.Alg() {
-			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
-		}
-		return j.Secret, nil
-	})
+	token, err := jwt.Parse(tokenString, j.keyFunc)
 
 	if err != nil {
 		return nil, err
@@ -95,51 +97,34 @@ func (j *JWTAuth) Parse(tokenString string) (jwt.MapClaims, error) {
 
 	claims := jwt.MapClaims{}
 
-	token, err := jwt.ParseWithClaims(tokenString, &claims, func(t *jwt.Token) (any, error) {
-		if t.Method.Alg() != j.SigningMethod.Alg() {
-			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
-		}
-		return j.Secret, nil
-	})
+	token, err := jwt.ParseWithClaims(tokenString, &claims, j.keyFunc)
 	if err != nil {
 		return nil, err
 	}
 
 	if !token.Valid {
-		return nil, fmt.Errorf("invalid token")
+		return nil, errors.New("invalid token")
 	}
 
 	return claims, nil
 }
 
-// bearerTokenFromRequest extracts the Bearer token from the Authorization header.
-// The auth-scheme is matched case-insensitively per RFC 7235 section 5.1
-// (e.g. "Bearer", "bearer", and "BEARER" are all accepted).
-func bearerTokenFromRequest(r *http.Request) (string, error) {
-	ah := r.Header["Authorization"]
-	if len(ah) == 0 {
-		return "", fmt.Errorf("missing authorization header")
+// keyFunc returns the signing key for the configured algorithm, rejecting
+// tokens that attempt to switch to a different signing method (the algorithm
+// confusion attack).
+func (j *JWTAuth) keyFunc(token *jwt.Token) (any, error) {
+	if token.Method.Alg() != j.SigningMethod.Alg() {
+		return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 	}
-
-	const scheme = "bearer "
-	if len(ah[0]) > len(scheme) && strings.EqualFold(ah[0][:len(scheme)], scheme) {
-		return ah[0][len(scheme):], nil
-	}
-
-	return "", fmt.Errorf("invalid authorization header format")
+	return j.Secret, nil
 }
 
-// userFromClaims maps JWT claims to a User using the optional claims function.
-func userFromClaims(claimsFunc func(jwt.MapClaims) *User, claims jwt.MapClaims) *User {
-	if claimsFunc != nil {
-		return claimsFunc(claims)
-	}
-	return DefaultUserMapper(claims)
-}
-
-// DefaultUserMapper constructs a User from JWT claims.
-func DefaultUserMapper(claims jwt.MapClaims) *User {
-	user := &User{
+// defaultUserMapper constructs a User from JWT claims. The "roles" claim
+// (array) or the "role" claim (single name) populates User.Roles; "scope" and
+// "authorities" claims are kept in User.Claims for business logic and are not
+// used for authorization (permissions are defined via Engine.EnableRBAC).
+func defaultUserMapper(claims jwt.MapClaims) *zen.User {
+	user := &zen.User{
 		Claims: claims,
 	}
 
@@ -153,26 +138,15 @@ func DefaultUserMapper(claims jwt.MapClaims) *User {
 		user.Username = name
 	}
 
+	if user.Username == "" {
+		user.Username = user.ID
+	}
+
 	if roles, ok := claims["roles"].([]any); ok {
-		user.Authorities = stringAuthorities(roles)
-	} else if roles, ok := claims["authorities"].([]any); ok {
-		user.Authorities = stringAuthorities(roles)
-	} else if scope, ok := claims["scope"].(string); ok && scope != "" {
-		user.Authorities = strings.Split(scope, " ")
+		user.Roles = stringRoles(roles)
+	} else if role, ok := claims["role"].(string); ok && role != "" {
+		user.Roles = []string{role}
 	}
 
 	return user
-}
-
-// stringAuthorities converts a heterogeneous claim array (e.g. JSON-decoded)
-// into a compact []string, skipping non-string and empty entries instead of
-// leaving empty holes that could match empty-authority checks.
-func stringAuthorities(values []any) []string {
-	authorities := make([]string, 0, len(values))
-	for _, v := range values {
-		if s, ok := v.(string); ok && s != "" {
-			authorities = append(authorities, s)
-		}
-	}
-	return authorities
 }

@@ -9,6 +9,14 @@ import (
 	"github.com/Pavan-Silva/go-zen/internal/log"
 )
 
+// Response content types shared across the response methods.
+const (
+	contentTypeJSON = "application/json"
+	contentTypeXML  = "application/xml"
+	contentTypeHTML = "text/html; charset=utf-8"
+	contentTypeText = "text/plain; charset=utf-8"
+)
+
 // setContentType sets the Content-Type header using direct map access,
 // bypassing the canonicalization overhead of http.Header.Set.
 // Only writes when the header is absent, avoiding a heap-allocated
@@ -20,6 +28,18 @@ func (c *Ctx) setContentType(ct string) {
 	}
 }
 
+// writeResponse commits the content type and status, then runs write to
+// produce the response body. Write errors are logged with the given label,
+// not returned — the response methods never surface them (Stream is the
+// exception: it returns its write error to the caller).
+func (c *Ctx) writeResponse(label string, status int, contentType string, write func() error) {
+	c.setContentType(contentType)
+	c.Response.WriteHeader(status)
+	if err := write(); err != nil {
+		log.Error("HTTP: %s error: %v", label, err)
+	}
+}
+
 // HTML writes an HTML string directly to the response with the given HTTP status.
 // The response Content-Type header is automatically set to "text/html; charset=utf-8".
 //
@@ -27,11 +47,10 @@ func (c *Ctx) setContentType(ct string) {
 //
 //	c.HTML(http.StatusOK, "<h1>Hello World</h1>")
 func (c *Ctx) HTML(status int, html string) {
-	c.setContentType("text/html; charset=utf-8")
-	c.Response.WriteHeader(status)
-	if _, err := io.WriteString(c.Response, html); err != nil {
-		log.Error("HTTP: HTML response write error: %v", err)
-	}
+	c.writeResponse("HTML response write", status, contentTypeHTML, func() error {
+		_, err := io.WriteString(c.Response, html)
+		return err
+	})
 }
 
 // String writes a plain text string directly to the response with the given HTTP status.
@@ -40,11 +59,10 @@ func (c *Ctx) HTML(status int, html string) {
 //
 //	c.String(http.StatusOK, "Hello World")
 func (c *Ctx) String(status int, text string) {
-	c.setContentType("text/plain; charset=utf-8")
-	c.Response.WriteHeader(status)
-	if _, err := io.WriteString(c.Response, text); err != nil {
-		log.Error("HTTP: string response write error: %v", err)
-	}
+	c.writeResponse("string response write", status, contentTypeText, func() error {
+		_, err := io.WriteString(c.Response, text)
+		return err
+	})
 }
 
 // Status writes a response header with no-body and the given HTTP status.
@@ -111,11 +129,10 @@ func (c *Ctx) Inline(filePath string) {
 //	data := []byte("id,name\n1,John Doe")
 //	c.Blob(http.StatusOK, "text/csv", data)
 func (c *Ctx) Blob(status int, contentType string, data []byte) {
-	c.setContentType(contentType)
-	c.Response.WriteHeader(status)
-	if _, err := c.Response.Write(data); err != nil {
-		log.Error("HTTP: blob response write error: %v", err)
-	}
+	c.writeResponse("blob response write", status, contentType, func() error {
+		_, err := c.Response.Write(data)
+		return err
+	})
 }
 
 // Stream copies data from an io.Reader to the response body with the given content type.

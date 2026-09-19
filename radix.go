@@ -416,13 +416,11 @@ func (n *node) insertChild(path string, fullPath string, handlers []HandlerFunc)
 // -- getValue --
 
 // nodeValue is the result of a route lookup. It carries the matched handler
-// chain, any extracted parameters, a trailing-slash-redirect (TSR) hint, and
-// the full registered path for the matched route.
+// chain, any extracted parameters, and a trailing-slash-redirect (TSR) hint.
 type nodeValue struct {
 	handlers []HandlerFunc
 	params   *params
 	tsr      bool
-	fullPath string
 }
 
 // skippedNode records a point in the tree where a wildcard branch was
@@ -580,7 +578,6 @@ walk:
 					// Path fully consumed. Return handlers if registered,
 					// otherwise check for TSR via the trailing-slash child.
 					if value.handlers = cur.handlers; value.handlers != nil {
-						value.fullPath = cur.fullPath
 						return value
 					}
 					if len(cur.children) == 1 {
@@ -598,7 +595,6 @@ walk:
 					appendParamValue(&value, ps, globalParamsCount, cur.path[2:], val)
 
 					value.handlers = cur.handlers
-					value.fullPath = cur.fullPath
 					return value
 
 				default:
@@ -621,7 +617,6 @@ walk:
 
 			// Return handlers if this node is a terminal route.
 			if value.handlers = cur.handlers; value.handlers != nil {
-				value.fullPath = cur.fullPath
 				return value
 			}
 

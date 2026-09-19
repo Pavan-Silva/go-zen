@@ -22,6 +22,17 @@ const maxBindDepth = 64
 // uploaded multipart files and may be nil. destination must be a non-nil
 // pointer to a struct or a string-keyed map, otherwise ErrInvalidBindTarget
 // is returned. When both maps are empty, destination is left unchanged.
+//
+// Tag resolution order: for a given source each struct field is located by
+// looking up its struct tag (param / query / form / header). If that tag is
+// empty the json tag is tried next. If the json tag is also empty (or set to
+// "-") the field name is used as-is. This allows a single set of json tags to
+// double as binding tags in most cases.
+//
+// Supported field types: basic types (int*, uint*, float*, bool, string),
+// pointers to those types, slices of those types, time.Time (with format
+// tag), BindUnmarshaler, encoding.TextUnmarshaler, and multipart.FileHeader
+// variants.
 func bindData(
 	destination any,
 	data map[string][]string,
@@ -72,41 +83,19 @@ func bindDataValue(
 			return fmt.Errorf("unsupported map key type %s (must be string)", typ.Key().String())
 		}
 
-		elemKind := typ.Elem().Kind()
-		switch elemKind {
-		case reflect.String:
-			if val.IsNil() {
-				val.Set(reflect.MakeMap(typ))
-			}
+		// Validate the element type up front so unsupported map types fail
+		// even when no data is bound to them.
+		if _, err := mapElemValue(typ.Elem(), nil); err != nil {
+			return err
+		}
 
-			for k, v := range data {
-				val.SetMapIndex(reflect.ValueOf(k), reflect.ValueOf(strings.Join(v, ",")))
-			}
+		if val.IsNil() {
+			val.Set(reflect.MakeMap(typ))
+		}
 
-		case reflect.Interface:
-			if val.IsNil() {
-				val.Set(reflect.MakeMap(typ))
-			}
-
-			for k, v := range data {
-				val.SetMapIndex(reflect.ValueOf(k), reflect.ValueOf(strings.Join(v, ",")))
-			}
-
-		case reflect.Slice:
-			if typ.Elem().Elem().Kind() != reflect.String {
-				return fmt.Errorf("unsupported map slice element type %s", typ.Elem().Elem().String())
-			}
-
-			if val.IsNil() {
-				val.Set(reflect.MakeMap(typ))
-			}
-
-			for k, v := range data {
-				val.SetMapIndex(reflect.ValueOf(k), reflect.ValueOf(v))
-			}
-
-		default:
-			return fmt.Errorf("unsupported map value type %s", typ.Elem().String())
+		for k, v := range data {
+			ev, _ := mapElemValue(typ.Elem(), v)
+			val.SetMapIndex(reflect.ValueOf(k), ev)
 		}
 		return nil
 	}
@@ -320,21 +309,11 @@ func bindDataValue(
 				structField.Set(reflect.MakeMap(mt))
 			}
 
-			elemKind := mt.Elem().Kind()
-
-			switch elemKind {
-			case reflect.String:
-				structField.SetMapIndex(reflect.ValueOf(inputFieldName), reflect.ValueOf(strings.Join(inputValue, ",")))
-			case reflect.Interface:
-				structField.SetMapIndex(reflect.ValueOf(inputFieldName), reflect.ValueOf(strings.Join(inputValue, ",")))
-			case reflect.Slice:
-				if mt.Elem().Elem().Kind() != reflect.String {
-					return fmt.Errorf("unsupported map slice element type %s", mt.Elem().Elem().String())
-				}
-				structField.SetMapIndex(reflect.ValueOf(inputFieldName), reflect.ValueOf(inputValue))
-			default:
-				return fmt.Errorf("unsupported map value type %s", mt.Elem().String())
+			ev, err := mapElemValue(mt.Elem(), inputValue)
+			if err != nil {
+				return err
 			}
+			structField.SetMapIndex(reflect.ValueOf(inputFieldName), ev)
 			continue
 		}
 
@@ -359,4 +338,22 @@ func jsonTagName(tag reflect.StructTag) string {
 	}
 
 	return name
+}
+
+// mapElemValue converts bound values into a reflect.Value storable in a map
+// whose element type is elemType: string/interface elements join the values
+// with "," and string-slice elements use the raw list. An unsupported element
+// type returns an error.
+func mapElemValue(elemType reflect.Type, values []string) (reflect.Value, error) {
+	switch elemType.Kind() {
+	case reflect.String, reflect.Interface:
+		return reflect.ValueOf(strings.Join(values, ",")), nil
+	case reflect.Slice:
+		if elemType.Elem().Kind() != reflect.String {
+			return reflect.Value{}, fmt.Errorf("unsupported map slice element type %s", elemType.Elem().String())
+		}
+		return reflect.ValueOf(values), nil
+	default:
+		return reflect.Value{}, fmt.Errorf("unsupported map value type %s", elemType.String())
+	}
 }

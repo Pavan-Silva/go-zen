@@ -2,13 +2,13 @@ package auth
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
+	"github.com/Pavan-Silva/go-zen"
 	"github.com/golang-jwt/jwt/v5"
 )
 
@@ -26,15 +26,15 @@ type OAuth2TokenInfo struct {
 
 // OAuth2Auth implements OAuth2 token introspection authentication.
 type OAuth2Auth struct {
-	TokenIntrospectionEndpoint string                           // URL of the OAuth2 token introspection endpoint.
-	ClientID                   string                           // Client ID for the introspection endpoint.
-	ClientSecret               string                           // Client secret for token introspection.
-	HTTPClient                 *http.Client                     // HTTP client used for introspection requests.
-	ClaimsFunc                 func(claims jwt.MapClaims) *User // Optional function mapping JWT claims to a User.
+	TokenIntrospectionEndpoint string                               // URL of the OAuth2 token introspection endpoint.
+	ClientID                   string                               // Client ID for the introspection endpoint.
+	ClientSecret               string                               // Client secret for token introspection.
+	HTTPClient                 *http.Client                         // HTTP client used for introspection requests.
+	ClaimsFunc                 func(claims jwt.MapClaims) *zen.User // Optional function mapping JWT claims to a User.
 }
 
 // Authenticate validates the access token using OAuth2 token introspection.
-func (o *OAuth2Auth) Authenticate(r *http.Request) (*User, error) {
+func (o *OAuth2Auth) Authenticate(r *http.Request) (*zen.User, error) {
 	if o == nil {
 		return nil, fmt.Errorf("oauth2 auth is not configured")
 	}
@@ -73,26 +73,7 @@ func (o *OAuth2Auth) Authenticate(r *http.Request) (*User, error) {
 		"iat":        tokenInfo.IssuedAt,
 	}
 
-	if o.ClaimsFunc != nil {
-		return o.ClaimsFunc(claims), nil
-	}
-
-	// Build the user from the introspection result.
-	user := &User{
-		ID:       tokenInfo.Subject,
-		Username: tokenInfo.Username,
-		Claims:   claims,
-	}
-
-	if user.Username == "" {
-		user.Username = tokenInfo.Subject
-	}
-
-	if tokenInfo.Scope != "" {
-		user.Authorities = strings.Split(tokenInfo.Scope, " ")
-	}
-
-	return user, nil
+	return userFromClaims(o.ClaimsFunc, claims), nil
 }
 
 // introspectToken calls the OAuth2 token introspection endpoint.
@@ -117,22 +98,8 @@ func (o *OAuth2Auth) introspectToken(
 		req.SetBasicAuth(o.ClientID, o.ClientSecret)
 	}
 
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		if closeErr := resp.Body.Close(); closeErr != nil && err == nil {
-			err = closeErr
-		}
-	}()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("introspection request failed with status %d", resp.StatusCode)
-	}
-
 	var tokenInfo OAuth2TokenInfo
-	if err := json.NewDecoder(resp.Body).Decode(&tokenInfo); err != nil {
+	if err := fetchJSON(client, req, &tokenInfo); err != nil {
 		return nil, err
 	}
 

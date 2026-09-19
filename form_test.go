@@ -1,7 +1,6 @@
 package zen
 
 import (
-	"fmt"
 	"net/http/httptest"
 	"net/url"
 	"strings"
@@ -231,21 +230,6 @@ func TestBindForm_MissingFields(t *testing.T) {
 	}
 	if captured.Email != "" {
 		t.Fatalf("email = %q, want empty", captured.Email)
-	}
-}
-
-func TestFormError_Error(t *testing.T) {
-	err := &FormError{Field: "age", Err: fmt.Errorf("invalid value")}
-	msg := err.Error()
-	if !strings.Contains(msg, "age") {
-		t.Fatalf("error message should contain field name: %s", msg)
-	}
-}
-
-func TestFormError_Unwrap(t *testing.T) {
-	innerErr := &FormError{Field: "age", Err: fmt.Errorf("cause")}
-	if innerErr.Unwrap() == nil {
-		t.Fatal("Unwrap should return the cause error")
 	}
 }
 

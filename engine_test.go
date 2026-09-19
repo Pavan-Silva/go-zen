@@ -9,6 +9,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"io"
 	"math/big"
 	"net"
 	"net/http"
@@ -19,6 +20,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/Pavan-Silva/go-zen/rbac"
 )
 
 func TestRouter_New(t *testing.T) {
@@ -690,13 +693,19 @@ func TestEngine_Run_StartsAndServes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("request failed: %v", err)
 	}
-	defer resp.Body.Close()
+
+	defer func(Body io.ReadCloser) {
+		_ = Body.Close()
+	}(resp.Body)
+
 	if resp.StatusCode != 200 {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
 
 	p, _ := os.FindProcess(os.Getpid())
-	p.Signal(syscall.SIGTERM)
+	if err := p.Signal(syscall.SIGTERM); err != nil {
+		t.Fatal(err)
+	}
 
 	select {
 	case err := <-errCh:
@@ -732,14 +741,16 @@ func TestEngine_Run_ServesMultiple(t *testing.T) {
 		if err != nil {
 			t.Fatalf("request to %s failed: %v", path, err)
 		}
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		if resp.StatusCode != 200 {
 			t.Fatalf("status on %s = %d, want 200", path, resp.StatusCode)
 		}
 	}
 
 	p, _ := os.FindProcess(os.Getpid())
-	p.Signal(syscall.SIGTERM)
+	if err := p.Signal(syscall.SIGTERM); err != nil {
+		t.Fatal(err)
+	}
 	<-errCh
 }
 
@@ -773,13 +784,19 @@ func TestEngine_RunTLS_StartsAndServes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("TLS request failed: %v", err)
 	}
-	defer resp.Body.Close()
+
+	defer func(Body io.ReadCloser) {
+		_ = Body.Close()
+	}(resp.Body)
+
 	if resp.StatusCode != 200 {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
 
 	p, _ := os.FindProcess(os.Getpid())
-	p.Signal(syscall.SIGTERM)
+	if err := p.Signal(syscall.SIGTERM); err != nil {
+		t.Fatal(err)
+	}
 	<-errCh
 }
 
@@ -793,7 +810,9 @@ func freePort(t *testing.T) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	l.Close()
+	if err := l.Close(); err != nil {
+		t.Fatal(err)
+	}
 	return portStr
 }
 
@@ -805,11 +824,13 @@ func waitListen(t *testing.T, addr string, timeout time.Duration) string {
 			time.Sleep(10 * time.Millisecond)
 			continue
 		}
+
 		conn, err := net.DialTimeout("tcp", addr, 50*time.Millisecond)
 		if err == nil {
-			conn.Close()
+			_ = conn.Close()
 			return addr
 		}
+
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatalf("server did not start listening on %s within %v", addr, timeout)
@@ -844,15 +865,154 @@ func generateCert(t *testing.T) (certFile, keyFile string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pem.Encode(f, &pem.Block{Type: "CERTIFICATE", Bytes: certDER})
-	f.Close()
+
+	if err := pem.Encode(f, &pem.Block{Type: "CERTIFICATE", Bytes: certDER}); err != nil {
+		_ = f.Close()
+		t.Fatal(err)
+	}
+
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	f, err = os.Create(keyFile)
 	if err != nil {
 		t.Fatal(err)
 	}
-	pem.Encode(f, &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(priv)})
-	f.Close()
+	if err := pem.Encode(f, &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(priv)}); err != nil {
+		_ = f.Close()
+		t.Fatal(err)
+	}
+
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	return
+}
+
+func TestEngine_EnableRBAC_DefaultConfigPath(t *testing.T) {
+	if rbac.DefaultConfigPath != "configs/rbac.json" {
+		t.Fatalf("DefaultConfigPath = %q, want configs/rbac.json", rbac.DefaultConfigPath)
+	}
+
+	dir := t.TempDir()
+	writeTestFile(t, filepath.Join(dir, "configs", "rbac.json"), `{
+		"roles": [
+			{"name": "viewer", "permissions": ["posts:read"]},
+			{"name": "editor", "permissions": ["posts:write"], "inheritsFrom": ["viewer"]}
+		]
+	}`)
+
+	oldWD, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldWD) })
+
+	New(":0").EnableRBAC()
+
+	if !rbac.HasPermission([]string{"editor"}, "posts:read") {
+		t.Fatal("editor should inherit viewer's permission from the default config")
+	}
+	if !rbac.HasPermission([]string{"editor"}, "posts:write") {
+		t.Fatal("editor should have its own permission from the default config")
+	}
+}
+
+func TestEngine_EnableRBAC_CustomFile(t *testing.T) {
+	cfg := filepath.Join(t.TempDir(), "rbac.json")
+	writeTestFile(t, cfg, `{
+		"roles": [{"name": "admin", "permissions": ["users:delete"]}]
+	}`)
+
+	New(":0").EnableRBAC(cfg)
+
+	if !rbac.HasPermission([]string{"admin"}, "users:delete") {
+		t.Fatal("admin role not registered from custom config")
+	}
+}
+
+func TestEngine_EnableRBAC_MissingConfigPanics(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("expected panic for missing config file")
+		}
+	}()
+
+	New(":0").EnableRBAC(filepath.Join(t.TempDir(), "does-not-exist.json"))
+}
+
+func TestEngine_EnableRBAC_InvalidConfigPanics(t *testing.T) {
+	cfg := filepath.Join(t.TempDir(), "rbac.json")
+	writeTestFile(t, cfg, `{"roles": [{"name": "viewer",`)
+
+	defer func() {
+		if recover() == nil {
+			t.Fatal("expected panic for invalid config file")
+		}
+	}()
+
+	New(":0").EnableRBAC(cfg)
+}
+
+func TestEngine_EnableRBACRoles(t *testing.T) {
+	New(":0").EnableRBACRoles(
+		rbac.Role{Name: "admin", Permissions: []string{"users:delete"}},
+		rbac.Role{Name: "editor", Permissions: []string{"docs:write"}, InheritsFrom: []string{"viewer"}},
+		rbac.Role{Name: "viewer", Permissions: []string{"docs:read"}},
+	)
+
+	if !rbac.HasPermission([]string{"admin"}, "users:delete") {
+		t.Fatal("admin role not registered from inline definitions")
+	}
+	if !rbac.HasPermission([]string{"editor"}, "docs:write") {
+		t.Fatal("editor should have its own permission")
+	}
+	if !rbac.HasPermission([]string{"editor"}, "docs:read") {
+		t.Fatal("editor should inherit viewer's permission")
+	}
+	if rbac.HasPermission([]string{"viewer"}, "users:delete") {
+		t.Fatal("viewer should not inherit unrelated permissions")
+	}
+}
+
+func TestEngine_EnableRBAC_MultiplePathsPanics(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("expected panic for multiple config file paths")
+		}
+	}()
+
+	New(":0").EnableRBAC("a.json", "b.json")
+}
+
+func TestEngine_EnableRBAC_MixedFileAndRoles(t *testing.T) {
+	cfg := filepath.Join(t.TempDir(), "rbac.json")
+	writeTestFile(t, cfg, `{
+		"roles": [{"name": "viewer", "permissions": ["posts:read"]}]
+	}`)
+
+	New(":0").EnableRBAC(cfg)
+	New(":0").EnableRBACRoles(rbac.Role{Name: "editor", Permissions: []string{"posts:write"}, InheritsFrom: []string{"viewer"}})
+
+	if !rbac.HasPermission([]string{"editor"}, "posts:write") {
+		t.Fatal("editor should own its inline permission")
+	}
+	if !rbac.HasPermission([]string{"editor"}, "posts:read") {
+		t.Fatal("editor should inherit viewer's permission from the config file")
+	}
+}
+
+func writeTestFile(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
 }

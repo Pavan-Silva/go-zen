@@ -24,21 +24,21 @@ jobs:
             exit 1
           fi
           echo "latest=$LATEST" >> "$GITHUB_OUTPUT"
-          CURRENT=$(cat openapi/ui/version.txt 2>/dev/null || echo "none")
+          CURRENT=$(cat scalar/assets/version.txt 2>/dev/null || echo "none")
           echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
 
       - name: Update assets
         if: steps.check.outputs.latest != steps.check.outputs.current
         run: |
           VER=${{ steps.check.outputs.latest }}
-          curl -sfL "https://cdn.jsdelivr.net/npm/@scalar/api-reference@$VER/dist/browser/standalone.js" -o openapi/ui/dist/scalar.js
+          curl -sfL "https://cdn.jsdelivr.net/npm/@scalar/api-reference@$VER/dist/browser/standalone.js" -o scalar/assets/dist/scalar.js
           # Guard against upstream packaging changes: the embedded UI relies
           # on a single self-contained file exposing Scalar.createApiReference.
-          grep -q "createApiReference" openapi/ui/dist/scalar.js || {
+          grep -q "createApiReference" scalar/assets/dist/scalar.js || {
             echo "Downloaded bundle does not expose createApiReference; upstream layout changed" >&2
             exit 1
           }
-          echo "$VER" > openapi/ui/version.txt
+          echo "$VER" > scalar/assets/version.txt
 
       - name: Create PR
         if: steps.check.outputs.latest != steps.check.outputs.current

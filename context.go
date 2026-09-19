@@ -10,17 +10,6 @@ import (
 // zenCtxKey is used for storing Ctx inside standard request context instances.
 type zenCtxKey struct{}
 
-// HeaderXRequestID is the canonical header name for request IDs.
-// Set on responses by the Request ID middleware.
-const HeaderXRequestID = "X-Request-ID"
-
-// HandlerFunc is the universal type for both route handlers and middleware.
-type HandlerFunc func(*Ctx)
-
-// SkipFunc decides whether a request should bypass middleware (auth, body limit, etc.).
-// It receives the current request and returns true for routes to skip.
-type SkipFunc func(*http.Request) bool
-
 // Ctx is the per-request context container for zen handlers and middleware components.
 // Valid ONLY for the explicit lifetime of the request—never preserve references beyond handler returns.
 type Ctx struct {

@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/Pavan-Silva/go-zen"
 	"github.com/golang-jwt/jwt/v5"
 )
 
@@ -33,7 +34,9 @@ func TestOIDCAuth_Success(t *testing.T) {
 			Locale:            "en-US",
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(info)
+		if err := json.NewEncoder(w).Encode(info); err != nil {
+			t.Fatal(err)
+		}
 	}))
 	defer userinfoServer.Close()
 
@@ -107,7 +110,9 @@ func TestOIDCAuth_DefaultEndpoint(t *testing.T) {
 		called = true
 		info := OIDCUserInfo{Sub: "user-1"}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(info)
+		if err := json.NewEncoder(w).Encode(info); err != nil {
+			t.Fatal(err)
+		}
 	}))
 	defer userinfoServer.Close()
 
@@ -138,15 +143,17 @@ func TestOIDCAuth_CustomClaimsFunc(t *testing.T) {
 			Name: "John",
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(info)
+		if err := json.NewEncoder(w).Encode(info); err != nil {
+			t.Fatal(err)
+		}
 	}))
 	defer userinfoServer.Close()
 
 	auth := &OIDCAuth{
 		UserInfoEndpoint:      userinfoServer.URL,
 		SkipTokenVerification: true,
-		ClaimsFunc: func(claims jwt.MapClaims) *User {
-			return &User{
+		ClaimsFunc: func(claims jwt.MapClaims) *zen.User {
+			return &zen.User{
 				ID:       "oidc-" + claims["sub"].(string),
 				Username: claims["name"].(string),
 			}
@@ -200,7 +207,9 @@ func TestOIDCAuth_VerificationAcceptsValidToken(t *testing.T) {
 	userinfoServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		info := OIDCUserInfo{Sub: "user-1"}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(info)
+		if err := json.NewEncoder(w).Encode(info); err != nil {
+			t.Fatal(err)
+		}
 	}))
 	defer userinfoServer.Close()
 
@@ -239,7 +248,9 @@ func TestOIDCAuth_SkipTokenVerification(t *testing.T) {
 			Name: "John",
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(info)
+		if err := json.NewEncoder(w).Encode(info); err != nil {
+			t.Fatal(err)
+		}
 	}))
 	defer userinfoServer.Close()
 

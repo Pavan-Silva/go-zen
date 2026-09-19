@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Pavan-Silva/go-zen"
 	"github.com/golang-jwt/jwt/v5"
 )
 
@@ -29,7 +30,9 @@ func TestOAuth2Auth_Success(t *testing.T) {
 			ExpiresAt: time.Now().Add(time.Hour).Unix(),
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(info)
+		if err := json.NewEncoder(w).Encode(info); err != nil {
+			t.Fatal(err)
+		}
 	}))
 	defer introspectServer.Close()
 
@@ -58,7 +61,9 @@ func TestOAuth2Auth_Inactive(t *testing.T) {
 	introspectServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		info := OAuth2TokenInfo{Active: false}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(info)
+		if err := json.NewEncoder(w).Encode(info); err != nil {
+			t.Fatal(err)
+		}
 	}))
 	defer introspectServer.Close()
 
@@ -83,7 +88,9 @@ func TestOAuth2Auth_Expired(t *testing.T) {
 			ExpiresAt: time.Now().Add(-time.Hour).Unix(),
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(info)
+		if err := json.NewEncoder(w).Encode(info); err != nil {
+			t.Fatal(err)
+		}
 	}))
 	defer introspectServer.Close()
 
@@ -129,14 +136,16 @@ func TestOAuth2Auth_CustomClaimsFunc(t *testing.T) {
 			Username: "john",
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(info)
+		if err := json.NewEncoder(w).Encode(info); err != nil {
+			t.Fatal(err)
+		}
 	}))
 	defer introspectServer.Close()
 
 	auth := &OAuth2Auth{
 		TokenIntrospectionEndpoint: introspectServer.URL,
-		ClaimsFunc: func(claims jwt.MapClaims) *User {
-			return &User{
+		ClaimsFunc: func(claims jwt.MapClaims) *zen.User {
+			return &zen.User{
 				ID:       "custom-" + claims["sub"].(string),
 				Username: "custom-" + claims["username"].(string),
 			}
@@ -165,7 +174,9 @@ func TestOAuth2Auth_UsernameFallback(t *testing.T) {
 			Subject: "user-1",
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(info)
+		if err := json.NewEncoder(w).Encode(info); err != nil {
+			t.Fatal(err)
+		}
 	}))
 	defer introspectServer.Close()
 
@@ -180,10 +191,12 @@ func TestOAuth2Auth_UsernameFallback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Authenticate() error = %v", err)
 	}
-	// Current behavior: userFromClaims returns ID from "sub" claim
-	// but Username is empty since "username" claim is not set.
-	// FIXME: OAuth2Auth should use the built user struct instead of userFromClaims
+	// defaultUserMapper maps ID from "sub" and falls back to it for the
+	// Username when no "username"/"name" claim is present.
 	if user.ID != "user-1" {
 		t.Fatalf("user.ID = %q, want %q", user.ID, "user-1")
+	}
+	if user.Username != "user-1" {
+		t.Fatalf("user.Username = %q, want %q", user.Username, "user-1")
 	}
 }

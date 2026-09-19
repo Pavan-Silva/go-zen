@@ -64,21 +64,21 @@ func Logger(c *zen.Ctx) {
 		buf = start.AppendFormat(buf, "2006/01/02 15:04:05")
 		buf = append(buf, " | "...)
 		buf = appendStatusColor(buf, rw.status)
-		buf = rightPad(buf, strconv.Itoa(rw.status), 5)
+		buf = leftPad(buf, strconv.Itoa(rw.status), 5)
 		buf = append(buf, colorReset...)
 		buf = append(buf, " | "...)
 
-		buf = rightPad(buf, formatLatency(duration), 9)
+		buf = leftPad(buf, formatLatency(duration), 9)
 		buf = append(buf, " | "...)
 
-		buf = leftPad(buf, c.ClientIP(), 15)
+		buf = rightPad(buf, c.ClientIP(), 15)
 		buf = append(buf, " | "...)
 		size := strconv.FormatInt(c.Request.ContentLength, 10) + "->" + strconv.FormatInt(int64(rw.written), 10) + "B"
-		buf = rightPad(buf, size, 13)
+		buf = leftPad(buf, size, 13)
 		buf = append(buf, " | "...)
 
 		buf = appendMethodColor(buf, method)
-		buf = leftPad(buf, method, 7)
+		buf = rightPad(buf, method, 7)
 		buf = append(buf, colorReset...)
 		buf = append(buf, " "...)
 

@@ -2,11 +2,11 @@ package auth
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 
+	"github.com/Pavan-Silva/go-zen"
 	"github.com/golang-jwt/jwt/v5"
 )
 
@@ -30,17 +30,17 @@ type OIDCUserInfo struct {
 
 // OIDCAuth implements OIDC authentication using access tokens.
 type OIDCAuth struct {
-	Issuer                string                           // OIDC issuer URL.
-	ClientID              string                           // Client ID for the application.
-	UserInfoEndpoint      string                           // Userinfo endpoint (default issuer + "/oauth2/v2/userinfo").
-	HTTPClient            *http.Client                     // HTTP client for userinfo requests.
-	ClaimsFunc            func(claims jwt.MapClaims) *User // Optional function to map JWT claims to a User struct.
-	SkipTokenVerification bool                             // True to skip JWT signature verification of the access token.
-	KeyFunc               jwt.Keyfunc                      // Verification key; required if SkipTokenVerification is false.
+	Issuer                string                               // OIDC issuer URL.
+	ClientID              string                               // Client ID for the application.
+	UserInfoEndpoint      string                               // Userinfo endpoint (default issuer + "/oauth2/v2/userinfo").
+	HTTPClient            *http.Client                         // HTTP client for userinfo requests.
+	ClaimsFunc            func(claims jwt.MapClaims) *zen.User // Optional function to map JWT claims to a User struct.
+	SkipTokenVerification bool                                 // True to skip JWT signature verification of the access token.
+	KeyFunc               jwt.Keyfunc                          // Verification key; required if SkipTokenVerification is false.
 }
 
 // Authenticate validates the access token by calling the userinfo endpoint.
-func (o *OIDCAuth) Authenticate(r *http.Request) (*User, error) {
+func (o *OIDCAuth) Authenticate(r *http.Request) (*zen.User, error) {
 	if o == nil {
 		return nil, fmt.Errorf("oidc auth is not configured")
 	}
@@ -104,22 +104,8 @@ func (o *OIDCAuth) getUserInfo(
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/json")
 
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		if closeErr := resp.Body.Close(); closeErr != nil && err == nil {
-			err = closeErr
-		}
-	}()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("userinfo request failed with status %d", resp.StatusCode)
-	}
-
 	var userInfo OIDCUserInfo
-	if err := json.NewDecoder(resp.Body).Decode(&userInfo); err != nil {
+	if err := fetchJSON(client, req, &userInfo); err != nil {
 		return nil, err
 	}
 
